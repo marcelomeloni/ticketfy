@@ -1,0 +1,50 @@
+{
+    "name": "Ticket - Club Party Friday Night",
+    "symbol": "TKTFY",
+    "description": "Prepare-se para uma noite inesquecível com a Club Party Friday Night. Música, luzes e energia em São Paulo para fechar o ano em grande estilo.",
+    "seller_fee_basis_points": 500,
+    "image": "https://s3.envato.com/files/308521832/Final%20Presentation%20single.jpg",
+    "external_url": "https://seusite.com/events/club-party-friday-night",
+    "attributes": [
+      {
+        "trait_type": "Data do Evento",
+        "value": "30/12/2025"
+      },
+      {
+        "trait_type": "Horário",
+        "value": "20:00"
+      },
+      {
+        "trait_type": "Endereço",
+        "value": "Av. Francisco Matarazzo, 1705 - Água Branca"
+      },
+      {
+        "trait_type": "Cidade",
+        "value": "São Paulo"
+      },
+      {
+        "trait_type": "Estado",
+        "value": "SP"
+      },
+      {
+        "trait_type": "País",
+        "value": "Brasil"
+      }
+    ],
+    "properties": {
+      "creators": [
+        {
+          "address": "SEU_ENDERECO_SOLANA",
+          "share": 100
+        }
+      ],
+      "files": [
+        {
+          "uri": "https://raw.githubusercontent.com/marcelomeloni/ticketfy/main/imgmetadado.png",
+          "type": "image/png"
+        }
+      ],
+      "category": "ticket"
+    }
+  }
+  
