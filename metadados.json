@@ -3,7 +3,7 @@
   "symbol": "TCKT",
   "description": "Ingresso NFT para o Show da Banda X em São Paulo, válido para 1 pessoa. Data: 12/10/2025 às 20h.",
   "seller_fee_basis_points": 500,
-  "image": "https://raw.githubusercontent.com/marcelomeloni/ticketfy/refs/heads/main/imgmetadado.png",
+  "image": "https://ticketfy.onrender.com/imgmetadado.png",
   "external_url": "https://ticketfy.app/eventos/show-banda-x",
   "attributes": [
     { "trait_type": "Evento", "value": "Show da Banda X" },
