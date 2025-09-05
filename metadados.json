@@ -1,0 +1,27 @@
+{
+  "name": "Ticket - Show da Banda X",
+  "symbol": "TCKT",
+  "description": "Ingresso NFT para o Show da Banda X em São Paulo, válido para 1 pessoa. Data: 12/10/2025 às 20h.",
+  "seller_fee_basis_points": 500,
+  "image": "https://seuusuario.github.io/arquivos-nft/ticket.png",
+  "external_url": "https://ticketfy.app/eventos/show-banda-x",
+  "attributes": [
+    { "trait_type": "Evento", "value": "Show da Banda X" },
+    { "trait_type": "Local", "value": "Allianz Parque - São Paulo" },
+    { "trait_type": "Data", "value": "2025-10-12" },
+    { "trait_type": "Horário", "value": "20:00" },
+    { "trait_type": "Assento", "value": "Pista Premium" }
+  ],
+  "properties": {
+    "creators": [
+      { "address": "SEU_ENDERECO_SOLANA", "share": 100 }
+    ],
+    "files": [
+      {
+        "uri": "https://seuusuario.github.io/arquivos-nft/ticket.png",
+        "type": "image/png"
+      }
+    ],
+    "category": "ticket"
+  }
+}
