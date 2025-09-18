@@ -7,8 +7,13 @@ export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: {
+      // Polyfills Node
       buffer: 'buffer',
       process: 'process/browser',
+      util: 'rollup-plugin-node-polyfills/polyfills/util',
+      stream: 'rollup-plugin-node-polyfills/polyfills/stream',
+      path: 'rollup-plugin-node-polyfills/polyfills/path',
+      assert: 'rollup-plugin-node-polyfills/polyfills/assert',
       '@': path.resolve(__dirname, './src'),
     },
   },
