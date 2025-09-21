@@ -22,6 +22,7 @@
     "@solana/web3.js": "^1.98.4",
     "buffer": "^6.0.3",
     "html5-qrcode": "^2.3.8",
+    "jspdf": "^3.0.3",
     "leaflet": "^1.9.4",
     "react": "^18.2.0",
     "react-datepicker": "^8.7.0",
