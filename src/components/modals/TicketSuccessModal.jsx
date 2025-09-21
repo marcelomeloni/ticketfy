@@ -25,86 +25,149 @@ export const TicketSuccessModal = ({ isOpen, onClose, ticketData }) => {
 
     // ✅ LÓGICA DE DOWNLOAD TOTALMENTE REFEITA PARA GERAR PDF
     const handleDownload = () => {
-        const svgElement = qrCodeContainerRef.current?.querySelector('svg');
-        if (!svgElement) {
-            toast.error("QR Code não encontrado. Tente novamente.");
-            return;
-        }
+    const svgElement = qrCodeContainerRef.current?.querySelector('svg');
+    if (!svgElement) {
+        toast.error("QR Code não encontrado. Tente novamente.");
+        return;
+    }
 
-        const loadingToast = toast.loading('Gerando PDF do ingresso...');
+    const loadingToast = toast.loading('Gerando seu ingresso personalizado...');
 
-        const svgData = new XMLSerializer().serializeToString(svgElement);
-        const img = new Image();
-        const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
-        const url = URL.createObjectURL(svgBlob);
+    // Assumindo que você passará esses dados via props em ticketData
+    // Se não existirem, usamos valores padrão para não quebrar o layout
+    const { 
+        eventName = 'Nome do Evento', 
+        eventDate = 'Data e Hora do Evento', 
+        eventLocation = 'Local do Evento',
+        mintAddress
+    } = ticketData;
 
-        img.onload = () => {
-            // Converte o SVG para um Data URL de imagem PNG
-            const canvas = document.createElement('canvas');
-            canvas.width = img.width;
-            canvas.height = img.height;
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(img, 0, 0);
-            const qrImageDataUrl = canvas.toDataURL('image/png');
-            URL.revokeObjectURL(url);
+    const svgData = new XMLSerializer().serializeToString(svgElement);
+    const img = new Image();
+    const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+    const url = URL.createObjectURL(svgBlob);
 
-            
-            const doc = new jsPDF({
-                orientation: 'portrait',
-                unit: 'mm',
-                format: 'a5'
-            });
+    img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0);
+        const qrImageDataUrl = canvas.toDataURL('image/png');
+        URL.revokeObjectURL(url);
 
-            // Adiciona conteúdo ao PDF
-            doc.setFontSize(22);
-            doc.setFont("helvetica", "bold");
-            doc.text('Seu Ingresso Digital', doc.internal.pageSize.getWidth() / 2, 20, { align: 'center' });
+        const doc = new jsPDF({
+            orientation: 'portrait',
+            unit: 'mm',
+            format: 'a5' // Formato A5 (148 x 210 mm)
+        });
 
-            doc.setFontSize(12);
-            doc.setFont("helvetica", "normal");
-            doc.setTextColor(100); // Cinza
-            doc.text('Apresente este QR Code na entrada do evento.', doc.internal.pageSize.getWidth() / 2, 30, { align: 'center' });
+        // --- Constantes de Design ---
+        const PAGE_WIDTH = doc.internal.pageSize.getWidth();
+        const PAGE_HEIGHT = doc.internal.pageSize.getHeight();
+        const MARGIN = 15;
+        const PRIMARY_COLOR = '#4F46E5'; // Indigo 600
+        const TEXT_COLOR_DARK = '#1E293B'; // Slate 800
+        const TEXT_COLOR_LIGHT = '#64748B'; // Slate 500
 
-            // Adiciona a imagem do QR Code
-            const qrSize = 60; // 60mm
-            const qrX = (doc.internal.pageSize.getWidth() - qrSize) / 2;
-            doc.addImage(qrImageDataUrl, 'PNG', qrX, 38, qrSize, qrSize);
+        // === CABEÇALHO ===
+        doc.setFillColor(PRIMARY_COLOR);
+        doc.rect(0, 0, PAGE_WIDTH, 30, 'F'); // 'F' para preencher
+        
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(24);
+        doc.setTextColor('#FFFFFF'); // Branco
+        doc.text('Ticketfy', MARGIN, 15);
 
-            // Adiciona o endereço do ingresso
-            doc.setFontSize(8);
-            doc.setFont("courier", "italic");
-            doc.setTextColor(150);
-            doc.text(mintAddress, doc.internal.pageSize.getWidth() / 2, 105, { align: 'center' });
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(10);
+        doc.text('O Futuro dos Eventos é Descentralizado', MARGIN, 23);
 
-            // Linha divisória
-            doc.setDrawColor(220, 220, 220); // Cinza claro
-            doc.line(15, 115, doc.internal.pageSize.getWidth() - 15, 115);
+        // === CORPO DO INGRESSO ===
+        let currentY = 45; // Posição vertical inicial
 
-            // Seção do Certificado
-            doc.setFontSize(14);
-            doc.setFont("helvetica", "bold");
-            doc.setTextColor(79, 70, 229); // Roxo (indigo-600)
-            doc.text('Seu Certificado', doc.internal.pageSize.getWidth() / 2, 125, { align: 'center' });
-            
-            doc.setFontSize(10);
-            doc.setFont("helvetica", "normal");
-            doc.setTextColor(51, 65, 85); // Cinza escuro (slate-700)
-            doc.text('Após o evento, seu certificado estará disponível em:', doc.internal.pageSize.getWidth() / 2, 132, { align: 'center' });
-            
-            // ✅ Adiciona o link clicável
-            const certificateLink = `${APP_BASE_URL}/certificate/${mintAddress}`;
-            doc.setFontSize(10);
-            doc.setTextColor(29, 78, 216); // Azul (blue-600)
-            doc.textWithLink(certificateLink, doc.internal.pageSize.getWidth() / 2, 139, { url: certificateLink, align: 'center' });
+        // --- Detalhes do Evento ---
+        doc.setFontSize(12);
+        doc.setTextColor(TEXT_COLOR_LIGHT);
+        doc.text('Ingresso Válido Para:', MARGIN, currentY);
+        currentY += 8;
 
-            // Salva o PDF
-            doc.save(`ingresso-${mintAddress.slice(0, 6)}.pdf`);
-            
-            toast.success('Download do PDF iniciado!', { id: loadingToast });
-        };
-        img.onerror = () => { toast.error('Falha ao carregar a imagem do QR Code.'); };
-        img.src = url;
+        doc.setFontSize(20);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(TEXT_COLOR_DARK);
+        doc.text(eventName, MARGIN, currentY, { maxWidth: PAGE_WIDTH - MARGIN * 2 });
+        currentY += 15; // Aumenta o espaço após o título
+
+        doc.setFontSize(12);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(TEXT_COLOR_DARK);
+        doc.text(`Data: ${eventDate}`, MARGIN, currentY);
+        currentY += 7;
+        doc.text(`Local: ${eventLocation}`, MARGIN, currentY);
+        currentY += 15;
+
+        // --- QR Code ---
+        const qrSize = 65; // Tamanho do QR Code
+        const qrX = (PAGE_WIDTH - qrSize) / 2;
+        doc.addImage(qrImageDataUrl, 'PNG', qrX, currentY, qrSize, qrSize);
+        currentY += qrSize + 5; // Posição abaixo do QR Code
+
+        doc.setFontSize(11);
+        doc.setTextColor(TEXT_COLOR_LIGHT);
+        doc.text('Apresente este QR Code na entrada do evento.', PAGE_WIDTH / 2, currentY, { align: 'center' });
+        currentY += 15;
+        
+        // --- Linha Tracejada (Simula canhoto) ---
+        doc.setLineDashPattern([2, 2], 0);
+        doc.setDrawColor(TEXT_COLOR_LIGHT);
+        doc.line(MARGIN, currentY, PAGE_WIDTH - MARGIN, currentY);
+        doc.setLineDashPattern([], 0); // Reseta o padrão da linha
+        currentY += 10;
+
+        // --- Seção do Certificado ---
+        doc.setFontSize(14);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(PRIMARY_COLOR);
+        doc.text('Seu Certificado Digital', PAGE_WIDTH / 2, currentY, { align: 'center' });
+        currentY += 7;
+
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(TEXT_COLOR_DARK);
+        doc.text('Após o evento, seu certificado estará disponível em:', PAGE_WIDTH / 2, currentY, { align: 'center' });
+        currentY += 7;
+
+        const certificateLink = `${APP_BASE_URL}/certificate/${mintAddress}`;
+        doc.setTextColor('#1D4ED8'); // Blue 700
+        doc.textWithLink(certificateLink, PAGE_WIDTH / 2, currentY, { url: certificateLink, align: 'center' });
+
+        // === RODAPÉ ===
+        const footerY = PAGE_HEIGHT - 18;
+        doc.setFillColor('#F1F5F9'); // Slate 100 (fundo cinza claro)
+        doc.rect(0, footerY - 5, PAGE_WIDTH, 23, 'F');
+        
+        doc.setFontSize(8);
+        doc.setFont('courier', 'italic');
+        doc.setTextColor(TEXT_COLOR_LIGHT);
+        doc.text('ID do Ingresso (Mint Address):', MARGIN, footerY);
+        doc.text(mintAddress, MARGIN, footerY + 4);
+        
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(PRIMARY_COLOR);
+        doc.text('www.ticketfy.com', PAGE_WIDTH - MARGIN, footerY + 2, { align: 'right' });
+
+
+        // Salva o PDF
+        doc.save(`ingresso-ticketfy-${mintAddress.slice(0, 6)}.pdf`);
+        
+        toast.success('Seu ingresso foi gerado com sucesso!', { id: loadingToast });
     };
+
+    img.onerror = () => { 
+        toast.error('Falha ao carregar a imagem do QR Code.', { id: loadingToast }); 
+    };
+    img.src = url;
+};
     
     const certificateLink = `${APP_BASE_URL}/certificate/${mintAddress}`;
 
@@ -171,4 +234,5 @@ export const TicketSuccessModal = ({ isOpen, onClose, ticketData }) => {
         </Modal>
     );
 };
+
 
