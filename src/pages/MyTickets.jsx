@@ -6,16 +6,18 @@ import { getAssociatedTokenAddress } from '@solana/spl-token';
 import toast from 'react-hot-toast';
 import idl from '@/idl/ticketing_system.json';
 import { createReadOnlyProgram, createWritableProgram } from '@/lib/program';
+import QRCode from 'react-qr-code';
+import ReactDOM from 'react-dom';
 
 // --- Ícones para UI ---
-const CalendarIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1.5 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>;
-const LocationIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1.5 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>;
+import { AcademicCapIcon, ArrowDownTrayIcon, CalendarIcon, MapPinIcon, TagIcon } from '@heroicons/react/24/outline';
 
 // --- Constantes ---
 const TICKET_ACCOUNT_OWNER_FIELD_OFFSET = 72;
 const LISTING_SEED = Buffer.from("listing");
 const ESCROW_SEED = Buffer.from("escrow");
 const REFUND_RESERVE_SEED = Buffer.from("refund_reserve");
+const APP_BASE_URL = "https://ticketfy.onrender.com"; // Ajuste se necessário
 
 export function MyTickets() {
     const { connection } = useConnection();
@@ -148,9 +150,7 @@ export function MyTickets() {
                 [REFUND_RESERVE_SEED, eventKey.toBuffer()],
                 writableProgram.programId
             );
-
             const nftTokenAccount = await getAssociatedTokenAddress(nftMint, wallet.publicKey);
-
             await writableProgram.methods
                 .claimRefund()
                 .accounts({
@@ -162,7 +162,6 @@ export function MyTickets() {
                     refundReserve: refundReservePda,
                 })
                 .rpc();
-
             toast.success("Reembolso solicitado com sucesso! O ingresso foi queimado.", { id: loadingToast, duration: 4000 });
             setTimeout(() => { fetchAllData() }, 2500);
 
@@ -233,30 +232,14 @@ function TicketCard({ ticket, isListed, isSubmitting, onSellClick, onCancelClick
             if (!program || !ticketData.event) return;
             setIsLoading(true);
             try {
-                // 1. Busca os dados on-chain do evento
                 const onChainEvent = await program.account.event.fetch(ticketData.event);
-                
-                // 2. Busca os metadados off-chain do JSON
-                // ✅ Adicionado "https://" para garantir que seja uma URL válida
-                const metadataUrl = onChainEvent.metadataUri.startsWith('http') 
-                    ? onChainEvent.metadataUri 
-                    : `https://${onChainEvent.metadataUri}`;
-                
+                const metadataUrl = onChainEvent.metadataUri.startsWith('http') ? onChainEvent.metadataUri : `https://${onChainEvent.metadataUri}`;
                 const response = await fetch(metadataUrl);
-                if (!response.ok) {
-                    throw new Error(`Falha ao buscar metadados: ${response.statusText}`);
-                }
+                if (!response.ok) throw new Error(`Falha ao buscar metadados`);
                 const offChainMetadata = await response.json();
-
-                // 3. Mescla os dados on-chain e off-chain
-                setEventData({
-                    ...onChainEvent,           // Dados do contrato (canceled, etc.)
-                    ...offChainMetadata,        // Dados do JSON (name, image, etc.)
-                    publicKey: ticketData.event // Mantém a chave pública
-                });
-
+                setEventData({ ...onChainEvent, ...offChainMetadata, publicKey: ticketData.event });
             } catch (error) {
-                console.error("Erro ao buscar detalhes completos do evento:", error);
+                console.error("Erro ao buscar detalhes do evento:", error);
             } finally {
                 setIsLoading(false);
             }
@@ -264,120 +247,158 @@ function TicketCard({ ticket, isListed, isSubmitting, onSellClick, onCancelClick
         fetchEventDetails();
     }, [program, ticketData.event]);
 
+    const handleDownload = () => {
+        const tempContainer = document.createElement("div");
+        document.body.appendChild(tempContainer);
+    
+        const onRender = () => {
+            const svgElement = tempContainer.querySelector('svg');
+            if (!svgElement) {
+                toast.error("Erro ao gerar QR Code.");
+                document.body.removeChild(tempContainer);
+                return;
+            }
+            const loadingToast = toast.loading('Gerando imagem do ingresso...');
+            const svgData = new XMLSerializer().serializeToString(svgElement);
+            const img = new Image();
+            const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+            const url = URL.createObjectURL(svgBlob);
+            img.onload = () => {
+                const scale = 2;
+                const canvas = document.createElement('canvas');
+                canvas.width = 320 * scale;
+                canvas.height = 450 * scale;
+                const ctx = canvas.getContext('2d');
+                ctx.fillStyle = '#FFFFFF';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = '#1e293b';
+                ctx.font = `bold ${22 * scale}px sans-serif`;
+                ctx.textAlign = 'center';
+                ctx.fillText('Seu Ingresso Digital', canvas.width / 2, 40 * scale);
+                ctx.fillStyle = '#64748b';
+                ctx.font = `${14 * scale}px sans-serif`;
+                ctx.fillText('Apresente este QR Code na entrada', canvas.width / 2, 70 * scale);
+                const qrSize = 180 * scale;
+                ctx.drawImage(img, (canvas.width - qrSize) / 2, 90 * scale, qrSize, qrSize);
+                URL.revokeObjectURL(url);
+                const shortAddress = `${ticketData.nftMint.toString().slice(0, 10)}...${ticketData.nftMint.toString().slice(-10)}`;
+                ctx.fillStyle = '#94a3b8';
+                ctx.font = `italic ${12 * scale}px monospace`;
+                ctx.fillText(shortAddress, canvas.width / 2, 300 * scale);
+                ctx.strokeStyle = '#e2e8f0';
+                ctx.beginPath();
+                ctx.moveTo(20 * scale, 325 * scale);
+                ctx.lineTo(canvas.width - (20 * scale), 325 * scale);
+                ctx.stroke();
+                ctx.fillStyle = '#4f46e5';
+                ctx.font = `bold ${16 * scale}px sans-serif`;
+                ctx.fillText('Seu Certificado Pós-Evento', canvas.width / 2, 360 * scale);
+                ctx.fillStyle = '#334155';
+                ctx.font = `${13 * scale}px sans-serif`;
+                ctx.fillText('Após o evento, seu certificado estará disponível em:', canvas.width / 2, 390 * scale);
+                const certificateLink = `${APP_BASE_URL}/certificate/${ticketData.nftMint.toString()}`;
+                const linkText = `${APP_BASE_URL}/certificate/...${ticketData.nftMint.toString().slice(-12)}`;
+                ctx.font = `bold ${13 * scale}px monospace`;
+                ctx.fillStyle = '#1e293b';
+                ctx.fillText(linkText, canvas.width / 2, 415 * scale, canvas.width - (40 * scale));
+                const image = canvas.toDataURL('image/png');
+                const link = document.createElement('a');
+                link.href = image;
+                link.download = `ingresso-${ticketData.nftMint.toString().slice(0, 6)}.png`;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                toast.success('Download iniciado!', { id: loadingToast });
+                document.body.removeChild(tempContainer);
+            };
+            img.src = url;
+        };
+    
+        ReactDOM.render(
+            <div style={{ position: 'absolute', left: '-9999px' }}>
+                <QRCode value={ticketData.nftMint.toString()} size={256} />
+            </div>,
+            tempContainer,
+            onRender
+        );
+    };
+
     if (isLoading || !eventData) {
         return (
             <div className="bg-white rounded-xl shadow-lg overflow-hidden h-[420px]">
                 <div className="h-48 bg-slate-200 animate-pulse"></div>
-                <div className="p-6 space-y-4">
-                    <div className="h-6 bg-slate-200 rounded animate-pulse w-3/4"></div>
-                    <div className="h-4 bg-slate-200 rounded animate-pulse w-1/2"></div>
-                    <div className="h-4 bg-slate-200 rounded animate-pulse w-1/3"></div>
-                    <div className="pt-4 mt-auto">
-                        <div className="h-10 bg-slate-200 rounded-lg animate-pulse"></div>
-                    </div>
-                </div>
+                <div className="p-6 space-y-4"><div className="h-6 bg-slate-200 rounded w-3/4"></div><div className="h-4 bg-slate-200 rounded w-1/2"></div><div className="h-4 bg-slate-200 rounded w-1/3"></div><div className="pt-4 mt-auto"><div className="h-10 bg-slate-200 rounded-lg"></div></div></div>
             </div>
         );
     }
     
-    // ✅ CORREÇÃO: Usa a data do JSON `eventData.properties.dateTime.start`
-    // Não precisa mais de .toNumber(), pois vem do JSON como string
-    const eventDate = new Date(eventData.properties.dateTime.start).toLocaleDateString('pt-BR', {
-        day: '2-digit', month: 'short', year: 'numeric'
-    });
-
-    // Usa a propriedade `canceled` que vem dos dados on-chain
-    const isEventCanceled = eventData.canceled;
-    
-    // ✅ CORREÇÃO: Usa a localização do JSON
+    const eventDate = new Date(eventData.properties.dateTime.start).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' });
     const location = eventData.properties.location.venueName || 'Online';
-    // ✅ CORREÇÃO: Usa a imagem do JSON
-    const image = eventData.image;
+    const isEventCanceled = eventData.canceled;
+    const isFreeTicket = ticketData.pricePaid.toNumber() === 0;
 
     const getStatusInfo = () => {
         if (isEventCanceled) return { text: 'Evento Cancelado', color: 'bg-red-100 text-red-800' };
         if (ticketData.redeemed) return { text: 'Utilizado', color: 'bg-slate-100 text-slate-800' };
-        if (isListed) return { text: 'À Venda no Marketplace', color: 'bg-blue-100 text-blue-800' };
+        if (isListed) return { text: 'À Venda', color: 'bg-blue-100 text-blue-800' };
+        if (isFreeTicket) return { text: 'Ingresso Gratuito', color: 'bg-green-100 text-green-800' };
         return { text: 'Disponível', color: 'bg-green-100 text-green-800' };
     };
 
     const status = getStatusInfo();
-
+    const certificateUrl = `${APP_BASE_URL}/certificate/${ticketData.nftMint.toString()}`;
+    
     const renderActionArea = () => {
-        if (isEventCanceled && isListed) {
+        if (isFreeTicket) {
             return (
-                <>
-                    <div className="text-xs text-center text-orange-800 bg-orange-100 p-3 rounded-md mb-4">
-                        Este evento foi cancelado. Retire o ingresso da venda para poder solicitar seu reembolso.
-                    </div>
-                    <button 
-                        onClick={onCancelClick}
-                        disabled={isSubmitting}
-                        className="w-full bg-red-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-red-700 transition disabled:bg-slate-400"
-                    >
-                        {isSubmitting ? 'Retirando...' : 'Retirar da Venda'}
+                <div className="flex flex-col gap-2">
+                    <Link to={certificateUrl} className={`w-full text-center px-4 py-2 rounded-lg font-bold transition flex items-center justify-center gap-2 ${ticketData.redeemed ? 'bg-indigo-600 text-white hover:bg-indigo-700' : 'bg-slate-200 text-slate-500 cursor-not-allowed'}`} disabled={!ticketData.redeemed}>
+                        <AcademicCapIcon className="h-5 w-5"/>
+                        Ver Certificado
+                    </Link>
+                    <button onClick={handleDownload} className="w-full bg-slate-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-slate-700 transition flex items-center justify-center gap-2">
+                        <ArrowDownTrayIcon className="h-5 w-5"/>
+                        Baixar Ingresso
                     </button>
-                </>
+                    {!ticketData.redeemed && <p className="text-xs text-center text-slate-500 mt-1">Certificado disponível após check-in.</p>}
+                </div>
             );
         }
 
+        if (isEventCanceled && isListed) {
+            return ( <> <div className="text-xs text-center text-orange-800 bg-orange-100 p-3 rounded-md mb-4"> Retire o ingresso da venda para solicitar seu reembolso. </div> <button onClick={onCancelClick} disabled={isSubmitting} className="w-full bg-red-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-red-700 transition disabled:bg-slate-400"> {isSubmitting ? 'Retirando...' : 'Retirar da Venda'} </button> </> );
+        }
         if (isEventCanceled && !isListed) {
-            return (
-                <button
-                    onClick={onRefundClick}
-                    disabled={isSubmitting || ticketData.redeemed}
-                    className="w-full bg-orange-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-orange-600 transition disabled:bg-slate-400 disabled:cursor-not-allowed"
-                >
-                   {ticketData.redeemed ? 'Ingresso já utilizado' : (isSubmitting ? 'Processando...' : 'Solicitar Reembolso')}
-                </button>
-            );
+            return ( <button onClick={onRefundClick} disabled={isSubmitting || ticketData.redeemed} className="w-full bg-orange-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-orange-600 transition disabled:bg-slate-400 disabled:cursor-not-allowed"> {ticketData.redeemed ? 'Ingresso já utilizado' : (isSubmitting ? 'Processando...' : 'Solicitar Reembolso')} </button> );
         }
-
         if (isListed) {
-            return (
-                <button 
-                    onClick={onCancelClick}
-                    disabled={isSubmitting}
-                    className="w-full bg-red-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-red-700 transition disabled:bg-slate-400"
-                >
-                    {isSubmitting ? 'Cancelando...' : 'Cancelar Venda'}
-                </button>
-            );
+            return ( <button onClick={onCancelClick} disabled={isSubmitting} className="w-full bg-red-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-red-700 transition disabled:bg-slate-400"> {isSubmitting ? 'Cancelando...' : 'Cancelar Venda'} </button> );
         }
         
         return (
-            <button 
-                onClick={onSellClick}
-                disabled={ticketData.redeemed || isSubmitting}
-                className="w-full bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-indigo-700 transition disabled:bg-slate-400 disabled:cursor-not-allowed"
-            >
-                {ticketData.redeemed ? 'Ingresso já utilizado' : 'Vender'}
+            <button onClick={onSellClick} disabled={ticketData.redeemed || isSubmitting} className="w-full bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-indigo-700 transition disabled:bg-slate-400 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+                <TagIcon className="h-5 w-5"/>
+                {ticketData.redeemed ? 'Ingresso Utilizado' : 'Vender'}
             </button>
         );
     };
-    
+
     return (
         <div className="bg-white rounded-xl shadow-lg hover:shadow-2xl transition-shadow duration-300 overflow-hidden flex flex-col group">
             <div className="relative">
                 <Link to={`/event/${eventData.publicKey.toString()}`} className="block">
-                    <img 
-                      className={`h-48 w-full object-cover transition-transform duration-300 group-hover:scale-105 ${isEventCanceled ? 'filter grayscale' : ''}`} 
-                      src={image} 
-                      alt={eventData.name} 
-                    />
+                    <img className={`h-48 w-full object-cover transition-transform duration-300 group-hover:scale-105 ${isEventCanceled ? 'filter grayscale' : ''}`} src={eventData.image} alt={eventData.name} />
                 </Link>
                 <div className={`absolute top-2 right-2 px-3 py-1 text-xs font-bold rounded-full ${status.color}`}>
                     {status.text}
                 </div>
             </div>
-            
             <div className="p-6 flex-grow flex flex-col">
                 <h3 className="text-xl font-bold text-slate-900 truncate mb-2">{eventData.name}</h3>
                 <div className="space-y-2 text-slate-600">
                     <p className="flex items-center text-sm"><CalendarIcon /> {eventDate}</p>
-                    <p className="flex items-center text-sm"><LocationIcon /> {location}</p>
+                    <p className="flex items-center text-sm"><MapPinIcon /> {location}</p>
                 </div>
-                
                 <div className="mt-auto pt-6">
                     {renderActionArea()}
                 </div>
@@ -386,7 +407,7 @@ function TicketCard({ ticket, isListed, isSubmitting, onSellClick, onCancelClick
     );
 }
 
-function SellModal({ isOpen, onClose, onSubmit, ticket, isSubmitting }) {
+function SellModal({ isOpen, onClose, onSubmit, isSubmitting }) {
     const [price, setPrice] = useState('');
     
     const handleSubmit = async (e) => {
