@@ -1,13 +1,7 @@
-// src/components/modals/TicketSuccessModal.jsx
-
 import { useRef, useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import QRCode from 'react-qr-code';
-
-// O html2canvas não é mais necessário
-// import html2canvas from 'html2canvas';
-
-import { KeyIcon, ClipboardIcon, CheckCircleIcon, ArrowDownTrayIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline';
+import { KeyIcon, ClipboardIcon, CheckCircleIcon, ArrowDownTrayIcon, ExclamationTriangleIcon, AcademicCapIcon } from '@heroicons/react/24/outline';
 import { Modal } from '@/components/ui/Modal';
 import { ActionButton } from '@/components/ui/ActionButton';
 
@@ -16,12 +10,8 @@ export const TicketSuccessModal = ({ isOpen, onClose, ticketData }) => {
     const [isReady, setIsReady] = useState(false);
 
     useEffect(() => {
-        // Apenas verifica se o modal está aberto para o botão de fechar funcionar
-        if (isOpen) {
-            setIsReady(true);
-        } else {
-            setIsReady(false);
-        }
+        if (isOpen) { setIsReady(true); } 
+        else { setIsReady(false); }
     }, [isOpen]);
 
     if (!isOpen || !ticketData) {
@@ -36,7 +26,6 @@ export const TicketSuccessModal = ({ isOpen, onClose, ticketData }) => {
         toast.success("Frase secreta copiada!");
     };
 
-    // ✅ LÓGICA DE DOWNLOAD REFEITA SEM HTML2CANVAS, USANDO CANVAS NATIVO
     const handleDownload = () => {
         const svgElement = qrCodeContainerRef.current?.querySelector('svg');
         if (!svgElement) {
@@ -45,52 +34,70 @@ export const TicketSuccessModal = ({ isOpen, onClose, ticketData }) => {
         }
 
         const loadingToast = toast.loading('Gerando imagem do ingresso...');
-
-        // 1. Converte o SVG para uma string e cria um URL de imagem
         const svgData = new XMLSerializer().serializeToString(svgElement);
         const img = new Image();
         const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
         const url = URL.createObjectURL(svgBlob);
 
         img.onload = () => {
-            // 2. Cria um canvas com dimensões maiores para melhor qualidade (e.g., 2x)
             const scale = 2;
             const canvas = document.createElement('canvas');
+            // ✅ Aumentamos a altura do canvas para caber o texto do certificado
             canvas.width = 320 * scale;
-            canvas.height = 400 * scale;
+            canvas.height = 450 * scale; 
             const ctx = canvas.getContext('2d');
 
-            // 3. Desenha o layout do ingresso no canvas
-            
-            // Fundo branco
+            // Fundo
             ctx.fillStyle = '#FFFFFF';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
             // Título
-            ctx.fillStyle = '#1e293b'; // slate-800
+            ctx.fillStyle = '#1e293b';
             ctx.font = `bold ${22 * scale}px sans-serif`;
             ctx.textAlign = 'center';
             ctx.fillText('Seu Ingresso Digital', canvas.width / 2, 40 * scale);
             
             // Subtítulo
-            ctx.fillStyle = '#64748b'; // slate-500
+            ctx.fillStyle = '#64748b';
             ctx.font = `${14 * scale}px sans-serif`;
             ctx.fillText('Apresente este QR Code na entrada', canvas.width / 2, 70 * scale);
 
-            // Desenha a imagem do QR Code (que veio do SVG) no centro
+            // QR Code
             const qrSize = 180 * scale;
             const qrX = (canvas.width - qrSize) / 2;
             const qrY = 90 * scale;
             ctx.drawImage(img, qrX, qrY, qrSize, qrSize);
-            URL.revokeObjectURL(url); // Libera a memória do blob
+            URL.revokeObjectURL(url);
 
             // Endereço (mintAddress)
-            ctx.fillStyle = '#94a3b8'; // slate-400
+            ctx.fillStyle = '#94a3b8';
             ctx.font = `italic ${12 * scale}px monospace`;
             const shortAddress = `${mintAddress.slice(0, 10)}...${mintAddress.slice(-10)}`;
             ctx.fillText(shortAddress, canvas.width / 2, 300 * scale);
 
-            // 4. Inicia o download da imagem do canvas
+            // ✅ NOVA SEÇÃO: Informações do Certificado
+            ctx.strokeStyle = '#e2e8f0'; // Cor da linha (slate-200)
+            ctx.beginPath();
+            ctx.moveTo(20 * scale, 325 * scale);
+            ctx.lineTo(canvas.width - (20 * scale), 325 * scale);
+            ctx.stroke();
+
+            ctx.fillStyle = '#4f46e5'; // Cor do texto (indigo-600)
+            ctx.font = `bold ${16 * scale}px sans-serif`;
+            ctx.fillText('Seu Certificado Pós-Evento', canvas.width / 2, 360 * scale);
+            
+            ctx.fillStyle = '#334155'; // Cor do texto (slate-700)
+            ctx.font = `${13 * scale}px sans-serif`;
+            ctx.fillText('Após a validação na entrada, seu certificado', canvas.width / 2, 390 * scale);
+            ctx.fillText('estará disponível neste link:', canvas.width / 2, 410 * scale);
+
+            // Pegando o link dinamicamente
+            const certificateLink = `${window.location.origin}/certificate/${mintAddress}`;
+            ctx.font = `bold ${13 * scale}px monospace`;
+            ctx.fillStyle = '#1e293b';
+            ctx.fillText(certificateLink, canvas.width / 2, 430 * scale);
+
+            // Download
             const image = canvas.toDataURL('image/png');
             const link = document.createElement('a');
             link.href = image;
@@ -101,13 +108,7 @@ export const TicketSuccessModal = ({ isOpen, onClose, ticketData }) => {
             
             toast.success('Download iniciado!', { id: loadingToast });
         };
-
-        img.onerror = (e) => {
-            toast.error('Falha ao carregar a imagem do QR Code.', { id: loadingToast });
-            console.error("Erro ao carregar SVG como imagem:", e);
-            URL.revokeObjectURL(url);
-        };
-        
+        img.onerror = (e) => { toast.error('Falha ao carregar a imagem do QR Code.'); };
         img.src = url;
     };
 
@@ -117,7 +118,6 @@ export const TicketSuccessModal = ({ isOpen, onClose, ticketData }) => {
                 <CheckCircleIcon className="mx-auto h-16 w-16 text-green-500" />
                 <h3 className="mt-4 text-xl font-semibold text-slate-900">Tudo Certo! Nos vemos no evento!</h3>
                 
-                {/* Apenas exibe o QR Code, sem a ref para o html2canvas */}
                 <div className="mt-6 bg-white p-6 rounded-lg border border-slate-200">
                     <h4 className="font-bold text-lg text-slate-800">Seu Ingresso Digital</h4>
                     <p className="text-sm text-slate-500 mt-1">Apresente este QR Code na entrada.</p>
@@ -125,6 +125,14 @@ export const TicketSuccessModal = ({ isOpen, onClose, ticketData }) => {
                         <QRCode value={mintAddress} size={180} />
                     </div>
                     <p className="text-xs text-slate-400 mt-2 font-mono break-all">{mintAddress}</p>
+                </div>
+
+                {/* ✅ Seção de Certificado adicionada ao modal para reforçar a mensagem */}
+                <div className="mt-4 text-sm text-center p-4 bg-slate-50 rounded-lg">
+                    <AcademicCapIcon className="h-6 w-6 mx-auto text-indigo-500 mb-2"/>
+                    <p className="text-slate-600">
+                        Após validar seu ingresso no evento, seu <strong className="text-indigo-600">certificado de participação</strong> estará disponível.
+                    </p>
                 </div>
 
                 <div className="mt-8 p-4 bg-indigo-50 border-l-4 border-indigo-500 text-left rounded-md">
@@ -135,14 +143,14 @@ export const TicketSuccessModal = ({ isOpen, onClose, ticketData }) => {
                         <div className="ml-3">
                             <h3 className="text-sm font-bold text-indigo-800">Ação Necessária: Baixe seu Ingresso!</h3>
                             <div className="mt-2 text-sm text-indigo-700">
-                                <p>Este é o seu comprovante oficial. Salve-o em um local seguro para **garantir sua entrada no evento.**</p>
+                                <p>Salve-o em um local seguro para garantir sua entrada.</p>
                             </div>
                         </div>
                     </div>
                 </div>
 
                 <div className="mt-6">
-                     <button 
+                   <button 
                         onClick={handleDownload}
                         className="w-full flex items-center justify-center gap-2 px-4 py-3 border border-transparent rounded-md shadow-sm text-base font-medium text-white bg-indigo-600 hover:bg-indigo-700 transition-colors"
                     >
