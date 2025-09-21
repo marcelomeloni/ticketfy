@@ -1,5 +1,3 @@
-// src/components/event/PurchaseCard.jsx
-
 import { useState, useEffect } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
 import toast from 'react-hot-toast';
@@ -13,7 +11,8 @@ import { TicketIcon } from '@heroicons/react/24/outline';
 // ✅ URL da sua API
 const API_URL = "https://gasless-api-ke68.onrender.com";
 
-export const PurchaseCard = ({ eventAccount, eventAddress, onPurchaseSuccess }) => {
+// ✅ 1. Receba 'metadata' como prop, junto com as outras.
+export const PurchaseCard = ({ metadata, eventAccount, eventAddress, onPurchaseSuccess }) => {
     const { publicKey } = useWallet();
     const [isMinting, setIsMinting] = useState(false);
     const [selectedTierIndex, setSelectedTierIndex] = useState(0);
@@ -27,13 +26,7 @@ export const PurchaseCard = ({ eventAccount, eventAddress, onPurchaseSuccess }) 
     }, [publicKey]);
 
     const handleGetTicket = () => {
-        if (publicKey && isRegistered) {
-            // Se já tem carteira e cadastro, poderia ir direto para um fluxo de mint
-            // Por enquanto, sempre abrimos o modal de cadastro
-            setIsRegistrationModalOpen(true);
-        } else {
-            setIsRegistrationModalOpen(true);
-        }
+        setIsRegistrationModalOpen(true);
     };
 
     const handleRegistrationSubmit = async (formData) => {
@@ -77,8 +70,18 @@ export const PurchaseCard = ({ eventAccount, eventAddress, onPurchaseSuccess }) 
             const mintData = await mintResponse.json();
             if (!mintResponse.ok) throw new Error(mintData.details || 'Falha ao resgatar o ingresso.');
     
-            // Etapa 3: Mostrar sucesso
-            setTicketResult({ mintAddress: mintData.mintAddress });
+            // 🧠 2. Crie o objeto completo com os dados do evento!
+            const fullTicketData = {
+                mintAddress: mintData.mintAddress,
+                seedPhrase: null, // Usuário Web3 não recebe nova seed phrase
+                eventName: metadata.name,
+                eventDate: metadata.attributes?.find(attr => attr.trait_type === 'Date')?.value || 'Data a definir',
+                eventLocation: metadata.attributes?.find(attr => attr.trait_type === 'Location')?.value || 'Local a definir',
+            };
+            
+            // ✅ 3. Salve o objeto completo no estado
+            setTicketResult(fullTicketData);
+            
             setIsRegistrationModalOpen(false);
             toast.success("Ingresso resgatado com sucesso!", { id: loadingToast });
             setTimeout(() => onPurchaseSuccess(), 2000);
@@ -112,7 +115,17 @@ export const PurchaseCard = ({ eventAccount, eventAddress, onPurchaseSuccess }) 
                 throw new Error(data.details || 'Ocorreu um erro ao criar sua conta.');
             }
             
-            setTicketResult(data);
+            // 🧠 2. Crie o objeto completo combinando a resposta da API com o metadata
+            const fullTicketData = {
+                ...data, // Pega `mintAddress` e `seedPhrase` da resposta da API
+                eventName: metadata.name,
+                eventDate: metadata.attributes?.find(attr => attr.trait_type === 'Date')?.value || 'Data a definir',
+                eventLocation: metadata.attributes?.find(attr => attr.trait_type === 'Location')?.value || 'Local a definir',
+            };
+
+            // ✅ 3. Salve o objeto completo no estado
+            setTicketResult(fullTicketData);
+
             setIsRegistrationModalOpen(false);
             toast.success("Ingresso e carteira criados com sucesso!", { id: loadingToast });
             setTimeout(() => onPurchaseSuccess(), 2000);
@@ -150,19 +163,19 @@ export const PurchaseCard = ({ eventAccount, eventAddress, onPurchaseSuccess }) 
             <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
                  <h2 className="text-xl font-bold text-slate-800 mb-4 flex items-center"><TicketIcon className="w-6 h-6 mr-2 text-indigo-500" /> Ingressos</h2>
                  <div className="space-y-3 mb-6">
-                     {eventAccount.tiers.map((tier, index) => (
-                         <TierOption 
-                             key={index} tier={tier} isSelected={selectedTierIndex === index}
-                             isSoldOut={tier.ticketsSold >= tier.maxTicketsSupply}
-                             onSelect={() => !(tier.ticketsSold >= tier.maxTicketsSupply) && setSelectedTierIndex(index)}
-                         />
-                     ))}
+                      {eventAccount.tiers.map((tier, index) => (
+                           <TierOption 
+                                key={index} tier={tier} isSelected={selectedTierIndex === index}
+                                isSoldOut={tier.ticketsSold >= tier.maxTicketsSupply}
+                                onSelect={() => !(tier.ticketsSold >= tier.maxTicketsSupply) && setSelectedTierIndex(index)}
+                           />
+                      ))}
                  </div>
                  <ActionButton 
-                     onClick={handleGetTicket} loading={isMinting} disabled={isButtonDisabled}
-                     className={`w-full ${isFree && !isButtonDisabled && 'bg-green-600 hover:bg-green-700'}`}
+                      onClick={handleGetTicket} loading={isMinting} disabled={isButtonDisabled}
+                      className={`w-full ${isFree && !isButtonDisabled && 'bg-green-600 hover:bg-green-700'}`}
                  >
-                     {getButtonText()}
+                      {getButtonText()}
                  </ActionButton>
             </div>
 
