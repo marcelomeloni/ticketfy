@@ -12,12 +12,13 @@ import { Navbar } from './components/Navbar';
 import { Footer } from './components/Footer';
 import { Home } from './pages/Home';
 import { Events } from './pages/Events';
-import { Marketplace } from './pages/Marketplace';
 import { Admin } from './pages/Admin';
 import { CreateEvent } from './pages/CreateEvent';
+import { ValidatorPage } from './pages/ValidatorPage';
 import { ManageEvent } from './pages/ManageEvent';
 import { EventDetail } from './pages/EventDetail';
 import { MyTickets } from './pages/MyTickets';
+import { CertificatePage } from './pages/CertificatePage';
 import '@solana/wallet-adapter-react-ui/styles.css';
 import 'leaflet/dist/leaflet.css';
 function App() {
@@ -41,8 +42,9 @@ function App() {
               <Routes>
                 <Route path="/" element={<Home />} />
                 <Route path="/events" element={<Events />} />
-                <Route path="/marketplace" element={<Marketplace />} />
                 <Route path="/admin" element={<Admin />} />
+                <Route path="/event/:eventAddress/validate" element={<ValidatorPage />} />
+                <Route path="/certificate/:mintAddress" element={<CertificatePage />} />
                 <Route path="/event/:eventAddress" element={<EventDetail />} />
                 <Route path="/my-tickets" element={<MyTickets />} />
                 <Route path="/manage-event/:eventAddress" element={<ManageEvent />} />

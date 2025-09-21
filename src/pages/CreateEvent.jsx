@@ -8,7 +8,7 @@ import { CreateEventWizard } from '@/components/event/create/CreateEventWizard';
 import { MyEventsList } from '@/components/event/MyEventsList';
 import { InfoBox } from '@/components/ui/InfoBox';
 
-const PROGRAM_ADDRESS = "AEcgrC2sEtWX12zs1m7RemTdcr9QwBkMbJUXfC4oEd2M"; // Lembre-se de usar o seu Program ID
+const PROGRAM_ADDRESS = "AHRuW77r9tM8RAX7qbhVyjktgSZueb6QVjDjWXjEoCeA"; // Lembre-se de usar o seu Program ID
 const GLOBAL_CONFIG_SEED = Buffer.from("config");
 const WHITELIST_SEED = Buffer.from("whitelist");
 

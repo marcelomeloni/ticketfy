@@ -6,7 +6,7 @@ import idl from '../../../../idl/ticketing_system.json';
 
 // --- CONFIGURAÇÕES ---
 
-const PROGRAM_ID = "VpDhKZvKNsrEkdpiy8MMS3ArTXYV5wrZMTEBxGYE4UL"; 
+const PROGRAM_ID = "GRDPcYTxrXv1mX3ExUS2UUjjAWNezUdiwvRtn3EQP8Ci"; 
 
 const RPC_URL = "https://api.devnet.solana.com"; 
 

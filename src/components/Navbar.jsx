@@ -32,7 +32,6 @@ export function Navbar() {
               Meus Ingressos
             </NavLink>
           )}
-          <NavLink to="/marketplace" style={({ isActive }) => (isActive ? activeStyle : undefined)} className="hover:text-slate-900 transition-colors">Marketplace</NavLink>
           <NavLink to="/create-event" style={({ isActive }) => (isActive ? activeStyle : undefined)} className="hover:text-slate-900 transition-colors">Criar Evento</NavLink>
         </nav>
 

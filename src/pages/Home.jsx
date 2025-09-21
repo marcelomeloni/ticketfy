@@ -8,7 +8,7 @@ import { createReadOnlyProgram } from '@/lib/program';
 // Importe seu componente de card de evento
 import { EventCard } from '@/components/event/EventCard';
 
-const PROGRAM_ADDRESS = "AEcgrC2sEtWX12zs1m7RemTdcr9QwBkMbJUXfC4oEd2M";
+const PROGRAM_ADDRESS = "AHRuW77r9tM8RAX7qbhVyjktgSZueb6QVjDjWXjEoCeA";
 
 export function Home() {
     const { connection } = useConnection();
