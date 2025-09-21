@@ -1,7 +1,7 @@
-import { useRef, useEffect, useState } from 'react';
+import { useRef } from 'react';
 import toast from 'react-hot-toast';
 import QRCode from 'react-qr-code';
-import jsPDF from 'jspdf'; // ✅ Importa a nova biblioteca
+import jsPDF from 'jspdf';
 import { KeyIcon, ClipboardIcon, CheckCircleIcon, ArrowDownTrayIcon, ExclamationTriangleIcon, AcademicCapIcon } from '@heroicons/react/24/outline';
 import { Modal } from '@/components/ui/Modal';
 import { ActionButton } from '@/components/ui/ActionButton';
@@ -23,151 +23,159 @@ export const TicketSuccessModal = ({ isOpen, onClose, ticketData }) => {
         toast.success(successMessage);
     };
 
-    // ✅ LÓGICA DE DOWNLOAD TOTALMENTE REFEITA PARA GERAR PDF
     const handleDownload = () => {
-    const svgElement = qrCodeContainerRef.current?.querySelector('svg');
-    if (!svgElement) {
-        toast.error("QR Code não encontrado. Tente novamente.");
-        return;
-    }
+        const svgElement = qrCodeContainerRef.current?.querySelector('svg');
+        if (!svgElement) {
+            toast.error("QR Code não encontrado. Tente novamente.");
+            return;
+        }
 
-    const loadingToast = toast.loading('Gerando seu ingresso personalizado...');
+        const loadingToast = toast.loading('Gerando seu ingresso personalizado...');
 
-    // Assumindo que você passará esses dados via props em ticketData
-    // Se não existirem, usamos valores padrão para não quebrar o layout
-    const { 
-        eventName = 'Nome do Evento', 
-        eventDate = 'Data e Hora do Evento', 
-        eventLocation = 'Local do Evento',
-        mintAddress
-    } = ticketData;
+        const {
+            eventName = 'Nome do Evento',
+            eventDate, // A data virá como uma string ISO
+            eventLocation,
+            mintAddress
+        } = ticketData;
 
-    const svgData = new XMLSerializer().serializeToString(svgElement);
-    const img = new Image();
-    const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
-    const url = URL.createObjectURL(svgBlob);
+        // ✅ FUNÇÃO PARA FORMATAR A DATA CORRETAMENTE
+        const formatDisplayDate = (dateString) => {
+            if (!dateString || isNaN(new Date(dateString))) {
+                return 'Data a definir'; // Retorno padrão se a data for inválida
+            }
+            // Converte a data para um formato amigável em Português do Brasil
+            return new Date(dateString).toLocaleString('pt-BR', {
+                day: '2-digit',
+                month: 'long',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                timeZone: 'America/Sao_Paulo' // Opcional: Especifique o fuso horário
+            });
+        };
 
-    img.onload = () => {
-        const canvas = document.createElement('canvas');
-        canvas.width = img.width;
-        canvas.height = img.height;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0);
-        const qrImageDataUrl = canvas.toDataURL('image/png');
-        URL.revokeObjectURL(url);
+        const formattedDate = formatDisplayDate(eventDate);
+        const displayLocation = eventLocation || 'Local a definir';
 
-        const doc = new jsPDF({
-            orientation: 'portrait',
-            unit: 'mm',
-            format: 'a5' // Formato A5 (148 x 210 mm)
-        });
+        const svgData = new XMLSerializer().serializeToString(svgElement);
+        const img = new Image();
+        const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+        const url = URL.createObjectURL(svgBlob);
 
-        // --- Constantes de Design ---
-        const PAGE_WIDTH = doc.internal.pageSize.getWidth();
-        const PAGE_HEIGHT = doc.internal.pageSize.getHeight();
-        const MARGIN = 15;
-        const PRIMARY_COLOR = '#4F46E5'; // Indigo 600
-        const TEXT_COLOR_DARK = '#1E293B'; // Slate 800
-        const TEXT_COLOR_LIGHT = '#64748B'; // Slate 500
+        img.onload = () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = img.width;
+            canvas.height = img.height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0);
+            const qrImageDataUrl = canvas.toDataURL('image/png');
+            URL.revokeObjectURL(url);
 
-        // === CABEÇALHO ===
-        doc.setFillColor(PRIMARY_COLOR);
-        doc.rect(0, 0, PAGE_WIDTH, 30, 'F'); // 'F' para preencher
-        
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(24);
-        doc.setTextColor('#FFFFFF'); // Branco
-        doc.text('Ticketfy', MARGIN, 15);
+            const doc = new jsPDF({
+                orientation: 'portrait',
+                unit: 'mm',
+                format: 'a5'
+            });
 
-        doc.setFont('helvetica', 'normal');
-        doc.setFontSize(10);
-        doc.text('O Futuro dos Eventos é Descentralizado', MARGIN, 23);
+            const PAGE_WIDTH = doc.internal.pageSize.getWidth();
+            const PAGE_HEIGHT = doc.internal.pageSize.getHeight();
+            const MARGIN = 15;
+            const PRIMARY_COLOR = '#4F46E5';
+            const TEXT_COLOR_DARK = '#1E293B';
+            const TEXT_COLOR_LIGHT = '#64748B';
 
-        // === CORPO DO INGRESSO ===
-        let currentY = 45; // Posição vertical inicial
+            // === CABEÇALHO ===
+            doc.setFillColor(PRIMARY_COLOR);
+            doc.rect(0, 0, PAGE_WIDTH, 30, 'F');
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(24);
+            doc.setTextColor('#FFFFFF');
+            doc.text('Ticketfy', MARGIN, 15);
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(10);
+            doc.text('O Futuro dos Eventos é Descentralizado', MARGIN, 23);
 
-        // --- Detalhes do Evento ---
-        doc.setFontSize(12);
-        doc.setTextColor(TEXT_COLOR_LIGHT);
-        doc.text('Ingresso Válido Para:', MARGIN, currentY);
-        currentY += 8;
+            // === CORPO DO INGRESSO ===
+            let currentY = 45;
+            doc.setFontSize(12);
+            doc.setTextColor(TEXT_COLOR_LIGHT);
+            doc.text('Ingresso Válido Para:', MARGIN, currentY);
+            currentY += 8;
 
-        doc.setFontSize(20);
-        doc.setFont('helvetica', 'bold');
-        doc.setTextColor(TEXT_COLOR_DARK);
-        doc.text(eventName, MARGIN, currentY, { maxWidth: PAGE_WIDTH - MARGIN * 2 });
-        currentY += 15; // Aumenta o espaço após o título
+            doc.setFontSize(20);
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(TEXT_COLOR_DARK);
+            doc.text(eventName, MARGIN, currentY, { maxWidth: PAGE_WIDTH - MARGIN * 2 });
+            currentY += 15;
 
-        doc.setFontSize(12);
-        doc.setFont('helvetica', 'normal');
-        doc.setTextColor(TEXT_COLOR_DARK);
-        doc.text(`Data: ${eventDate}`, MARGIN, currentY);
-        currentY += 7;
-        doc.text(`Local: ${eventLocation}`, MARGIN, currentY);
-        currentY += 15;
+            doc.setFontSize(12);
+            doc.setFont('helvetica', 'normal');
+            doc.setTextColor(TEXT_COLOR_DARK);
+            // ✅ USA AS VARIÁVEIS FORMATADAS
+            doc.text(`Data: ${formattedDate}`, MARGIN, currentY);
+            currentY += 7;
+            doc.text(`Local: ${displayLocation}`, MARGIN, currentY);
+            currentY += 15;
 
-        // --- QR Code ---
-        const qrSize = 65; // Tamanho do QR Code
-        const qrX = (PAGE_WIDTH - qrSize) / 2;
-        doc.addImage(qrImageDataUrl, 'PNG', qrX, currentY, qrSize, qrSize);
-        currentY += qrSize + 5; // Posição abaixo do QR Code
+            // --- QR Code ---
+            const qrSize = 65;
+            const qrX = (PAGE_WIDTH - qrSize) / 2;
+            doc.addImage(qrImageDataUrl, 'PNG', qrX, currentY, qrSize, qrSize);
+            currentY += qrSize + 5;
 
-        doc.setFontSize(11);
-        doc.setTextColor(TEXT_COLOR_LIGHT);
-        doc.text('Apresente este QR Code na entrada do evento.', PAGE_WIDTH / 2, currentY, { align: 'center' });
-        currentY += 15;
-        
-        // --- Linha Tracejada (Simula canhoto) ---
-        doc.setLineDashPattern([2, 2], 0);
-        doc.setDrawColor(TEXT_COLOR_LIGHT);
-        doc.line(MARGIN, currentY, PAGE_WIDTH - MARGIN, currentY);
-        doc.setLineDashPattern([], 0); // Reseta o padrão da linha
-        currentY += 10;
+            doc.setFontSize(11);
+            doc.setTextColor(TEXT_COLOR_LIGHT);
+            doc.text('Apresente este QR Code na entrada do evento.', PAGE_WIDTH / 2, currentY, { align: 'center' });
+            currentY += 15;
+            
+            // --- Linha Tracejada ---
+            doc.setLineDashPattern([2, 2], 0);
+            doc.setDrawColor(TEXT_COLOR_LIGHT);
+            doc.line(MARGIN, currentY, PAGE_WIDTH - MARGIN, currentY);
+            doc.setLineDashPattern([], 0);
+            currentY += 10;
 
-        // --- Seção do Certificado ---
-        doc.setFontSize(14);
-        doc.setFont('helvetica', 'bold');
-        doc.setTextColor(PRIMARY_COLOR);
-        doc.text('Seu Certificado Digital', PAGE_WIDTH / 2, currentY, { align: 'center' });
-        currentY += 7;
+            // --- Seção do Certificado ---
+            doc.setFontSize(14);
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(PRIMARY_COLOR);
+            doc.text('Seu Certificado Digital', PAGE_WIDTH / 2, currentY, { align: 'center' });
+            currentY += 7;
 
-        doc.setFontSize(10);
-        doc.setFont('helvetica', 'normal');
-        doc.setTextColor(TEXT_COLOR_DARK);
-        doc.text('Após o evento, seu certificado estará disponível em:', PAGE_WIDTH / 2, currentY, { align: 'center' });
-        currentY += 7;
+            doc.setFontSize(10);
+            doc.setFont('helvetica', 'normal');
+            doc.setTextColor(TEXT_COLOR_DARK);
+            doc.text('Após o evento, seu certificado estará disponível em:', PAGE_WIDTH / 2, currentY, { align: 'center' });
+            currentY += 7;
 
-        const certificateLink = `${APP_BASE_URL}/certificate/${mintAddress}`;
-        doc.setTextColor('#1D4ED8'); // Blue 700
-        doc.textWithLink(certificateLink, PAGE_WIDTH / 2, currentY, { url: certificateLink, align: 'center' });
+            const certificateLink = `${APP_BASE_URL}/certificate/${mintAddress}`;
+            doc.setTextColor('#1D4ED8');
+            doc.textWithLink(certificateLink, PAGE_WIDTH / 2, currentY, { url: certificateLink, align: 'center' });
 
-        // === RODAPÉ ===
-        const footerY = PAGE_HEIGHT - 18;
-        doc.setFillColor('#F1F5F9'); // Slate 100 (fundo cinza claro)
-        doc.rect(0, footerY - 5, PAGE_WIDTH, 23, 'F');
-        
-        doc.setFontSize(8);
-        doc.setFont('courier', 'italic');
-        doc.setTextColor(TEXT_COLOR_LIGHT);
-        doc.text('ID do Ingresso (Mint Address):', MARGIN, footerY);
-        doc.text(mintAddress, MARGIN, footerY + 4);
-        
-        doc.setFont('helvetica', 'bold');
-        doc.setTextColor(PRIMARY_COLOR);
-        doc.text('www.ticketfy.com', PAGE_WIDTH - MARGIN, footerY + 2, { align: 'right' });
+            // === RODAPÉ ===
+            const footerY = PAGE_HEIGHT - 18;
+            doc.setFillColor('#F1F5F9');
+            doc.rect(0, footerY - 5, PAGE_WIDTH, 23, 'F');
+            doc.setFontSize(8);
+            doc.setFont('courier', 'italic');
+            doc.setTextColor(TEXT_COLOR_LIGHT);
+            doc.text('ID do Ingresso (Mint Address):', MARGIN, footerY);
+            doc.text(mintAddress, MARGIN, footerY + 4);
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(PRIMARY_COLOR);
+            doc.text('www.ticketfy.com', PAGE_WIDTH - MARGIN, footerY + 2, { align: 'right' });
 
+            doc.save(`ingresso-ticketfy-${mintAddress.slice(0, 6)}.pdf`);
+            
+            toast.success('Seu ingresso foi gerado com sucesso!', { id: loadingToast });
+        };
 
-        // Salva o PDF
-        doc.save(`ingresso-ticketfy-${mintAddress.slice(0, 6)}.pdf`);
-        
-        toast.success('Seu ingresso foi gerado com sucesso!', { id: loadingToast });
+        img.onerror = () => { 
+            toast.error('Falha ao carregar a imagem do QR Code.', { id: loadingToast }); 
+        };
+        img.src = url;
     };
-
-    img.onerror = () => { 
-        toast.error('Falha ao carregar a imagem do QR Code.', { id: loadingToast }); 
-    };
-    img.src = url;
-};
     
     const certificateLink = `${APP_BASE_URL}/certificate/${mintAddress}`;
 
@@ -191,7 +199,6 @@ export const TicketSuccessModal = ({ isOpen, onClose, ticketData }) => {
                     <p className="text-slate-600">
                         Após validar seu ingresso no evento, seu <strong className="text-indigo-600">certificado</strong> estará disponível.
                     </p>
-                    {/* ✅ Link visível no modal para o usuário copiar se quiser */}
                     <div className="mt-2 flex items-center justify-center gap-2">
                         <input type="text" readOnly value={certificateLink} className="w-full text-xs text-center font-mono bg-slate-200 border-slate-300 rounded-md shadow-sm"/>
                         <button onClick={() => handleCopy(certificateLink, 'Link do certificado copiado!')} className="p-2 bg-indigo-100 text-indigo-600 rounded-md hover:bg-indigo-200 flex-shrink-0">
@@ -234,5 +241,3 @@ export const TicketSuccessModal = ({ isOpen, onClose, ticketData }) => {
         </Modal>
     );
 };
-
-
