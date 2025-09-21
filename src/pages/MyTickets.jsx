@@ -4,7 +4,7 @@ import { useConnection, useAnchorWallet } from '@solana/wallet-adapter-react';
 import { Program, web3, BN } from '@coral-xyz/anchor';
 import { getAssociatedTokenAddress } from '@solana/spl-token';
 import toast from 'react-hot-toast';
-import { createRoot } from 'react-dom/client';
+import ReactDOM from 'react-dom'; // ✅ ALTERAÇÃO: Importa o ReactDOM legado para usar o callback
 import QRCode from 'react-qr-code';
 import jsPDF from 'jspdf';
 
@@ -247,11 +247,10 @@ function TicketCard({ ticket, isListed, isSubmitting, onSellClick, onCancelClick
         fetchEventDetails();
     }, [program, ticketData.event]);
 
-    // ✅ LÓGICA DE DOWNLOAD SUBSTITUÍDA PARA GERAR PDF
     const handleDownload = () => {
         const tempContainer = document.createElement("div");
         tempContainer.style.position = 'absolute';
-        tempContainer.style.left = '-9999px'; // Esconde o container
+        tempContainer.style.left = '-9999px';
         document.body.appendChild(tempContainer);
 
         const onRender = () => {
@@ -288,7 +287,6 @@ function TicketCard({ ticket, isListed, isSubmitting, onSellClick, onCancelClick
                 const TEXT_COLOR_DARK = '#1E293B';
                 const TEXT_COLOR_LIGHT = '#64748B';
 
-                // Cabeçalho
                 doc.setFillColor(PRIMARY_COLOR);
                 doc.rect(0, 0, PAGE_WIDTH, 30, 'F');
                 doc.setFont('helvetica', 'bold');
@@ -299,7 +297,6 @@ function TicketCard({ ticket, isListed, isSubmitting, onSellClick, onCancelClick
                 doc.setFontSize(10);
                 doc.text('O Futuro dos Eventos é Descentralizado', MARGIN, 23);
 
-                // Corpo
                 let currentY = 45;
                 doc.setFontSize(12);
                 doc.setTextColor(TEXT_COLOR_LIGHT);
@@ -318,7 +315,6 @@ function TicketCard({ ticket, isListed, isSubmitting, onSellClick, onCancelClick
                 doc.text(`Local: ${eventData.properties.location.venueName || 'Online'}`, MARGIN, currentY);
                 currentY += 15;
 
-                // QR Code
                 const qrSize = 65;
                 const qrX = (PAGE_WIDTH - qrSize) / 2;
                 doc.addImage(qrImageDataUrl, 'PNG', qrX, currentY, qrSize, qrSize);
@@ -328,7 +324,6 @@ function TicketCard({ ticket, isListed, isSubmitting, onSellClick, onCancelClick
                 doc.text('Apresente este QR Code na entrada do evento.', PAGE_WIDTH / 2, currentY, { align: 'center' });
                 currentY += 15;
                 
-                // Linha Tracejada e Certificado
                 doc.setLineDashPattern([2, 2], 0);
                 doc.setDrawColor(TEXT_COLOR_LIGHT);
                 doc.line(MARGIN, currentY, PAGE_WIDTH - MARGIN, currentY);
@@ -348,7 +343,6 @@ function TicketCard({ ticket, isListed, isSubmitting, onSellClick, onCancelClick
                 doc.setTextColor('#1D4ED8');
                 doc.textWithLink(certificateLink, PAGE_WIDTH / 2, currentY, { url: certificateLink, align: 'center' });
 
-                // Rodapé
                 const footerY = PAGE_HEIGHT - 18;
                 doc.setFillColor('#F1F5F9');
                 doc.rect(0, footerY - 5, PAGE_WIDTH, 23, 'F');
@@ -364,7 +358,6 @@ function TicketCard({ ticket, isListed, isSubmitting, onSellClick, onCancelClick
                 doc.save(`ingresso-ticketfy-${ticketData.nftMint.toString().slice(0, 6)}.pdf`);
                 toast.success('Seu ingresso foi gerado com sucesso!', { id: loadingToast });
                 
-                // Limpeza
                 document.body.removeChild(tempContainer);
             };
             
@@ -376,8 +369,8 @@ function TicketCard({ ticket, isListed, isSubmitting, onSellClick, onCancelClick
             img.src = url;
         };
 
-        const root = createRoot(tempContainer);
-        root.render(<QRCode value={ticketData.nftMint.toString()} size={256} />, { onUnmount: onRender() });
+        // ✅ ALTERAÇÃO: Usa ReactDOM.render com callback para garantir que o QR Code exista antes de continuar.
+        ReactDOM.render(<QRCode value={ticketData.nftMint.toString()} size={256} />, tempContainer, onRender);
     };
 
     if (isLoading || !eventData) {
