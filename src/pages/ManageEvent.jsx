@@ -36,6 +36,7 @@ export function ManageEvent() {
     const wallet = useAnchorWallet();
 
     const [event, setEvent] = useState(null);
+    const [metadata, setMetadata] = useState(null);
     const [loading, setLoading] = useState(true);
     const [actionLoading, setActionLoading] = useState(false);
     const [reserveBalance, setReserveBalance] = useState(0);
@@ -54,6 +55,16 @@ export function ManageEvent() {
             const eventPubkey = new web3.PublicKey(eventAddress);
             const eventAccount = await program.account.event.fetch(eventPubkey);
             setEvent(eventAccount);
+
+            if (eventAccount.metadataUri) {
+                const response = await fetch(eventAccount.metadataUri);
+                if (response.ok) {
+                    const data = await response.json();
+                    setMetadata(data);
+                } else {
+                    setMetadata({ name: "Nome do Evento Indisponível" });
+                }
+            }
 
             const [refundReservePda] = web3.PublicKey.findProgramAddressSync(
                 [REFUND_RESERVE_SEED, eventPubkey.toBuffer()],
@@ -105,14 +116,14 @@ export function ManageEvent() {
     };
     
     const handleAddValidator = () => {
-         if (!program || !wallet || !validatorAddress) return;
-         try {
-             const method = program.methods
-                 .addValidator(new web3.PublicKey(validatorAddress))
-                 .accounts({ event: new web3.PublicKey(eventAddress), controller: wallet.publicKey });
-             handleTransaction(method, "Validador adicionado com sucesso!");
-             setValidatorAddress('');
-         } catch(e) { toast.error("Endereço de carteira inválido.") }
+        if (!program || !wallet || !validatorAddress) return;
+        try {
+            const method = program.methods
+                .addValidator(new web3.PublicKey(validatorAddress))
+                .accounts({ event: new web3.PublicKey(eventAddress), controller: wallet.publicKey });
+            handleTransaction(method, "Validador adicionado com sucesso!");
+            setValidatorAddress('');
+        } catch(e) { toast.error("Endereço de carteira inválido.") }
     };
     
     const handleRemoveValidator = (addressToRemove) => {
@@ -166,7 +177,7 @@ export function ManageEvent() {
             <header className="mb-8">
                 <Link to="/create-event" className="text-sm text-indigo-600 hover:underline mb-4 block">&larr; Voltar para Meus Eventos</Link>
                 <div className="flex flex-wrap items-center gap-4">
-                    <h1 className="text-4xl font-bold text-slate-900">{event.name || "Evento sem nome"}</h1>
+                    <h1 className="text-4xl font-bold text-slate-900">{metadata?.name || "Carregando nome..."}</h1>
                     <span className={`px-3 py-1 text-sm font-semibold rounded-full ${getSaleStatus(event).color}`}>{getSaleStatus(event).text}</span>
                 </div>
             </header>
