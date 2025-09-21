@@ -1,5 +1,3 @@
-// src/pages/CertificatePage.jsx
-
 import { useEffect, useState, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import QRCode from 'react-qr-code';
@@ -10,12 +8,9 @@ const API_URL = "https://gasless-api-ke68.onrender.com";
 // Componente para exibir o certificado
 const CertificateDisplay = ({ data, eventName }) => {
     const certificateRef = useRef(null);
-    // ✅ CORREÇÃO: Defina a ref que estava faltando.
     const qrCodeContainerRef = useRef(null);
 
     const handleDownload = () => {
-        // A lógica de download agora vai procurar o SVG dentro de qrCodeContainerRef,
-        // o que é mais seguro do que procurar em todo o 'certificateRef'.
         const svgElement = qrCodeContainerRef.current?.querySelector('svg');
         if (!svgElement) {
             alert("Não foi possível encontrar o QR Code para gerar a imagem.");
@@ -72,8 +67,9 @@ const CertificateDisplay = ({ data, eventName }) => {
             const link = document.createElement('a');
             link.href = image;
             link.download = `certificado-${data.profile.name.replace(/\s/g, '-')}.png`;
+            document.body.appendChild(link);
             link.click();
-            document.body.removeChild(link); // Limpeza do elemento
+            document.body.removeChild(link);
         };
         img.onerror = () => {
             alert("Ocorreu um erro ao carregar a imagem do QR Code.");
@@ -83,7 +79,6 @@ const CertificateDisplay = ({ data, eventName }) => {
 
     return (
         <div className="max-w-4xl mx-auto">
-            {/* Agora o 'certificateRef' envolve apenas o visual do certificado */}
             <div ref={certificateRef} className="bg-slate-50 p-10 sm:p-16 border-8 border-double border-slate-300 rounded-lg shadow-2xl text-center">
                 <AcademicCapIcon className="mx-auto h-16 w-16 text-indigo-500 mb-4" />
                 <h1 className="text-4xl sm:text-5xl font-serif font-bold text-slate-900">Certificado de Participação</h1>
@@ -93,7 +88,6 @@ const CertificateDisplay = ({ data, eventName }) => {
                 <p className="mt-2 text-2xl font-bold text-slate-800">{eventName}</p>
                 <div className="mt-10 flex flex-col items-center">
                     <p className="text-sm text-slate-500 mb-2">Validação On-chain</p>
-                    {/* A ref é aplicada diretamente no contêiner do QR Code */}
                     <div className="p-2 bg-white rounded-md" ref={qrCodeContainerRef}>
                         <QRCode value={`https://solscan.io/token/${data.ticket.nftMint}?cluster=devnet`} size={100} />
                     </div>
@@ -113,15 +107,13 @@ const CertificateDisplay = ({ data, eventName }) => {
 };
 
 
-// Componente principal da página (sem alterações)
+// Componente principal da página
 export const CertificatePage = () => {
     const { mintAddress } = useParams();
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState(null);
     const [data, setData] = useState(null);
-
-    // TODO: Obter o nome do evento dinamicamente se necessário
-    const eventName = "Meu Evento Incrível na Solana";
+    const [eventName, setEventName] = useState("Carregando...");
 
     useEffect(() => {
         if (!mintAddress) {
@@ -140,12 +132,17 @@ export const CertificatePage = () => {
 
                 const result = await response.json();
 
-                // A VERIFICAÇÃO CRUCIAL!
                 if (!result.ticket.redeemed) {
                     throw new Error("Este ingresso precisa ser validado no evento para gerar o certificado.");
                 }
 
                 setData(result);
+                if (result.event && result.event.name) {
+                    setEventName(result.event.name);
+                } else {
+                    setEventName("Evento Especial");
+                }
+
             } catch (err) {
                 setError(err.message);
             } finally {
