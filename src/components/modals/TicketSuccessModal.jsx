@@ -1,21 +1,15 @@
 import { useRef, useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import QRCode from 'react-qr-code';
+import jsPDF from 'jspdf'; // ✅ Importa a nova biblioteca
 import { KeyIcon, ClipboardIcon, CheckCircleIcon, ArrowDownTrayIcon, ExclamationTriangleIcon, AcademicCapIcon } from '@heroicons/react/24/outline';
 import { Modal } from '@/components/ui/Modal';
 import { ActionButton } from '@/components/ui/ActionButton';
 
-// Define your app's base URL as a constant for reliability
 const APP_BASE_URL = "https://ticketfy.onrender.com";
 
 export const TicketSuccessModal = ({ isOpen, onClose, ticketData }) => {
     const qrCodeContainerRef = useRef(null);
-    const [isReady, setIsReady] = useState(false);
-
-    useEffect(() => {
-        if (isOpen) { setIsReady(true); } 
-        else { setIsReady(false); }
-    }, [isOpen]);
 
     if (!isOpen || !ticketData) {
         return null;
@@ -24,11 +18,12 @@ export const TicketSuccessModal = ({ isOpen, onClose, ticketData }) => {
     const { mintAddress, seedPhrase } = ticketData;
     const words = seedPhrase ? seedPhrase.split(' ') : [];
 
-    const handleCopy = () => {
-        navigator.clipboard.writeText(seedPhrase);
-        toast.success("Frase secreta copiada!");
+    const handleCopy = (textToCopy, successMessage) => {
+        navigator.clipboard.writeText(textToCopy);
+        toast.success(successMessage);
     };
 
+    // ✅ LÓGICA DE DOWNLOAD TOTALMENTE REFEITA PARA GERAR PDF
     const handleDownload = () => {
         const svgElement = qrCodeContainerRef.current?.querySelector('svg');
         if (!svgElement) {
@@ -36,79 +31,82 @@ export const TicketSuccessModal = ({ isOpen, onClose, ticketData }) => {
             return;
         }
 
-        const loadingToast = toast.loading('Gerando imagem do ingresso...');
+        const loadingToast = toast.loading('Gerando PDF do ingresso...');
+
         const svgData = new XMLSerializer().serializeToString(svgElement);
         const img = new Image();
         const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
         const url = URL.createObjectURL(svgBlob);
 
         img.onload = () => {
-            const scale = 2;
+            // Converte o SVG para um Data URL de imagem PNG
             const canvas = document.createElement('canvas');
-            canvas.width = 320 * scale;
-            canvas.height = 450 * scale; 
+            canvas.width = img.width;
+            canvas.height = img.height;
             const ctx = canvas.getContext('2d');
-
-            ctx.fillStyle = '#FFFFFF';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-            ctx.fillStyle = '#1e293b';
-            ctx.font = `bold ${22 * scale}px sans-serif`;
-            ctx.textAlign = 'center';
-            ctx.fillText('Seu Ingresso Digital', canvas.width / 2, 40 * scale);
-            
-            ctx.fillStyle = '#64748b';
-            ctx.font = `${14 * scale}px sans-serif`;
-            ctx.fillText('Apresente este QR Code na entrada', canvas.width / 2, 70 * scale);
-
-            const qrSize = 180 * scale;
-            const qrX = (canvas.width - qrSize) / 2;
-            const qrY = 90 * scale;
-            ctx.drawImage(img, qrX, qrY, qrSize, qrSize);
+            ctx.drawImage(img, 0, 0);
+            const qrImageDataUrl = canvas.toDataURL('image/png');
             URL.revokeObjectURL(url);
 
-            ctx.fillStyle = '#94a3b8';
-            ctx.font = `italic ${12 * scale}px monospace`;
-            const shortAddress = `${mintAddress.slice(0, 10)}...${mintAddress.slice(-10)}`;
-            ctx.fillText(shortAddress, canvas.width / 2, 300 * scale);
+            // Cria um novo documento PDF (A6 é um bom tamanho para ingresso)
+            const doc = new jsPDF({
+                orientation: 'portrait',
+                unit: 'mm',
+                format: 'a6'
+            });
 
-            ctx.strokeStyle = '#e2e8f0';
-            ctx.beginPath();
-            ctx.moveTo(20 * scale, 325 * scale);
-            ctx.lineTo(canvas.width - (20 * scale), 325 * scale);
-            ctx.stroke();
+            // Adiciona conteúdo ao PDF
+            doc.setFontSize(22);
+            doc.setFont("helvetica", "bold");
+            doc.text('Seu Ingresso Digital', doc.internal.pageSize.getWidth() / 2, 20, { align: 'center' });
 
-            ctx.fillStyle = '#4f46e5';
-            ctx.font = `bold ${16 * scale}px sans-serif`;
-            ctx.fillText('Seu Certificado Pós-Evento', canvas.width / 2, 360 * scale);
+            doc.setFontSize(12);
+            doc.setFont("helvetica", "normal");
+            doc.setTextColor(100); // Cinza
+            doc.text('Apresente este QR Code na entrada do evento.', doc.internal.pageSize.getWidth() / 2, 30, { align: 'center' });
+
+            // Adiciona a imagem do QR Code
+            const qrSize = 60; // 60mm
+            const qrX = (doc.internal.pageSize.getWidth() - qrSize) / 2;
+            doc.addImage(qrImageDataUrl, 'PNG', qrX, 38, qrSize, qrSize);
+
+            // Adiciona o endereço do ingresso
+            doc.setFontSize(8);
+            doc.setFont("courier", "italic");
+            doc.setTextColor(150);
+            doc.text(mintAddress, doc.internal.pageSize.getWidth() / 2, 105, { align: 'center' });
+
+            // Linha divisória
+            doc.setDrawColor(220, 220, 220); // Cinza claro
+            doc.line(15, 115, doc.internal.pageSize.getWidth() - 15, 115);
+
+            // Seção do Certificado
+            doc.setFontSize(14);
+            doc.setFont("helvetica", "bold");
+            doc.setTextColor(79, 70, 229); // Roxo (indigo-600)
+            doc.text('Seu Certificado', doc.internal.pageSize.getWidth() / 2, 125, { align: 'center' });
             
-            ctx.fillStyle = '#334155';
-            ctx.font = `${13 * scale}px sans-serif`;
-            ctx.fillText('Após o evento, seu certificado estará disponível em:', canvas.width / 2, 390 * scale);
-
-            // Use the constant for the base URL
+            doc.setFontSize(10);
+            doc.setFont("helvetica", "normal");
+            doc.setTextColor(51, 65, 85); // Cinza escuro (slate-700)
+            doc.text('Após o evento, seu certificado estará disponível em:', doc.internal.pageSize.getWidth() / 2, 132, { align: 'center' });
+            
+            // ✅ Adiciona o link clicável
             const certificateLink = `${APP_BASE_URL}/certificate/${mintAddress}`;
-            ctx.font = `bold ${13 * scale}px monospace`;
-            ctx.fillStyle = '#1e293b';
-            
-            // Logic to wrap text if the link is too long for the canvas
-            const maxTextWidth = canvas.width - (40 * scale);
-            const linkText = `${APP_BASE_URL}/certificate/...${mintAddress.slice(-12)}`;
-            ctx.fillText(linkText, canvas.width / 2, 415 * scale, maxTextWidth);
+            doc.setFontSize(10);
+            doc.setTextColor(29, 78, 216); // Azul (blue-600)
+            doc.textWithLink(certificateLink, doc.internal.pageSize.getWidth() / 2, 139, { url: certificateLink, align: 'center' });
 
-            const image = canvas.toDataURL('image/png');
-            const link = document.createElement('a');
-            link.href = image;
-            link.download = `ingresso-${mintAddress.slice(0, 6)}.png`;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
+            // Salva o PDF
+            doc.save(`ingresso-${mintAddress.slice(0, 6)}.pdf`);
             
-            toast.success('Download iniciado!', { id: loadingToast });
+            toast.success('Download do PDF iniciado!', { id: loadingToast });
         };
         img.onerror = () => { toast.error('Falha ao carregar a imagem do QR Code.'); };
         img.src = url;
     };
+    
+    const certificateLink = `${APP_BASE_URL}/certificate/${mintAddress}`;
 
     return (
         <Modal isOpen={isOpen} onClose={onClose} title="Ingresso Garantido!">
@@ -128,53 +126,40 @@ export const TicketSuccessModal = ({ isOpen, onClose, ticketData }) => {
                 <div className="mt-4 text-sm text-center p-4 bg-slate-50 rounded-lg">
                     <AcademicCapIcon className="h-6 w-6 mx-auto text-indigo-500 mb-2"/>
                     <p className="text-slate-600">
-                        Após validar seu ingresso no evento, seu <strong className="text-indigo-600">certificado de participação</strong> estará disponível.
+                        Após validar seu ingresso no evento, seu <strong className="text-indigo-600">certificado</strong> estará disponível.
                     </p>
-                </div>
-
-                <div className="mt-8 p-4 bg-indigo-50 border-l-4 border-indigo-500 text-left rounded-md">
-                    <div className="flex">
-                        <div className="flex-shrink-0">
-                            <ExclamationTriangleIcon className="h-5 w-5 text-indigo-500" aria-hidden="true" />
-                        </div>
-                        <div className="ml-3">
-                            <h3 className="text-sm font-bold text-indigo-800">Ação Necessária: Baixe seu Ingresso!</h3>
-                            <div className="mt-2 text-sm text-indigo-700">
-                                <p>Salve-o em um local seguro para garantir sua entrada.</p>
-                            </div>
-                        </div>
+                    {/* ✅ Link visível no modal para o usuário copiar se quiser */}
+                    <div className="mt-2 flex items-center justify-center gap-2">
+                        <input type="text" readOnly value={certificateLink} className="w-full text-xs text-center font-mono bg-slate-200 border-slate-300 rounded-md shadow-sm"/>
+                        <button onClick={() => handleCopy(certificateLink, 'Link do certificado copiado!')} className="p-2 bg-indigo-100 text-indigo-600 rounded-md hover:bg-indigo-200 flex-shrink-0">
+                            <ClipboardIcon className="h-4 w-4" />
+                        </button>
                     </div>
                 </div>
 
+                <div className="mt-8 p-4 bg-indigo-50 border-l-4 border-indigo-500 text-left rounded-md">
+                    <div className="flex"><div className="flex-shrink-0"><ExclamationTriangleIcon className="h-5 w-5 text-indigo-500" /></div><div className="ml-3"><h3 className="text-sm font-bold text-indigo-800">Ação Necessária: Baixe seu Ingresso!</h3><div className="mt-2 text-sm text-indigo-700"><p>Salve o PDF em um local seguro para garantir sua entrada.</p></div></div></div>
+                </div>
+
                 <div className="mt-6">
-                   <button 
-                        onClick={handleDownload}
-                        className="w-full flex items-center justify-center gap-2 px-4 py-3 border border-transparent rounded-md shadow-sm text-base font-medium text-white bg-indigo-600 hover:bg-indigo-700 transition-colors"
-                    >
+                   <button onClick={handleDownload} className="w-full flex items-center justify-center gap-2 px-4 py-3 border border-transparent rounded-md shadow-sm text-base font-medium text-white bg-indigo-600 hover:bg-indigo-700">
                         <ArrowDownTrayIcon className="h-5 w-5"/>
-                        Baixar Ingresso Agora
+                        Baixar Ingresso (PDF)
                     </button>
                 </div>
 
                 {seedPhrase && (
                     <div className="mt-8 border-t pt-6">
-                        <div className="mx-auto flex items-center justify-center bg-amber-100 border border-amber-300 rounded-full h-12 w-12">
-                            <KeyIcon className="h-6 w-6 text-amber-600" />
-                        </div>
+                        <div className="mx-auto flex items-center justify-center bg-amber-100 border border-amber-300 rounded-full h-12 w-12"><KeyIcon className="h-6 w-6 text-amber-600" /></div>
                         <h3 className="mt-4 text-lg font-semibold text-slate-900">Guarde sua Chave de Acesso!</h3>
-                        <p className="mt-2 text-sm text-slate-600">
-                            Esta é a <strong>única</strong> forma de recuperar seu ingresso e certificado. Anote em um lugar seguro.
-                        </p>
+                        <p className="mt-2 text-sm text-slate-600">Esta é a <strong>única</strong> forma de recuperar seu ingresso e certificado.</p>
                         <div className="my-6 grid grid-cols-3 gap-x-4 gap-y-3 bg-slate-100 p-4 rounded-lg">
                             {words.map((word, index) => (
-                                <div key={index} className="text-slate-800 font-mono text-sm">
-                                    <span className="text-slate-500 mr-2">{index + 1}.</span>{word}
-                                </div>
+                                <div key={index} className="text-slate-800 font-mono text-sm"><span className="text-slate-500 mr-2">{index + 1}.</span>{word}</div>
                             ))}
                         </div>
-                        <button onClick={handleCopy} className="w-full flex items-center justify-center p-2 bg-slate-200 rounded-md cursor-pointer hover:bg-slate-300 transition-colors">
-                            <ClipboardIcon className="h-5 w-5 mr-2 text-slate-600"/>
-                            <span className="font-semibold text-sm text-slate-700">Copiar Frase Secreta</span>
+                        <button onClick={() => handleCopy(seedPhrase, 'Frase secreta copiada!')} className="w-full flex items-center justify-center p-2 bg-slate-200 rounded-md hover:bg-slate-300">
+                            <ClipboardIcon className="h-5 w-5 mr-2 text-slate-600"/><span className="font-semibold text-sm text-slate-700">Copiar Frase Secreta</span>
                         </button>
                     </div>
                 )}
