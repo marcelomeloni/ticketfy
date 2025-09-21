@@ -1,5 +1,3 @@
-// src/components/event/EventSections.jsx
-
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import {
@@ -7,7 +5,20 @@ import {
     InformationCircleIcon, SparklesIcon
 } from '@heroicons/react/24/outline';
 
-// ... (Componentes Section, DescriptionSection, OrganizerSection não mudam) ...
+// ✅ --- INÍCIO DA CORREÇÃO ---
+import L from 'leaflet';
+import markerIconPng from "leaflet/dist/images/marker-icon.png";
+import markerShadowPng from "leaflet/dist/images/marker-shadow.png";
+
+// Configura o ícone padrão do Leaflet para que ele encontre as imagens
+// depois que o Vite empacotar o projeto.
+L.Icon.Default.mergeOptions({
+    iconUrl: markerIconPng,
+    shadowUrl: markerShadowPng
+});
+// ✅ --- FIM DA CORREÇÃO ---
+
+
 const Section = ({ title, icon: Icon, children }) => (
     <section>
         <h2 className="text-2xl font-bold text-slate-900 flex items-center mb-4">
@@ -42,7 +53,6 @@ const LocationSection = ({ location }) => {
                     <p className="font-semibold mb-2">{location.venueName}</p>
                     <p>{`${location.address.street}, ${location.address.number}`}</p>
 
-                    {/* ✅ CORREÇÃO AQUI: Adicionado "relative" para o "z-0" funcionar */}
                     <div className="relative z-0 mt-4 rounded-lg overflow-hidden border">
                         <MapContainer center={position} zoom={16} scrollWheelZoom={false} style={{ height: '400px', width: '100%' }}>
                             <TileLayer
@@ -65,7 +75,6 @@ const LocationSection = ({ location }) => {
     );
 };
 
-// ... (Componentes DetailItem, DetailsSection, e as exportações não mudam) ...
 const DetailItem = ({ icon: Icon, label, text }) => (
     <div className="flex items-start">
         <Icon className="h-5 w-5 text-slate-500 mt-0.5 flex-shrink-0" />
