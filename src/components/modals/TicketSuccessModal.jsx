@@ -48,11 +48,11 @@ export const TicketSuccessModal = ({ isOpen, onClose, ticketData }) => {
             const qrImageDataUrl = canvas.toDataURL('image/png');
             URL.revokeObjectURL(url);
 
-            // Cria um novo documento PDF (A6 é um bom tamanho para ingresso)
+            
             const doc = new jsPDF({
                 orientation: 'portrait',
                 unit: 'mm',
-                format: 'a6'
+                format: 'a5'
             });
 
             // Adiciona conteúdo ao PDF
@@ -171,3 +171,4 @@ export const TicketSuccessModal = ({ isOpen, onClose, ticketData }) => {
         </Modal>
     );
 };
+
