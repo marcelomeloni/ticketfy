@@ -5,6 +5,9 @@ import { KeyIcon, ClipboardIcon, CheckCircleIcon, ArrowDownTrayIcon, Exclamation
 import { Modal } from '@/components/ui/Modal';
 import { ActionButton } from '@/components/ui/ActionButton';
 
+// Define your app's base URL as a constant for reliability
+const APP_BASE_URL = "https://ticketfy.onrender.com";
+
 export const TicketSuccessModal = ({ isOpen, onClose, ticketData }) => {
     const qrCodeContainerRef = useRef(null);
     const [isReady, setIsReady] = useState(false);
@@ -42,62 +45,57 @@ export const TicketSuccessModal = ({ isOpen, onClose, ticketData }) => {
         img.onload = () => {
             const scale = 2;
             const canvas = document.createElement('canvas');
-            // ✅ Aumentamos a altura do canvas para caber o texto do certificado
             canvas.width = 320 * scale;
             canvas.height = 450 * scale; 
             const ctx = canvas.getContext('2d');
 
-            // Fundo
             ctx.fillStyle = '#FFFFFF';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            // Título
             ctx.fillStyle = '#1e293b';
             ctx.font = `bold ${22 * scale}px sans-serif`;
             ctx.textAlign = 'center';
             ctx.fillText('Seu Ingresso Digital', canvas.width / 2, 40 * scale);
             
-            // Subtítulo
             ctx.fillStyle = '#64748b';
             ctx.font = `${14 * scale}px sans-serif`;
             ctx.fillText('Apresente este QR Code na entrada', canvas.width / 2, 70 * scale);
 
-            // QR Code
             const qrSize = 180 * scale;
             const qrX = (canvas.width - qrSize) / 2;
             const qrY = 90 * scale;
             ctx.drawImage(img, qrX, qrY, qrSize, qrSize);
             URL.revokeObjectURL(url);
 
-            // Endereço (mintAddress)
             ctx.fillStyle = '#94a3b8';
             ctx.font = `italic ${12 * scale}px monospace`;
             const shortAddress = `${mintAddress.slice(0, 10)}...${mintAddress.slice(-10)}`;
             ctx.fillText(shortAddress, canvas.width / 2, 300 * scale);
 
-            // ✅ NOVA SEÇÃO: Informações do Certificado
-            ctx.strokeStyle = '#e2e8f0'; // Cor da linha (slate-200)
+            ctx.strokeStyle = '#e2e8f0';
             ctx.beginPath();
             ctx.moveTo(20 * scale, 325 * scale);
             ctx.lineTo(canvas.width - (20 * scale), 325 * scale);
             ctx.stroke();
 
-            ctx.fillStyle = '#4f46e5'; // Cor do texto (indigo-600)
+            ctx.fillStyle = '#4f46e5';
             ctx.font = `bold ${16 * scale}px sans-serif`;
             ctx.fillText('Seu Certificado Pós-Evento', canvas.width / 2, 360 * scale);
             
-            ctx.fillStyle = '#334155'; // Cor do texto (slate-700)
+            ctx.fillStyle = '#334155';
             ctx.font = `${13 * scale}px sans-serif`;
-            ctx.fillText('Após a validação na entrada, seu certificado', canvas.width / 2, 390 * scale);
-            ctx.fillText('estará disponível neste link:', canvas.width / 2, 410 * scale);
+            ctx.fillText('Após o evento, seu certificado estará disponível em:', canvas.width / 2, 390 * scale);
 
-            // Pegando o link dinamicamente
-            const certificateLink = `${window.location.origin}/certificate/${mintAddress}`;
+            // Use the constant for the base URL
+            const certificateLink = `${APP_BASE_URL}/certificate/${mintAddress}`;
             ctx.font = `bold ${13 * scale}px monospace`;
             ctx.fillStyle = '#1e293b';
-            ctx.fillText(certificateLink, canvas.width / 2, 430 * scale);
+            
+            // Logic to wrap text if the link is too long for the canvas
+            const maxTextWidth = canvas.width - (40 * scale);
+            const linkText = `${APP_BASE_URL}/certificate/...${mintAddress.slice(-12)}`;
+            ctx.fillText(linkText, canvas.width / 2, 415 * scale, maxTextWidth);
 
-            // Download
             const image = canvas.toDataURL('image/png');
             const link = document.createElement('a');
             link.href = image;
@@ -108,7 +106,7 @@ export const TicketSuccessModal = ({ isOpen, onClose, ticketData }) => {
             
             toast.success('Download iniciado!', { id: loadingToast });
         };
-        img.onerror = (e) => { toast.error('Falha ao carregar a imagem do QR Code.'); };
+        img.onerror = () => { toast.error('Falha ao carregar a imagem do QR Code.'); };
         img.src = url;
     };
 
@@ -127,7 +125,6 @@ export const TicketSuccessModal = ({ isOpen, onClose, ticketData }) => {
                     <p className="text-xs text-slate-400 mt-2 font-mono break-all">{mintAddress}</p>
                 </div>
 
-                {/* ✅ Seção de Certificado adicionada ao modal para reforçar a mensagem */}
                 <div className="mt-4 text-sm text-center p-4 bg-slate-50 rounded-lg">
                     <AcademicCapIcon className="h-6 w-6 mx-auto text-indigo-500 mb-2"/>
                     <p className="text-slate-600">
