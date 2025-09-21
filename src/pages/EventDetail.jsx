@@ -74,7 +74,8 @@ export function EventDetail() {
                     </div>
                     <aside className="lg:col-span-1">
                         <div className="sticky top-24 space-y-8">
-                            <PurchaseCard 
+                            <PurchaseCard
+                                metadata={metadata}
                                 eventAccount={eventAccount} 
                                 eventAddress={eventAddress} 
                                 onPurchaseSuccess={fetchEventAndMetadata} 
@@ -86,4 +87,5 @@ export function EventDetail() {
             </main>
         </div>
     );
+
 }
