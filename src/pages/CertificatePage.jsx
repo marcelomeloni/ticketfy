@@ -2,119 +2,107 @@ import { useEffect, useState, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import QRCode from 'react-qr-code';
 import toast from 'react-hot-toast';
-import { AcademicCapIcon, ArrowDownTrayIcon, ExclamationTriangleIcon, ShieldCheckIcon, ClockIcon, StarIcon } from '@heroicons/react/24/outline';
+import { ArrowDownTrayIcon, ExclamationTriangleIcon, ShieldCheckIcon, ClockIcon } from '@heroicons/react/24/outline';
 
 const API_URL = "https://gasless-api-ke68.onrender.com";
 
-// --- Componente de Exibição do Certificado (Totalmente Redesenhado) ---
+// --- Componente de Exibição do Certificado (com Logo real) ---
 const CertificateDisplay = ({ data, eventName }) => {
     const qrCodeContainerRef = useRef(null);
 
     const handleDownload = () => {
-        const svgElement = qrCodeContainerRef.current?.querySelector('svg');
-        if (!svgElement) {
-            toast.error("Não foi possível encontrar o QR Code para gerar a imagem.");
-            return;
-        }
-
         const loadingToast = toast.loading("Gerando seu certificado...");
 
-        const svgData = new XMLSerializer().serializeToString(svgElement);
-        const img = new Image();
-        const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
-        const url = URL.createObjectURL(svgBlob);
+        // ✅ 1. FUNÇÃO AUXILIAR PARA CARREGAR UMA IMAGEM
+        // Isso nos permite usar Promises para um controle mais robusto.
+        const loadImage = (src) => {
+            return new Promise((resolve, reject) => {
+                const img = new Image();
+                img.crossOrigin = "anonymous"; // Essencial para carregar imagens em canvas
+                img.onload = () => resolve(img);
+                img.onerror = (err) => reject(err);
+                img.src = src;
+            });
+        };
 
-        img.onload = () => {
-            const scale = 2; // Aumenta a resolução da imagem final
+        // Prepara o QR Code como uma imagem
+        const svgElement = qrCodeContainerRef.current?.querySelector('svg');
+        if (!svgElement) {
+            toast.error("QR Code não encontrado.", { id: loadingToast });
+            return;
+        }
+        const svgData = new XMLSerializer().serializeToString(svgElement);
+        const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+        const qrCodeUrl = URL.createObjectURL(svgBlob);
+
+        // ✅ 2. CARREGA AS DUAS IMAGENS (LOGO E QR CODE) EM PARALELO
+        Promise.all([
+            loadImage(qrCodeUrl),
+            loadImage('/logo.png') // Caminho direto para o logo na pasta /public
+        ]).then(([qrCodeImage, logoImage]) => {
+            // ✅ 3. TODO O CÓDIGO DE DESENHO VAI AQUI DENTRO
+            // Isso garante que ele só execute após AMBAS as imagens estarem carregadas.
+            const scale = 2;
             const canvas = document.createElement('canvas');
-            // Proporção de paisagem (similar a A4)
             canvas.width = 842 * scale;
             canvas.height = 595 * scale;
             const ctx = canvas.getContext('2d');
 
-            // --- Desenho do Certificado na Imagem ---
-            
-            // Fundo
             ctx.fillStyle = '#FFFFFF';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-            // Borda sutil
-            ctx.strokeStyle = '#E2E8F0'; // slate-200
+            ctx.strokeStyle = '#E2E8F0';
             ctx.lineWidth = 1 * scale;
             ctx.strokeRect(20 * scale, 20 * scale, canvas.width - 40 * scale, canvas.height - 40 * scale);
 
-            // Título Principal
             ctx.textAlign = 'center';
-            ctx.fillStyle = '#1E293B'; // slate-800
+            ctx.fillStyle = '#1E293B';
             ctx.font = `bold ${40 * scale}px "Times New Roman", serif`;
-            ctx.fillText('Certificado de Participação', canvas.width / 2, 100 * scale);
-
-            // Linha decorativa
-            ctx.strokeStyle = '#CBD5E1'; // slate-300
+            ctx.fillText('Certificado de Participação', canvas.width / 2, 110 * scale);
+            
+            // Desenha a imagem do logo no topo
+            const logoWidth = 60 * scale;
+            const logoHeight = (logoWidth / logoImage.width) * logoImage.height;
+            ctx.drawImage(logoImage, canvas.width / 2 - logoWidth / 2, 35 * scale, logoWidth, logoHeight);
+            
+            ctx.strokeStyle = '#CBD5E1';
             ctx.lineWidth = 0.5 * scale;
             ctx.beginPath();
-            ctx.moveTo(canvas.width / 2 - 150 * scale, 125 * scale);
-            ctx.lineTo(canvas.width / 2 + 150 * scale, 125 * scale);
+            ctx.moveTo(canvas.width / 2 - 150 * scale, 135 * scale);
+            ctx.lineTo(canvas.width / 2 + 150 * scale, 135 * scale);
             ctx.stroke();
 
-            // Texto de concessão
-            ctx.fillStyle = '#475569'; // slate-600
-            ctx.font = `${18 * scale}px "Helvetica Neue", sans-serif`;
-            ctx.fillText('Este certificado é concedido a', canvas.width / 2, 180 * scale);
-
-            // Nome do Participante
-            ctx.fillStyle = '#4338CA'; // indigo-700
-            ctx.font = `bold ${48 * scale}px "Helvetica Neue", sans-serif`;
-            ctx.fillText(data.profile.name, canvas.width / 2, 250 * scale);
-
-            // Texto de participação
             ctx.fillStyle = '#475569';
             ctx.font = `${18 * scale}px "Helvetica Neue", sans-serif`;
-            ctx.fillText('pela sua participação bem-sucedida no evento', canvas.width / 2, 310 * scale);
-
-            // Nome do Evento
+            ctx.fillText('Este certificado é concedido a', canvas.width / 2, 190 * scale);
+            ctx.fillStyle = '#4338CA';
+            ctx.font = `bold ${48 * scale}px "Helvetica Neue", sans-serif`;
+            ctx.fillText(data.profile.name, canvas.width / 2, 260 * scale);
+            ctx.fillStyle = '#475569';
+            ctx.font = `${18 * scale}px "Helvetica Neue", sans-serif`;
+            ctx.fillText('pela sua participação bem-sucedida no evento', canvas.width / 2, 320 * scale);
             ctx.fillStyle = '#1E293B';
             ctx.font = `bold ${24 * scale}px "Helvetica Neue", sans-serif`;
-            ctx.fillText(eventName, canvas.width / 2, 350 * scale);
-            
-            // Detalhes de validação (canto inferior esquerdo)
+            ctx.fillText(eventName, canvas.width / 2, 360 * scale);
+
             const issueDate = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
             ctx.textAlign = 'left';
-            ctx.fillStyle = '#64748B'; // slate-500
+            ctx.fillStyle = '#64748B';
             ctx.font = `normal ${12 * scale}px "Helvetica Neue", sans-serif`;
             ctx.fillText(`Emitido em: ${issueDate}`, 60 * scale, canvas.height - 80 * scale);
             ctx.fillText(`ID de Verificação:`, 60 * scale, canvas.height - 60 * scale);
             ctx.font = `normal ${12 * scale}px monospace`;
             ctx.fillStyle = '#475569';
             ctx.fillText(data.ticket.nftMint, 60 * scale, canvas.height - 45 * scale);
-
-            // Selo de Autenticidade (canto inferior direito)
+            
+            // ✅ 4. DESENHA A IMAGEM DO LOGO COMO SELO
+            const sealSize = 80 * scale;
             const sealX = canvas.width - 120 * scale;
-            const sealY = canvas.height - 100 * scale;
-            ctx.beginPath();
-            ctx.arc(sealX, sealY, 40 * scale, 0, 2 * Math.PI);
-            ctx.fillStyle = '#F59E0B'; // amber-500
-            ctx.fill();
-            
-            ctx.beginPath();
-            ctx.arc(sealX, sealY, 35 * scale, 0, 2 * Math.PI);
-            ctx.fillStyle = '#FFFFFF';
-            ctx.fill();
+            const sealY = canvas.height - 120 * scale;
+            ctx.drawImage(logoImage, sealX - sealSize / 2, sealY - sealSize / 2, sealSize, sealSize);
 
-            // Simulação do ícone de estrela no selo
-            ctx.fillStyle = '#F59E0B';
-            ctx.font = `bold ${30 * scale}px "Helvetica Neue", sans-serif`;
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText('★', sealX, sealY + 2 * scale);
-
-
-            // QR Code
             const qrSize = 80 * scale;
-            ctx.drawImage(img, canvas.width / 2 - qrSize / 2, canvas.height - 120 * scale, qrSize, qrSize);
-            URL.revokeObjectURL(url);
-            
-            // --- Fim do Desenho ---
+            ctx.drawImage(qrCodeImage, canvas.width / 2 - qrSize / 2, canvas.height - 120 * scale, qrSize, qrSize);
+            URL.revokeObjectURL(qrCodeUrl);
 
             const image = canvas.toDataURL('image/png');
             const link = document.createElement('a');
@@ -124,11 +112,11 @@ const CertificateDisplay = ({ data, eventName }) => {
             link.click();
             document.body.removeChild(link);
             toast.success("Download do certificado iniciado!", { id: loadingToast });
-        };
-        img.onerror = () => {
-            toast.error("Ocorreu um erro ao carregar a imagem do QR Code.", { id: loadingToast });
-        };
-        img.src = url;
+
+        }).catch(error => {
+            console.error("Erro ao carregar imagens:", error);
+            toast.error("Não foi possível carregar as imagens para o certificado.", { id: loadingToast });
+        });
     };
 
     const certificateId = data.ticket.nftMint;
@@ -137,14 +125,12 @@ const CertificateDisplay = ({ data, eventName }) => {
     return (
         <div className="max-w-5xl mx-auto bg-white rounded-lg shadow-2xl p-4 sm:p-6 border border-slate-200">
             <div className="border-2 border-slate-300 rounded p-6 sm:p-10 text-center relative overflow-hidden">
-                {/* Elementos decorativos */}
                 <div className="absolute -top-12 -left-12 w-48 h-48 border-8 border-slate-100 rounded-full"></div>
                 <div className="absolute -bottom-16 -right-16 w-64 h-64 border-[12px] border-slate-50"></div>
 
                 <div className="relative z-10">
                     <h3 className="text-sm uppercase tracking-widest text-slate-500">Certificado de Participação</h3>
                     <h1 className="mt-2 text-4xl sm:text-5xl font-serif font-bold text-slate-800">{eventName}</h1>
-
                     <p className="mt-12 text-lg text-slate-600">Este certificado é concedido a</p>
                     <p className="mt-3 text-4xl sm:text-5xl font-bold text-indigo-600 tracking-wide">{data.profile.name}</p>
 
@@ -153,13 +139,10 @@ const CertificateDisplay = ({ data, eventName }) => {
                             <p className="text-sm font-semibold text-slate-700">Emitido em</p>
                             <p className="text-lg text-slate-900">{issueDate}</p>
                         </div>
+                        {/* ✅ 5. USA A IMAGEM DO LOGO NO JSX */}
                         <div className="flex flex-col items-center">
-                            <div className="flex items-center justify-center h-28 w-28 rounded-full bg-amber-400">
-                                <div className="flex items-center justify-center h-24 w-24 rounded-full bg-white">
-                                    <StarIcon className="h-12 w-12 text-amber-400" />
-                                </div>
-                            </div>
-                            <p className="mt-2 text-xs text-slate-500 font-semibold">Selo de Autenticidade</p>
+                            <img src="/logo.png" alt="Ticketfy Logo" className="h-28 w-28" />
+                            <p className="mt-2 text-xs text-slate-500 font-semibold">Emitido por Ticketfy</p>
                         </div>
                         <div className="text-right">
                             <p className="text-sm font-semibold text-slate-700">ID de Verificação</p>
@@ -178,7 +161,7 @@ const CertificateDisplay = ({ data, eventName }) => {
                     </div>
                     <div>
                         <h4 className="font-bold text-slate-800">Validação On-chain</h4>
-                        <p className="text-sm text-slate-600">Use o QR code para verificar a autenticidade do seu certificado na blockchain Solana.</p>
+                        <p className="text-sm text-slate-600">Use o QR code para verificar a autenticidade.</p>
                     </div>
                 </div>
 
@@ -194,7 +177,7 @@ const CertificateDisplay = ({ data, eventName }) => {
     );
 };
 
-// --- Componente Principal da Página ---
+// --- Componente Principal da Página (sem alterações) ---
 export const CertificatePage = () => {
     const { mintAddress } = useParams();
     const [isLoading, setIsLoading] = useState(true);
