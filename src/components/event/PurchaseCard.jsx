@@ -64,7 +64,6 @@ export const PurchaseCard = ({ metadata, eventAccount, eventAddress, onPurchaseS
             const mintData = await mintResponse.json();
             if (!mintResponse.ok) throw new Error(mintData.details || 'Falha ao resgatar o ingresso.');
     
-            // ✅ CORREÇÃO: Buscando os dados da estrutura correta (metadata.properties)
             const fullTicketData = {
                 mintAddress: mintData.mintAddress,
                 seedPhrase: null,
@@ -79,7 +78,8 @@ export const PurchaseCard = ({ metadata, eventAccount, eventAddress, onPurchaseS
             toast.success("Ingresso resgatado com sucesso!", { id: loadingToast });
             setTimeout(() => onPurchaseSuccess(), 2000);
     
-        } catch (error) => {
+        // ✅ CORREÇÃO: Removido o "=>" da sintaxe do catch
+        } catch (error) {
             console.error("Erro no fluxo Web3:", error);
             toast.error(`Erro: ${error.message}`, { id: loadingToast });
         } finally {
@@ -106,7 +106,6 @@ export const PurchaseCard = ({ metadata, eventAccount, eventAddress, onPurchaseS
                 throw new Error(data.details || 'Ocorreu um erro ao criar sua conta.');
             }
             
-            // ✅ CORREÇÃO: Buscando os dados da estrutura correta (metadata.properties)
             const fullTicketData = {
                 ...data,
                 eventName: metadata.name,
@@ -120,6 +119,7 @@ export const PurchaseCard = ({ metadata, eventAccount, eventAddress, onPurchaseS
             toast.success("Ingresso e carteira criados com sucesso!", { id: loadingToast });
             setTimeout(() => onPurchaseSuccess(), 2000);
 
+        // ✅ CORREÇÃO: Removido o "=>" da sintaxe do catch
         } catch (error) {
             console.error("Erro no fluxo Web2:", error);
             toast.error(`Erro: ${error.message}`, { id: loadingToast });
