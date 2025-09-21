@@ -8,7 +8,7 @@ import { Html5QrcodeScanner } from 'html5-qrcode';
 import idl from '@/idl/ticketing_system.json';
 import { ActionButton } from '@/components/ui/ActionButton';
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
-import { DocumentMagnifyingGlassIcon, QrCodeIcon, ShieldCheckIcon, ShieldExclamationIcon, TicketIcon } from '@heroicons/react/24/outline';
+import { DocumentMagnifyingGlassIcon, ClipboardDocumentCheckIcon, ShieldCheckIcon, ShieldExclamationIcon, TicketIcon } from '@heroicons/react/24/outline';
 
 const PROGRAM_ID = new web3.PublicKey("AHRuW77r9tM8RAX7qbhVyjktgSZueb6QVjDjWXjEoCeA");
 const API_URL = "https://gasless-api-ke68.onrender.com";
@@ -81,14 +81,13 @@ export function ValidatorPage() {
 
     // Efeito para iniciar o scanner de câmera
     useEffect(() => {
-        // Só inicia o scanner se for validador e não houver um ticket sendo processado
         if (isValidator && !ticketToValidate && !scannedMint) {
             const scanner = new Html5QrcodeScanner('qr-reader', { fps: 10, qrbox: { width: 250, height: 250 } }, false);
             const onScanSuccess = (decodedText) => {
                 scanner.clear().catch(() => {});
-                setScannedMint(decodedText); // Define o ingresso escaneado para a próxima etapa
+                setScannedMint(decodedText);
             };
-            scanner.render(onScanSuccess, () => {}); // Ignora erros de "QR não encontrado"
+            scanner.render(onScanSuccess, () => {});
             return () => { scanner.clear().catch(() => {}); };
         }
     }, [isValidator, ticketToValidate, scannedMint]);
@@ -133,27 +132,38 @@ export function ValidatorPage() {
 
     // --- RENDERIZAÇÃO CONDICIONAL ---
 
-    // 1. Tela para escolher a carteira após escanear
+    // 1. Tela intermediária de "Copiar e Colar" após escanear
     if (scannedMint && !ticketToValidate && ticketData) {
         const validationUrl = `${window.location.origin}${window.location.pathname}?ticket=${scannedMint}`;
-        const solflareUrl = `https://solflare.com/ul/v1/browse/${encodeURIComponent(validationUrl)}`;
-        const phantomUrl = `https://phantom.app/ul/v1/browse/${encodeURIComponent(validationUrl)}#v=1`;
+        
+        const handleCopyLink = () => {
+            navigator.clipboard.writeText(validationUrl);
+            toast.success("Link de validação copiado!");
+        };
 
         return (
             <div className="flex justify-center items-center h-screen bg-slate-100 p-4">
                 <div className="w-full max-w-md bg-white p-8 rounded-lg shadow-xl text-center">
-                    <QrCodeIcon className="mx-auto h-12 w-12 text-green-600"/>
-                    <h2 className="mt-4 text-2xl font-bold">Ingresso Escaneado!</h2>
-                    <p className="mt-2 text-slate-600">Agora, abra em sua carteira para assinar e confirmar a validação.</p>
+                    <ShieldCheckIcon className="mx-auto h-12 w-12 text-green-600"/>
+                    <h2 className="mt-4 text-2xl font-bold">Ingresso Pronto para Validar</h2>
+                    <p className="mt-2 text-slate-600">Copie o link abaixo e cole no navegador da sua carteira Solflare para assinar a transação.</p>
+                    
                     <div className="mt-6 text-left space-y-2 bg-slate-50 p-4 rounded-md">
                         <p><strong className="text-slate-800">Nome:</strong> {ticketData.profile.name}</p>
                         <p className="font-mono text-xs break-all"><strong className="text-slate-800 font-sans text-base">Ingresso:</strong> {scannedMint}</p>
                     </div>
-                    <div className="mt-6 flex flex-col gap-3">
-                        <a href={solflareUrl} className="block w-full text-center bg-purple-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-purple-700">Validar com Solflare</a>
-                        <a href={phantomUrl} className="block w-full text-center bg-indigo-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-indigo-700">Validar com Phantom</a>
+                    
+                    <div className="mt-6">
+                        <label className="text-sm font-semibold text-slate-700 text-left block mb-2">Link de Validação:</label>
+                        <div className="flex gap-2">
+                             <input type="text" readOnly value={validationUrl} className="w-full text-xs font-mono bg-slate-100 border-slate-300 rounded-md shadow-sm"/>
+                             <button onClick={handleCopyLink} className="p-3 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 flex-shrink-0">
+                                 <ClipboardDocumentCheckIcon className="h-6 w-6" />
+                             </button>
+                        </div>
                     </div>
-                     <button onClick={() => { setTicketData(null); setScannedMint(null); }} className="mt-4 text-slate-600 hover:underline">
+                    
+                    <button onClick={() => { setTicketData(null); setScannedMint(null); setManualMintAddress(''); }} className="mt-6 text-slate-600 hover:underline">
                         Voltar para o Scanner
                     </button>
                 </div>
