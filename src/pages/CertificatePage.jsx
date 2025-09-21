@@ -1,21 +1,23 @@
 import { useEffect, useState, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import QRCode from 'react-qr-code';
-import { AcademicCapIcon, ArrowDownTrayIcon, ExclamationTriangleIcon, ShieldCheckIcon, ClockIcon } from '@heroicons/react/24/outline';
+import toast from 'react-hot-toast';
+import { AcademicCapIcon, ArrowDownTrayIcon, ExclamationTriangleIcon, ShieldCheckIcon, ClockIcon, StarIcon } from '@heroicons/react/24/outline';
 
 const API_URL = "https://gasless-api-ke68.onrender.com";
 
-// Componente para exibir o certificado
+// --- Componente de Exibição do Certificado (Totalmente Redesenhado) ---
 const CertificateDisplay = ({ data, eventName }) => {
-    const certificateRef = useRef(null);
     const qrCodeContainerRef = useRef(null);
 
     const handleDownload = () => {
         const svgElement = qrCodeContainerRef.current?.querySelector('svg');
         if (!svgElement) {
-            alert("Não foi possível encontrar o QR Code para gerar a imagem.");
+            toast.error("Não foi possível encontrar o QR Code para gerar a imagem.");
             return;
         }
+
+        const loadingToast = toast.loading("Gerando seu certificado...");
 
         const svgData = new XMLSerializer().serializeToString(svgElement);
         const img = new Image();
@@ -23,82 +25,168 @@ const CertificateDisplay = ({ data, eventName }) => {
         const url = URL.createObjectURL(svgBlob);
 
         img.onload = () => {
-            const scale = 2;
+            const scale = 2; // Aumenta a resolução da imagem final
             const canvas = document.createElement('canvas');
-            canvas.width = 800 * scale;
-            canvas.height = 560 * scale;
+            // Proporção de paisagem (similar a A4)
+            canvas.width = 842 * scale;
+            canvas.height = 595 * scale;
             const ctx = canvas.getContext('2d');
 
+            // --- Desenho do Certificado na Imagem ---
+            
             // Fundo
-            ctx.fillStyle = '#f8fafc'; // slate-50
+            ctx.fillStyle = '#FFFFFF';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
-            
-            // Título
-            ctx.fillStyle = '#0f172a'; // slate-900
-            ctx.font = `bold ${48 * scale}px serif`;
+
+            // Borda sutil
+            ctx.strokeStyle = '#E2E8F0'; // slate-200
+            ctx.lineWidth = 1 * scale;
+            ctx.strokeRect(20 * scale, 20 * scale, canvas.width - 40 * scale, canvas.height - 40 * scale);
+
+            // Título Principal
             ctx.textAlign = 'center';
-            ctx.fillText('Certificado de Participação', canvas.width / 2, 80 * scale);
-            
-            // Texto
-            ctx.fillStyle = '#334155'; // slate-700
-            ctx.font = `${20 * scale}px sans-serif`;
-            ctx.fillText('Este certificado é concedido a', canvas.width / 2, 160 * scale);
-            
+            ctx.fillStyle = '#1E293B'; // slate-800
+            ctx.font = `bold ${40 * scale}px "Times New Roman", serif`;
+            ctx.fillText('Certificado de Participação', canvas.width / 2, 100 * scale);
+
+            // Linha decorativa
+            ctx.strokeStyle = '#CBD5E1'; // slate-300
+            ctx.lineWidth = 0.5 * scale;
+            ctx.beginPath();
+            ctx.moveTo(canvas.width / 2 - 150 * scale, 125 * scale);
+            ctx.lineTo(canvas.width / 2 + 150 * scale, 125 * scale);
+            ctx.stroke();
+
+            // Texto de concessão
+            ctx.fillStyle = '#475569'; // slate-600
+            ctx.font = `${18 * scale}px "Helvetica Neue", sans-serif`;
+            ctx.fillText('Este certificado é concedido a', canvas.width / 2, 180 * scale);
+
             // Nome do Participante
-            ctx.fillStyle = '#4f46e5'; // indigo-600
-            ctx.font = `bold ${40 * scale}px sans-serif`;
-            ctx.fillText(data.profile.name, canvas.width / 2, 230 * scale);
+            ctx.fillStyle = '#4338CA'; // indigo-700
+            ctx.font = `bold ${48 * scale}px "Helvetica Neue", sans-serif`;
+            ctx.fillText(data.profile.name, canvas.width / 2, 250 * scale);
 
-            // Descrição
-            ctx.fillStyle = '#334155';
-            ctx.font = `${20 * scale}px sans-serif`;
-            ctx.fillText(`pela sua participação no evento`, canvas.width / 2, 290 * scale);
-            
+            // Texto de participação
+            ctx.fillStyle = '#475569';
+            ctx.font = `${18 * scale}px "Helvetica Neue", sans-serif`;
+            ctx.fillText('pela sua participação bem-sucedida no evento', canvas.width / 2, 310 * scale);
+
             // Nome do Evento
-            ctx.font = `bold ${24 * scale}px sans-serif`;
-            ctx.fillText(eventName, canvas.width / 2, 330 * scale);
+            ctx.fillStyle = '#1E293B';
+            ctx.font = `bold ${24 * scale}px "Helvetica Neue", sans-serif`;
+            ctx.fillText(eventName, canvas.width / 2, 350 * scale);
+            
+            // Detalhes de validação (canto inferior esquerdo)
+            const issueDate = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
+            ctx.textAlign = 'left';
+            ctx.fillStyle = '#64748B'; // slate-500
+            ctx.font = `normal ${12 * scale}px "Helvetica Neue", sans-serif`;
+            ctx.fillText(`Emitido em: ${issueDate}`, 60 * scale, canvas.height - 80 * scale);
+            ctx.fillText(`ID de Verificação:`, 60 * scale, canvas.height - 60 * scale);
+            ctx.font = `normal ${12 * scale}px monospace`;
+            ctx.fillStyle = '#475569';
+            ctx.fillText(data.ticket.nftMint, 60 * scale, canvas.height - 45 * scale);
 
-            // QR Code de Validação
-            const qrSize = 100 * scale;
-            ctx.drawImage(img, (canvas.width / 2) - (qrSize / 2), 370 * scale, qrSize, qrSize);
+            // Selo de Autenticidade (canto inferior direito)
+            const sealX = canvas.width - 120 * scale;
+            const sealY = canvas.height - 100 * scale;
+            ctx.beginPath();
+            ctx.arc(sealX, sealY, 40 * scale, 0, 2 * Math.PI);
+            ctx.fillStyle = '#F59E0B'; // amber-500
+            ctx.fill();
+            
+            ctx.beginPath();
+            ctx.arc(sealX, sealY, 35 * scale, 0, 2 * Math.PI);
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fill();
+
+            // Simulação do ícone de estrela no selo
+            ctx.fillStyle = '#F59E0B';
+            ctx.font = `bold ${30 * scale}px "Helvetica Neue", sans-serif`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('★', sealX, sealY + 2 * scale);
+
+
+            // QR Code
+            const qrSize = 80 * scale;
+            ctx.drawImage(img, canvas.width / 2 - qrSize / 2, canvas.height - 120 * scale, qrSize, qrSize);
             URL.revokeObjectURL(url);
+            
+            // --- Fim do Desenho ---
 
             const image = canvas.toDataURL('image/png');
             const link = document.createElement('a');
             link.href = image;
-            link.download = `certificado-${data.profile.name.replace(/\s/g, '-')}.png`;
+            link.download = `Certificado-${eventName}-${data.profile.name.replace(/\s/g, '_')}.png`;
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
+            toast.success("Download do certificado iniciado!", { id: loadingToast });
         };
         img.onerror = () => {
-            alert("Ocorreu um erro ao carregar a imagem do QR Code.");
+            toast.error("Ocorreu um erro ao carregar a imagem do QR Code.", { id: loadingToast });
         };
         img.src = url;
     };
 
+    const certificateId = data.ticket.nftMint;
+    const issueDate = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
+
     return (
-        <div className="max-w-4xl mx-auto">
-            <div ref={certificateRef} className="bg-slate-50 p-10 sm:p-16 border-8 border-double border-slate-300 rounded-lg shadow-2xl text-center">
-                <AcademicCapIcon className="mx-auto h-16 w-16 text-indigo-500 mb-4" />
-                <h1 className="text-4xl sm:text-5xl font-serif font-bold text-slate-900">Certificado de Participação</h1>
-                <p className="mt-8 text-xl text-slate-700">Este certificado é concedido a</p>
-                <p className="mt-4 text-4xl sm:text-5xl font-bold text-indigo-600">{data.profile.name}</p>
-                <p className="mt-6 text-xl text-slate-700">pela sua participação no evento</p>
-                <p className="mt-2 text-2xl font-bold text-slate-800">{eventName}</p>
-                <div className="mt-10 flex flex-col items-center">
-                    <p className="text-sm text-slate-500 mb-2">Validação On-chain</p>
-                    <div className="p-2 bg-white rounded-md" ref={qrCodeContainerRef}>
-                        <QRCode value={`https://solscan.io/token/${data.ticket.nftMint}?cluster=devnet`} size={100} />
+        <div className="max-w-5xl mx-auto bg-white rounded-lg shadow-2xl p-4 sm:p-6 border border-slate-200">
+            <div className="border-2 border-slate-300 rounded p-6 sm:p-10 text-center relative overflow-hidden">
+                {/* Elementos decorativos */}
+                <div className="absolute -top-12 -left-12 w-48 h-48 border-8 border-slate-100 rounded-full"></div>
+                <div className="absolute -bottom-16 -right-16 w-64 h-64 border-[12px] border-slate-50"></div>
+
+                <div className="relative z-10">
+                    <h3 className="text-sm uppercase tracking-widest text-slate-500">Certificado de Participação</h3>
+                    <h1 className="mt-2 text-4xl sm:text-5xl font-serif font-bold text-slate-800">{eventName}</h1>
+
+                    <p className="mt-12 text-lg text-slate-600">Este certificado é concedido a</p>
+                    <p className="mt-3 text-4xl sm:text-5xl font-bold text-indigo-600 tracking-wide">{data.profile.name}</p>
+
+                    <div className="mt-12 grid sm:grid-cols-3 gap-8 items-end">
+                        <div className="text-left">
+                            <p className="text-sm font-semibold text-slate-700">Emitido em</p>
+                            <p className="text-lg text-slate-900">{issueDate}</p>
+                        </div>
+                        <div className="flex flex-col items-center">
+                            <div className="flex items-center justify-center h-28 w-28 rounded-full bg-amber-400">
+                                <div className="flex items-center justify-center h-24 w-24 rounded-full bg-white">
+                                    <StarIcon className="h-12 w-12 text-amber-400" />
+                                </div>
+                            </div>
+                            <p className="mt-2 text-xs text-slate-500 font-semibold">Selo de Autenticidade</p>
+                        </div>
+                        <div className="text-right">
+                            <p className="text-sm font-semibold text-slate-700">ID de Verificação</p>
+                            <p className="text-sm text-slate-500 font-mono break-all" title={certificateId}>
+                                {certificateId.slice(0, 8)}...{certificateId.slice(-8)}
+                            </p>
+                        </div>
                     </div>
                 </div>
             </div>
-            <div className="mt-8 text-center">
-                <button 
+
+            <div className="mt-8 flex flex-col sm:flex-row items-center justify-between gap-6 p-6 bg-slate-50 rounded-lg">
+                <div className="flex items-center gap-3">
+                    <div className="p-1 bg-white rounded-md shadow-sm" ref={qrCodeContainerRef}>
+                        <QRCode value={`https://solscan.io/token/${data.ticket.nftMint}?cluster=devnet`} size={64} />
+                    </div>
+                    <div>
+                        <h4 className="font-bold text-slate-800">Validação On-chain</h4>
+                        <p className="text-sm text-slate-600">Use o QR code para verificar a autenticidade do seu certificado na blockchain Solana.</p>
+                    </div>
+                </div>
+
+                <button
                     onClick={handleDownload}
-                    className="inline-flex items-center gap-2 px-6 py-3 border border-transparent rounded-md shadow-sm text-base font-medium text-white bg-indigo-600 hover:bg-indigo-700"
+                    className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 border border-transparent rounded-md shadow-sm text-base font-medium text-white bg-indigo-600 hover:bg-indigo-700 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
                 >
-                    <ArrowDownTrayIcon className="h-5 w-5"/>
+                    <ArrowDownTrayIcon className="h-5 w-5" />
                     Baixar Certificado
                 </button>
             </div>
@@ -106,8 +194,7 @@ const CertificateDisplay = ({ data, eventName }) => {
     );
 };
 
-
-// Componente principal da página
+// --- Componente Principal da Página ---
 export const CertificatePage = () => {
     const { mintAddress } = useParams();
     const [isLoading, setIsLoading] = useState(true);
@@ -137,11 +224,7 @@ export const CertificatePage = () => {
                 }
 
                 setData(result);
-                if (result.event && result.event.name) {
-                    setEventName(result.event.name);
-                } else {
-                    setEventName("Evento Especial");
-                }
+                setEventName(result.event?.name || "Evento Especial");
 
             } catch (err) {
                 setError(err.message);
@@ -153,31 +236,27 @@ export const CertificatePage = () => {
         fetchCertificateData();
     }, [mintAddress]);
 
-    if (isLoading) {
-        return <div className="flex justify-center items-center h-screen"><ClockIcon className="h-12 w-12 animate-spin text-slate-500" /></div>;
-    }
-    
-    if (error) {
-        return (
-            <div className="flex justify-center items-center h-screen text-center p-4">
-                <div>
-                    <ExclamationTriangleIcon className="mx-auto h-12 w-12 text-red-500" />
-                    <h2 className="mt-4 text-xl font-bold">Não foi possível gerar o certificado</h2>
-                    <p className="mt-2 text-slate-600">{error}</p>
-                </div>
-            </div>
-        );
-    }
-
     return (
-        <div className="bg-slate-200 min-h-screen py-12 px-4">
+        <div className="min-h-screen bg-slate-100 py-12 px-4 sm:px-6 lg:px-8 bg-[url('/grid.svg')]">
             <header className="text-center mb-12">
-                <div className="inline-flex items-center gap-3 bg-white py-2 px-6 rounded-full shadow-md">
-                    <ShieldCheckIcon className="h-6 w-6 text-green-500"/>
-                    <h1 className="text-2xl font-bold text-slate-800">Certificado Verificado</h1>
+                <div className="inline-flex items-center gap-3 bg-white py-2 px-6 rounded-full shadow-md border border-slate-200">
+                    <ShieldCheckIcon className="h-6 w-6 text-green-500" />
+                    <h1 className="text-xl sm:text-2xl font-bold text-slate-800">Certificado Verificado</h1>
                 </div>
             </header>
             <main>
+                {isLoading && (
+                    <div className="flex justify-center items-center py-20">
+                        <ClockIcon className="h-12 w-12 animate-spin text-slate-500" />
+                    </div>
+                )}
+                {error && (
+                    <div className="max-w-2xl mx-auto text-center p-8 bg-white rounded-lg shadow-md border border-red-200">
+                        <ExclamationTriangleIcon className="mx-auto h-12 w-12 text-red-500" />
+                        <h2 className="mt-4 text-xl font-bold text-slate-800">Não foi possível gerar o certificado</h2>
+                        <p className="mt-2 text-slate-600">{error}</p>
+                    </div>
+                )}
                 {data && <CertificateDisplay data={data} eventName={eventName} />}
             </main>
         </div>
