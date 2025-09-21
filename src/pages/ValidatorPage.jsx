@@ -32,10 +32,15 @@ const ScannerView = ({ onScan, onManualSearch }) => {
 
     useEffect(() => {
         // Previne a reinicialização do scanner se ele já estiver ativo
-        if (document.getElementById('qr-reader-container').innerHTML === "") {
+        if (document.getElementById('qr-reader-container')?.innerHTML === "") {
             const scanner = new Html5QrcodeScanner('qr-reader-container', { fps: 10, qrbox: { width: 250, height: 250 } }, false);
             const handleSuccess = (decodedText) => {
-                try { scanner.clear(); onScan(decodedText); } catch (e) { /* Scanner already cleared */ }
+                try {
+                    if (scanner.getState()) {
+                        scanner.clear();
+                    }
+                    onScan(decodedText);
+                } catch (e) { console.error("Falha ao limpar o scanner:", e); }
             };
             scanner.render(handleSuccess, () => {});
             return () => { if (scanner && scanner.getState()) { scanner.clear().catch(() => {}); } };
@@ -78,6 +83,7 @@ const RecentValidations = ({ entries }) => (
         </div>
     </div>
 );
+
 
 // --- Componente Principal da Página ---
 
@@ -185,11 +191,14 @@ export function ValidatorPage() {
             
             const newEntry = { name: ticketData.profile.name, redeemedAt: new Date().toLocaleTimeString('pt-BR'), nftMint: ticketData.ticket.nftMint };
             setRecentEntries(prev => [newEntry, ...prev]);
-            await fetchEventAndCheckValidator();
+            await fetchEventAndCheckValidator(); // Re-fetch event data to update total counts
 
             setTicketData(null);
-            setScannedMint(null);
-            
+            if (ticketToValidate) {
+                window.location.href = window.location.pathname;
+            } else {
+                setScannedMint(null);
+            }
         } catch (error) {
             console.error("Erro ao validar ingresso:", error);
             const errorMsg = error.error?.errorMessage || error.message || "Erro desconhecido.";
@@ -206,7 +215,7 @@ export function ValidatorPage() {
     // --- Layout Principal ---
 
     return (
-        <div className="bg-slate-100 min-h-screen">
+        <div className="bg-slate-50 min-h-screen">
             <header className="bg-white shadow-sm sticky top-0 z-10">
                 <div className="container mx-auto px-4 py-4 flex justify-between items-center">
                     <div className="flex items-center gap-3">
@@ -221,22 +230,44 @@ export function ValidatorPage() {
                 </div>
             </header>
 
-            {/* Modal de Confirmação */}
+            {/* Modal de Confirmação ou Escolha de Carteira */}
             {ticketData && (
                 <div className="fixed inset-0 bg-black/60 flex justify-center items-center z-50 p-4 animate-fade-in">
-                    <div className="w-full max-w-md bg-white p-8 rounded-lg shadow-xl text-center">
-                        <TicketIcon className="mx-auto h-12 w-12 text-indigo-600"/>
-                        <h2 className="mt-4 text-2xl font-bold">Confirmar Validação</h2>
-                        <div className="mt-6 text-left space-y-2 bg-slate-50 p-4 rounded-md border border-slate-200">
-                            <p><strong className="text-slate-800">Nome:</strong> {ticketData.profile.name}</p>
-                            <p className="font-mono text-xs break-all"><strong className="text-slate-800 font-sans text-base">Ingresso:</strong> {ticketData.ticket.nftMint}</p>
-                            {ticketData.ticket.redeemed ? <p className="font-bold text-red-500">Status: JÁ VALIDADO!</p> : <p className="font-bold text-green-500">Status: PRONTO PARA VALIDAR</p>}
+                    {ticketToValidate ? (
+                        // Tela de Confirmação Final
+                        <div className="w-full max-w-md bg-white p-8 rounded-lg shadow-xl text-center">
+                            <TicketIcon className="mx-auto h-12 w-12 text-indigo-600"/>
+                            <h2 className="mt-4 text-2xl font-bold">Confirmar Validação</h2>
+                            <div className="mt-6 text-left space-y-2 bg-slate-50 p-4 rounded-md border border-slate-200">
+                                <p><strong className="text-slate-800">Nome:</strong> {ticketData.profile.name}</p>
+                                <p className="font-mono text-xs break-all"><strong className="text-slate-800 font-sans text-base">Ingresso:</strong> {ticketData.ticket.nftMint}</p>
+                                {ticketData.ticket.redeemed ? <p className="font-bold text-red-500">Status: JÁ VALIDADO!</p> : <p className="font-bold text-green-500">Status: PRONTO PARA VALIDAR</p>}
+                            </div>
+                            <div className="mt-6 flex flex-col gap-3">
+                                <ActionButton onClick={handleRedeemTicket} disabled={ticketData.ticket.redeemed}>Assinar e Concluir Check-in</ActionButton>
+                                <button onClick={() => window.location.href = window.location.pathname} className="text-slate-600 hover:underline">Cancelar</button>
+                            </div>
                         </div>
-                        <div className="mt-6 flex flex-col gap-3">
-                            <ActionButton onClick={handleRedeemTicket} disabled={ticketData.ticket.redeemed}>Assinar e Concluir Check-in</ActionButton>
-                            <button onClick={() => { setTicketData(null); setScannedMint(null); }} className="text-slate-600 hover:underline">Cancelar</button>
+                    ) : (
+                        // Tela Intermediária de Copiar e Colar
+                        <div className="w-full max-w-md bg-white p-8 rounded-lg shadow-xl text-center">
+                            <QrCodeIcon className="mx-auto h-12 w-12 text-green-600"/>
+                            <h2 className="mt-4 text-2xl font-bold">Ingresso Encontrado!</h2>
+                            <p className="mt-2 text-slate-600">Copie o link e cole no navegador da sua carteira para assinar a validação.</p>
+                            <div className="mt-6 text-left space-y-2 bg-slate-50 p-4 rounded-md">
+                                <p><strong className="text-slate-800">Nome:</strong> {ticketData.profile.name}</p>
+                                <p className="font-mono text-xs break-all"><strong className="text-slate-800 font-sans text-base">Ingresso:</strong> {scannedMint}</p>
+                            </div>
+                            <div className="mt-6">
+                                <label className="text-sm font-semibold text-slate-700 text-left block mb-2">Link de Validação:</label>
+                                <div className="flex gap-2">
+                                    <input type="text" readOnly value={`${window.location.origin}${window.location.pathname}?ticket=${scannedMint}`} className="w-full text-xs font-mono bg-slate-100 border-slate-300 rounded-md shadow-sm"/>
+                                    <button onClick={() => { navigator.clipboard.writeText(`${window.location.origin}${window.location.pathname}?ticket=${scannedMint}`); toast.success("Link copiado!"); }} className="p-3 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 flex-shrink-0"><ClipboardDocumentCheckIcon className="h-6 w-6" /></button>
+                                </div>
+                            </div>
+                            <button onClick={() => { setTicketData(null); setScannedMint(null); }} className="mt-6 text-slate-600 hover:underline">Voltar</button>
                         </div>
-                    </div>
+                    )}
                 </div>
             )}
 
