@@ -4,12 +4,12 @@ import { useConnection, useAnchorWallet } from '@solana/wallet-adapter-react';
 import { Program, web3, BN } from '@coral-xyz/anchor';
 import { getAssociatedTokenAddress } from '@solana/spl-token';
 import toast from 'react-hot-toast';
+import { createRoot } from 'react-dom/client';
+import QRCode from 'react-qr-code';
+import jsPDF from 'jspdf';
+
 import idl from '@/idl/ticketing_system.json';
 import { createReadOnlyProgram, createWritableProgram } from '@/lib/program';
-import QRCode from 'react-qr-code';
-import ReactDOM from 'react-dom';
-
-// --- Ícones para UI ---
 import { AcademicCapIcon, ArrowDownTrayIcon, CalendarIcon, MapPinIcon, TagIcon } from '@heroicons/react/24/outline';
 
 // --- Constantes ---
@@ -17,7 +17,7 @@ const TICKET_ACCOUNT_OWNER_FIELD_OFFSET = 72;
 const LISTING_SEED = Buffer.from("listing");
 const ESCROW_SEED = Buffer.from("escrow");
 const REFUND_RESERVE_SEED = Buffer.from("refund_reserve");
-const APP_BASE_URL = "https://ticketfy.onrender.com"; // Ajuste se necessário
+const APP_BASE_URL = "https://ticketfy.onrender.com";
 
 export function MyTickets() {
     const { connection } = useConnection();
@@ -174,7 +174,7 @@ export function MyTickets() {
     };
 
     const renderContent = () => {
-        if (isLoading) return <div className="text-center text-slate-500">Carregando seus ingressos... 🎟️</div>;
+        if (isLoading) return <div className="text-center text-slate-500">Carregando seus ingressos...</div>;
         if (!wallet) return <div className="text-center text-slate-500">Conecte sua carteira para ver seus ingressos.</div>;
         if (tickets.length === 0) return (
             <div className="text-center text-slate-500">
@@ -247,10 +247,13 @@ function TicketCard({ ticket, isListed, isSubmitting, onSellClick, onCancelClick
         fetchEventDetails();
     }, [program, ticketData.event]);
 
+    // ✅ LÓGICA DE DOWNLOAD SUBSTITUÍDA PARA GERAR PDF
     const handleDownload = () => {
         const tempContainer = document.createElement("div");
+        tempContainer.style.position = 'absolute';
+        tempContainer.style.left = '-9999px'; // Esconde o container
         document.body.appendChild(tempContainer);
-    
+
         const onRender = () => {
             const svgElement = tempContainer.querySelector('svg');
             if (!svgElement) {
@@ -258,69 +261,123 @@ function TicketCard({ ticket, isListed, isSubmitting, onSellClick, onCancelClick
                 document.body.removeChild(tempContainer);
                 return;
             }
-            const loadingToast = toast.loading('Gerando imagem do ingresso...');
+            
+            const loadingToast = toast.loading('Gerando PDF do ingresso...');
             const svgData = new XMLSerializer().serializeToString(svgElement);
             const img = new Image();
             const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
             const url = URL.createObjectURL(svgBlob);
+
             img.onload = () => {
-                const scale = 2;
                 const canvas = document.createElement('canvas');
-                canvas.width = 320 * scale;
-                canvas.height = 450 * scale;
+                canvas.width = img.width;
+                canvas.height = img.height;
                 const ctx = canvas.getContext('2d');
-                ctx.fillStyle = '#FFFFFF';
-                ctx.fillRect(0, 0, canvas.width, canvas.height);
-                ctx.fillStyle = '#1e293b';
-                ctx.font = `bold ${22 * scale}px sans-serif`;
-                ctx.textAlign = 'center';
-                ctx.fillText('Seu Ingresso Digital', canvas.width / 2, 40 * scale);
-                ctx.fillStyle = '#64748b';
-                ctx.font = `${14 * scale}px sans-serif`;
-                ctx.fillText('Apresente este QR Code na entrada', canvas.width / 2, 70 * scale);
-                const qrSize = 180 * scale;
-                ctx.drawImage(img, (canvas.width - qrSize) / 2, 90 * scale, qrSize, qrSize);
+                ctx.drawImage(img, 0, 0);
+                const qrImageDataUrl = canvas.toDataURL('image/png');
                 URL.revokeObjectURL(url);
-                const shortAddress = `${ticketData.nftMint.toString().slice(0, 10)}...${ticketData.nftMint.toString().slice(-10)}`;
-                ctx.fillStyle = '#94a3b8';
-                ctx.font = `italic ${12 * scale}px monospace`;
-                ctx.fillText(shortAddress, canvas.width / 2, 300 * scale);
-                ctx.strokeStyle = '#e2e8f0';
-                ctx.beginPath();
-                ctx.moveTo(20 * scale, 325 * scale);
-                ctx.lineTo(canvas.width - (20 * scale), 325 * scale);
-                ctx.stroke();
-                ctx.fillStyle = '#4f46e5';
-                ctx.font = `bold ${16 * scale}px sans-serif`;
-                ctx.fillText('Seu Certificado Pós-Evento', canvas.width / 2, 360 * scale);
-                ctx.fillStyle = '#334155';
-                ctx.font = `${13 * scale}px sans-serif`;
-                ctx.fillText('Após o evento, seu certificado estará disponível em:', canvas.width / 2, 390 * scale);
+
+                const doc = new jsPDF({
+                    orientation: 'portrait', unit: 'mm', format: 'a5'
+                });
+
+                const PAGE_WIDTH = doc.internal.pageSize.getWidth();
+                const PAGE_HEIGHT = doc.internal.pageSize.getHeight();
+                const MARGIN = 15;
+                const PRIMARY_COLOR = '#4F46E5';
+                const TEXT_COLOR_DARK = '#1E293B';
+                const TEXT_COLOR_LIGHT = '#64748B';
+
+                // Cabeçalho
+                doc.setFillColor(PRIMARY_COLOR);
+                doc.rect(0, 0, PAGE_WIDTH, 30, 'F');
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(24);
+                doc.setTextColor('#FFFFFF');
+                doc.text('Ticketfy', MARGIN, 15);
+                doc.setFont('helvetica', 'normal');
+                doc.setFontSize(10);
+                doc.text('O Futuro dos Eventos é Descentralizado', MARGIN, 23);
+
+                // Corpo
+                let currentY = 45;
+                doc.setFontSize(12);
+                doc.setTextColor(TEXT_COLOR_LIGHT);
+                doc.text('Ingresso Válido Para:', MARGIN, currentY);
+                currentY += 8;
+                doc.setFontSize(20);
+                doc.setFont('helvetica', 'bold');
+                doc.setTextColor(TEXT_COLOR_DARK);
+                doc.text(eventData.name || 'Nome do Evento', MARGIN, currentY, { maxWidth: PAGE_WIDTH - MARGIN * 2 });
+                currentY += 15;
+                doc.setFontSize(12);
+                doc.setFont('helvetica', 'normal');
+                doc.setTextColor(TEXT_COLOR_DARK);
+                doc.text(`Data: ${new Date(eventData.properties.dateTime.start).toLocaleString('pt-BR')}`, MARGIN, currentY);
+                currentY += 7;
+                doc.text(`Local: ${eventData.properties.location.venueName || 'Online'}`, MARGIN, currentY);
+                currentY += 15;
+
+                // QR Code
+                const qrSize = 65;
+                const qrX = (PAGE_WIDTH - qrSize) / 2;
+                doc.addImage(qrImageDataUrl, 'PNG', qrX, currentY, qrSize, qrSize);
+                currentY += qrSize + 5;
+                doc.setFontSize(11);
+                doc.setTextColor(TEXT_COLOR_LIGHT);
+                doc.text('Apresente este QR Code na entrada do evento.', PAGE_WIDTH / 2, currentY, { align: 'center' });
+                currentY += 15;
+                
+                // Linha Tracejada e Certificado
+                doc.setLineDashPattern([2, 2], 0);
+                doc.setDrawColor(TEXT_COLOR_LIGHT);
+                doc.line(MARGIN, currentY, PAGE_WIDTH - MARGIN, currentY);
+                doc.setLineDashPattern([], 0);
+                currentY += 10;
+                doc.setFontSize(14);
+                doc.setFont('helvetica', 'bold');
+                doc.setTextColor(PRIMARY_COLOR);
+                doc.text('Seu Certificado Digital', PAGE_WIDTH / 2, currentY, { align: 'center' });
+                currentY += 7;
+                doc.setFontSize(10);
+                doc.setFont('helvetica', 'normal');
+                doc.setTextColor(TEXT_COLOR_DARK);
+                doc.text('Após o evento, seu certificado estará disponível em:', PAGE_WIDTH / 2, currentY, { align: 'center' });
+                currentY += 7;
                 const certificateLink = `${APP_BASE_URL}/certificate/${ticketData.nftMint.toString()}`;
-                const linkText = `${APP_BASE_URL}/certificate/...${ticketData.nftMint.toString().slice(-12)}`;
-                ctx.font = `bold ${13 * scale}px monospace`;
-                ctx.fillStyle = '#1e293b';
-                ctx.fillText(linkText, canvas.width / 2, 415 * scale, canvas.width - (40 * scale));
-                const image = canvas.toDataURL('image/png');
-                const link = document.createElement('a');
-                link.href = image;
-                link.download = `ingresso-${ticketData.nftMint.toString().slice(0, 6)}.png`;
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-                toast.success('Download iniciado!', { id: loadingToast });
+                doc.setTextColor('#1D4ED8');
+                doc.textWithLink(certificateLink, PAGE_WIDTH / 2, currentY, { url: certificateLink, align: 'center' });
+
+                // Rodapé
+                const footerY = PAGE_HEIGHT - 18;
+                doc.setFillColor('#F1F5F9');
+                doc.rect(0, footerY - 5, PAGE_WIDTH, 23, 'F');
+                doc.setFontSize(8);
+                doc.setFont('courier', 'italic');
+                doc.setTextColor(TEXT_COLOR_LIGHT);
+                doc.text('ID do Ingresso (Mint Address):', MARGIN, footerY);
+                doc.text(ticketData.nftMint.toString(), MARGIN, footerY + 4);
+                doc.setFont('helvetica', 'bold');
+                doc.setTextColor(PRIMARY_COLOR);
+                doc.text('www.ticketfy.com', PAGE_WIDTH - MARGIN, footerY + 2, { align: 'right' });
+
+                doc.save(`ingresso-ticketfy-${ticketData.nftMint.toString().slice(0, 6)}.pdf`);
+                toast.success('Seu ingresso foi gerado com sucesso!', { id: loadingToast });
+                
+                // Limpeza
                 document.body.removeChild(tempContainer);
             };
+            
+            img.onerror = () => { 
+                toast.error('Falha ao carregar a imagem do QR Code.', { id: loadingToast });
+                document.body.removeChild(tempContainer);
+            };
+
             img.src = url;
         };
-    
-        ReactDOM.render(
-            <div style={{ position: 'absolute', left: '-9999px' }}>
-                <QRCode value={ticketData.nftMint.toString()} size={256} />
-            </div>,
-            tempContainer,
-            onRender
-        );
+
+        const root = createRoot(tempContainer);
+        root.render(<QRCode value={ticketData.nftMint.toString()} size={256} />, { onUnmount: onRender() });
     };
 
     if (isLoading || !eventData) {
@@ -396,8 +453,8 @@ function TicketCard({ ticket, isListed, isSubmitting, onSellClick, onCancelClick
             <div className="p-6 flex-grow flex flex-col">
                 <h3 className="text-xl font-bold text-slate-900 truncate mb-2">{eventData.name}</h3>
                 <div className="space-y-2 text-slate-600">
-                    <p className="flex items-center text-sm"><CalendarIcon /> {eventDate}</p>
-                    <p className="flex items-center text-sm"><MapPinIcon /> {location}</p>
+                    <p className="flex items-center text-sm gap-2"><CalendarIcon className="h-5 w-5 text-slate-400"/> {eventDate}</p>
+                    <p className="flex items-center text-sm gap-2"><MapPinIcon className="h-5 w-5 text-slate-400"/> {location}</p>
                 </div>
                 <div className="mt-auto pt-6">
                     {renderActionArea()}
