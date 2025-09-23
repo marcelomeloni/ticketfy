@@ -6,14 +6,14 @@ import { getAssociatedTokenAddress } from '@solana/spl-token';
 import toast from 'react-hot-toast';
 import { Html5QrcodeScanner } from 'html5-qrcode';
 import idl from '@/idl/ticketing_system.json';
-import { supabase } from '@/lib/supabaseClient'; // ✅ 1. IMPORTA O CLIENTE SUPABASE
+// import { supabase } from '@/lib/supabaseClient'; // ✅ REMOVIDO: Não é mais necessário aqui.
 import { ActionButton } from '@/components/ui/ActionButton';
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
 import { DocumentMagnifyingGlassIcon, ClipboardDocumentCheckIcon, ShieldCheckIcon, ShieldExclamationIcon, TicketIcon, QrCodeIcon, ClockIcon, UserIcon, UserGroupIcon } from '@heroicons/react/24/outline';
 import { PROGRAM_ID, API_URL } from '@/lib/constants';
 
 
-// --- Componentes Modulares de UI ---
+// --- Componentes Modulares de UI (Inalterados) ---
 
 const StatCard = ({ title, value, icon: Icon, color }) => (
     <div className="bg-white p-4 rounded-lg flex items-center gap-4 border border-slate-200">
@@ -36,14 +36,14 @@ const ScannerView = ({ onScan, onManualSearch }) => {
             scanner = new Html5QrcodeScanner('qr-reader-container', { fps: 10, qrbox: { width: 250, height: 250 } }, false);
             const handleSuccess = (decodedText, decodedResult) => {
                 onScan(decodedText);
-                if (scanner.getState()) {
+                if (scanner.getState() && scanner.getState() !== 1) { // 1 = NOT_STARTED
                     scanner.clear().catch(err => console.error("Falha ao limpar scanner", err));
                 }
             };
             scanner.render(handleSuccess, () => {});
         }
         return () => {
-            if (scanner && scanner.getState()) {
+            if (scanner && scanner.getState() && scanner.getState() !== 1) {
                 scanner.clear().catch(() => {});
             }
         };
@@ -69,7 +69,6 @@ const ScannerView = ({ onScan, onManualSearch }) => {
     );
 };
 
-// ✅ 2. ATUALIZA O COMPONENTE PARA EXIBIR O NOME
 const RecentValidations = ({ entries }) => (
     <div>
         <h2 className="text-lg font-bold text-slate-800 mb-4">Últimas Validações</h2>
@@ -78,7 +77,6 @@ const RecentValidations = ({ entries }) => (
                 <div key={entry.nftMint} className="bg-slate-50 p-3 rounded-lg flex items-center justify-between animate-fade-in border border-slate-200">
                     <div className="flex items-center gap-3">
                         <UserIcon className="h-5 w-5 text-green-500"/>
-                        {/* Exibe o nome se existir, senão exibe a carteira formatada */}
                         <p className="font-medium text-slate-700">
                             {entry.name || `${entry.owner.slice(0, 4)}...${entry.owner.slice(-4)}`}
                         </p>
@@ -138,73 +136,44 @@ export function ValidatorPage() {
         fetchEventAndCheckValidator();
     }, [fetchEventAndCheckValidator]);
     
-    // ✅ 3. ATUALIZA A FUNÇÃO PARA BUSCAR OS NOMES NO SUPABASE
+    // ✅ FUNÇÃO SIMPLIFICADA
     const fetchRecentEntries = useCallback(async () => {
         if (!isValidator) return;
         try {
-            // Passo 1: Busca as validações da sua API (como antes)
             const response = await fetch(`${API_URL}/event/${eventAddress}/validated-tickets`);
             if (!response.ok) throw new Error('Falha ao buscar validações da API');
             
             const entriesFromApi = await response.json();
-            if (entriesFromApi.length === 0) {
-                setRecentEntries([]);
-                return;
-            }
-
-            // Passo 2: Pega todos os endereços de carteira
-            const ownerAddresses = entriesFromApi.map(entry => entry.owner);
-
-            // Passo 3: Busca os perfis correspondentes no Supabase
-            const { data: profiles, error: supabaseError } = await supabase
-                .from('user_profiles')
-                .select('wallet_address, name')
-                .in('wallet_address', ownerAddresses);
-
-            if (supabaseError) throw supabaseError;
-
-            // Passo 4: Combina os dados da API com os nomes do Supabase
-            const profilesMap = new Map(profiles.map(p => [p.wallet_address, p.name]));
-            const enrichedEntries = entriesFromApi.map(entry => ({
-                ...entry,
-                name: profilesMap.get(entry.owner) || null // Adiciona o nome ao objeto
-            }));
-
-            setRecentEntries(enrichedEntries);
+            // Os dados já vêm enriquecidos com o nome, basta setar o estado.
+            setRecentEntries(entriesFromApi);
 
         } catch (error) {
-            console.error("Erro ao buscar e enriquecer entradas recentes:", error);
+            console.error("Erro ao buscar entradas recentes:", error);
         }
     }, [eventAddress, isValidator]);
 
     useEffect(() => {
         if (isValidator) {
             fetchRecentEntries();
-            const interval = setInterval(fetchRecentEntries, 15000);
+            const interval = setInterval(fetchRecentEntries, 15000); // Atualiza a cada 15s
             return () => clearInterval(interval);
         }
     }, [isValidator, fetchRecentEntries]);
     
+    // ✅ FUNÇÃO SIMPLIFICADA
     const fetchTicketData = useCallback(async (ticketId) => {
         if (!ticketId) return;
         setIsLoading(true);
         try {
             const response = await fetch(`${API_URL}/ticket-data/${ticketId}`);
-            if (!response.ok) throw new Error("Ingresso não encontrado ou inválido.");
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || "Ingresso não encontrado ou inválido.");
+            }
             
             const data = await response.json();
-            
-            // Passo extra: Busca o nome do dono do ingresso escaneado
-            const { data: profile, error } = await supabase
-                .from('user_profiles')
-                .select('name')
-                .eq('wallet_address', data.owner)
-                .single();
-            
-            if (error) console.warn("Perfil Supabase não encontrado para este ingresso:", error.message);
-
-            // Adiciona o nome aos dados do ingresso
-            setTicketData({ ...data, ownerName: profile?.name || null });
+            // A 'data' agora JÁ CONTÉM o 'ownerName' vindo da API.
+            setTicketData(data);
 
         } catch (error) {
             toast.error(error.message);
@@ -241,12 +210,13 @@ export function ValidatorPage() {
             
             toast.success(`Ingresso de ${ticketData.ownerName || 'participante'} validado!`, { id: loadingToast, duration: 5000 });
             
-            fetchRecentEntries(); // Atualiza a lista de recentes imediatamente
+            fetchRecentEntries();
             fetchEventAndCheckValidator();
 
             setTicketData(null);
             if (ticketToValidate) {
-                window.location.href = window.location.pathname;
+                // Remove o query param da URL sem recarregar a página
+                window.history.replaceState(null, '', window.location.pathname);
             } else {
                 setScannedMint(null);
             }
@@ -289,14 +259,13 @@ export function ValidatorPage() {
                             <TicketIcon className="mx-auto h-12 w-12 text-indigo-600"/>
                             <h2 className="mt-4 text-2xl font-bold">Confirmar Validação</h2>
                             <div className="mt-6 text-left space-y-2 bg-slate-50 p-4 rounded-md border border-slate-200">
-                                {/* ✅ 4. ATUALIZA O MODAL PARA MOSTRAR O NOME */}
                                 <p><strong className="text-slate-800">Dono:</strong> {ticketData.ownerName || <span className="font-mono text-xs">{ticketData.owner}</span>}</p>
                                 <p className="font-mono text-xs break-all"><strong className="text-slate-800 font-sans text-base">Ingresso:</strong> {ticketData.ticket.nftMint}</p>
                                 {ticketData.ticket.redeemed ? <p className="font-bold text-red-500">Status: JÁ VALIDADO!</p> : <p className="font-bold text-green-500">Status: PRONTO PARA VALIDAR</p>}
                             </div>
                             <div className="mt-6 flex flex-col gap-3">
                                 <ActionButton onClick={handleRedeemTicket} disabled={ticketData.ticket.redeemed}>Assinar e Concluir Check-in</ActionButton>
-                                <button onClick={() => window.location.href = window.location.pathname} className="text-slate-600 hover:underline">Cancelar</button>
+                                <button onClick={() => window.history.replaceState(null, '', window.location.pathname)} className="text-slate-600 hover:underline">Cancelar</button>
                             </div>
                         </div>
                     ) : (
