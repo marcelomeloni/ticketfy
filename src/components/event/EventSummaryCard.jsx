@@ -75,7 +75,7 @@ export function EventSummaryCard({ event, publicKey }) {
         fetchMetadata();
     }, [event.metadataUri]);
 
-    // MODIFICADO: A lógica de status agora usa apenas dados ON-CHAIN
+   
     const status = useMemo(() => {
         const now = Math.floor(Date.now() / 1000);
         if (event.canceled) return 'canceled';

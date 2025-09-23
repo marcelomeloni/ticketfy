@@ -10,9 +10,8 @@ import { supabase } from '@/lib/supabaseClient'; // ✅ 1. IMPORTA O CLIENTE SUP
 import { ActionButton } from '@/components/ui/ActionButton';
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
 import { DocumentMagnifyingGlassIcon, ClipboardDocumentCheckIcon, ShieldCheckIcon, ShieldExclamationIcon, TicketIcon, QrCodeIcon, ClockIcon, UserIcon, UserGroupIcon } from '@heroicons/react/24/outline';
+import { PROGRAM_ID, API_URL } from '@/lib/constants';
 
-const PROGRAM_ID = new web3.PublicKey("6BpG2uYeLSgHEynoT7VrNb6BpHSiwXPyayvECgCaizL5");
-const API_URL = "https://gasless-api-ke68.onrender.com"; // Lembre-se de mudar para a URL de produção quando aplicável
 
 // --- Componentes Modulares de UI ---
 

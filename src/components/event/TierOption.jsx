@@ -1,3 +1,4 @@
+import { web3 } from '@coral-xyz/anchor';
 export const TierOption = ({ tier, isSelected, isSoldOut, onSelect }) => {
     const isFree = tier.priceLamports.toNumber() === 0;
     return (

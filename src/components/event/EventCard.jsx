@@ -65,7 +65,7 @@ export function EventCard({ event }) {
         fetchMetadata();
     }, [metadataUri]);
 
-    // ✅ LÓGICA DE STATUS: Compara as datas do evento (dos metadados) com a data atual.
+
     const status = useMemo(() => {
         if (canceled) return 'canceled';
         if (!metadata?.properties?.dateTime) return null;

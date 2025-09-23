@@ -5,7 +5,7 @@ import toast from 'react-hot-toast';
 import { ArrowDownTrayIcon, ExclamationTriangleIcon, ShieldCheckIcon, ClockIcon } from '@heroicons/react/24/outline';
 import { supabase } from '../lib/supabaseClient';
 
-const API_URL = "https://gasless-api-ke68.onrender.com"; // Lembre-se de mudar para a URL de produção
+import { API_URL } from '@/lib/constants';
 
 // --- Componente de Exibição do Certificado (Design Profissional) ---
 const CertificateDisplay = ({ profile, ticketData, eventName }) => {

@@ -11,7 +11,7 @@ import { ActionButton } from '../components/ui/ActionButton';
 import { InfoBox } from '../components/ui/InfoBox';
 import { Spinner } from '../components/ui/Spinner';
 
-const PROGRAM_ADDRESS = "6BpG2uYeLSgHEynoT7VrNb6BpHSiwXPyayvECgCaizL5"; 
+import { PROGRAM_ID, API_URL } from '@/lib/constants'; 
 const GLOBAL_CONFIG_SEED = Buffer.from("config");
 const WHITELIST_SEED = Buffer.from("whitelist");
 
@@ -39,7 +39,7 @@ export function Admin() {
 
     const program = useMemo(() => {
         if (!provider) return null;
-        return new Program(idl, PROGRAM_ADDRESS, provider);
+        return new Program(idl, PROGRAM_ID, provider);
     }, [provider]);
     
     const fetchWhitelistedWallets = useCallback(async () => {

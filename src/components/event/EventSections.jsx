@@ -5,18 +5,21 @@ import {
     InformationCircleIcon, SparklesIcon
 } from '@heroicons/react/24/outline';
 
-// ✅ --- INÍCIO DA CORREÇÃO ---
+
 import L from 'leaflet';
 import markerIconPng from "leaflet/dist/images/marker-icon.png";
 import markerShadowPng from "leaflet/dist/images/marker-shadow.png";
+import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png'; 
 
-// Configura o ícone padrão do Leaflet para que ele encontre as imagens
-// depois que o Vite empacotar o projeto.
+
+delete L.Icon.Default.prototype._getIconUrl;
+
 L.Icon.Default.mergeOptions({
     iconUrl: markerIconPng,
-    shadowUrl: markerShadowPng
+    shadowUrl: markerShadowPng,
+    iconRetinaUrl: markerIcon2x, 
 });
-// ✅ --- FIM DA CORREÇÃO ---
+
 
 
 const Section = ({ title, icon: Icon, children }) => (

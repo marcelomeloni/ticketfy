@@ -8,7 +8,7 @@ import idl from '@/idl/ticketing_system.json';
 import {
     BanknotesIcon, CalendarDaysIcon, ChartBarIcon, ClockIcon, ExclamationTriangleIcon, PlusCircleIcon, TicketIcon, UserPlusIcon, XCircleIcon, ShareIcon, ClipboardDocumentIcon
 } from '@heroicons/react/24/outline';
-
+import { PROGRAM_ID, API_URL } from '@/lib/constants';
 // Supondo que estes componentes de UI existam em seus respectivos arquivos
 import { AdminCard } from '@/components/ui/AdminCard';
 import { InputField } from '@/components/ui/InputField';
@@ -57,7 +57,7 @@ export function ManageEvent() {
     const program = useMemo(() => {
         if (!wallet) return null;
         const provider = new AnchorProvider(connection, wallet, AnchorProvider.defaultOptions());
-        return new Program(idl, PROGRAM_ADDRESS, provider);
+        return new Program(idl, PROGRAM_ID, provider);
     }, [connection, wallet]);
 
     const fetchEventData = useCallback(async () => {

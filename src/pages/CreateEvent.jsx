@@ -8,7 +8,7 @@ import { CreateEventWizard } from '@/components/event/create/CreateEventWizard';
 import { MyEventsList } from '@/components/event/MyEventsList';
 import { InfoBox } from '@/components/ui/InfoBox';
 
-const PROGRAM_ADDRESS = "6BpG2uYeLSgHEynoT7VrNb6BpHSiwXPyayvECgCaizL5"; // Lembre-se de usar o seu Program ID
+import { PROGRAM_ID } from '@/lib/constants';
 const GLOBAL_CONFIG_SEED = Buffer.from("config");
 const WHITELIST_SEED = Buffer.from("whitelist");
 
@@ -26,7 +26,7 @@ export function CreateEvent() {
 
     const program = useMemo(() => {
         if (!provider) return null;
-        return new Program(idl, PROGRAM_ADDRESS, provider);
+        return new Program(idl, PROGRAM_ID, provider);
     }, [provider]);
 
     useEffect(() => {

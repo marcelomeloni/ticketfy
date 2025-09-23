@@ -33,22 +33,22 @@ export function CreateEventWizard({ program, wallet, onEventCreated }) {
         },
         properties: {
             location: {
-                type: 'Physical', // Novo: 'Physical' ou 'Online'
+                type: 'Physical', //'Physical' ou 'Online'
                 venueName: '',
                 address: { 
                     street: '', 
-                    number: '',     // Novo
-                    neighborhood: '', // Novo
+                    number: '',     
+                    neighborhood: '', 
                     city: '', 
                     state: '',
-                    zipCode: '',    // Novo
-                    country: 'BR'     // Novo
+                    zipCode: '',    
+                    country: 'BR'    
                 },
-                coordinates: {    // Novo
+                coordinates: {   
                     latitude: '',
                     longitude: ''
                 },
-                onlineUrl: ''     // Novo
+                onlineUrl: ''     
             },
             dateTime: {
                 start: new Date(Date.now() + 3600 * 1000 * 24 * 14),
@@ -76,7 +76,7 @@ export function CreateEventWizard({ program, wallet, onEventCreated }) {
         const jsonContent = { ...offChainData, properties: { ...offChainData.properties,
             dateTime: {
                 ...offChainData.properties.dateTime,
-                // MODIFICADO: Converte a string de volta para um objeto Date antes de chamar toISOString()
+               
                 start: new Date(offChainData.properties.dateTime.start).toISOString(),
                 end: new Date(offChainData.properties.dateTime.end).toISOString(),
             }
@@ -94,7 +94,7 @@ export function CreateEventWizard({ program, wallet, onEventCreated }) {
         const loadingToast = toast.loading("Criando evento na blockchain...");
         setLoading(true);
         try {
-            const eventId = new BN(Date.now()); // Usar timestamp como ID é mais simples
+            const eventId = new BN(Date.now()); 
             
             const [whitelistPda] = web3.PublicKey.findProgramAddressSync([WHITELIST_SEED, wallet.publicKey.toBuffer()], program.programId);
             const [eventPda] = web3.PublicKey.findProgramAddressSync([EVENT_SEED, eventId.toBuffer('le', 8)], program.programId);

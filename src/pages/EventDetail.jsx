@@ -7,10 +7,9 @@ import { PurchaseCard } from '@/components/event/PurchaseCard';
 import { EventHero } from '@/components/event/EventHero';
 import { EventSections, EventDetailsSidebar } from '@/components/event/EventSections';
 import { PageSkeleton } from '@/components/ui/PageSkeleton';
-
+import { PROGRAM_ID } from '@/lib/constants';
 import idl from '@/idl/ticketing_system.json';
 
-const PROGRAM_ID = new web3.PublicKey("6BpG2uYeLSgHEynoT7VrNb6BpHSiwXPyayvECgCaizL5");
 
 // ✅ CORREÇÃO: "export function" em vez de "export default function"
 export function EventDetail() {

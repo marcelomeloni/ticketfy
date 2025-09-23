@@ -10,7 +10,7 @@ import { AdminCard } from '@/components/ui/AdminCard';
 import { InputField } from '@/components/ui/InputField';
 import { ActionButton } from '@/components/ui/ActionButton';
 
-// Constantes para as seeds
+
 const WHITELIST_SEED = Buffer.from("whitelist");
 const EVENT_SEED = Buffer.from("event");
 
@@ -18,42 +18,39 @@ export function CreateEventForm({ program, wallet, onEventCreated }) {
     const [loading, setLoading] = useState(false);
     const [step, setStep] = useState(1);
 
-    // --- ESTADOS SEPARADOS PARA ON-CHAIN E OFF-CHAIN ---
-
-    // Passo 1: Dados para o arquivo JSON (Off-Chain)
+   
     const [offChainData, setOffChainData] = useState({
         name: '',
         description: '',
-        image: '', // URL da imagem que o usuário vai subir no Pinata/NFT.Storage
-        // Propriedades estruturadas para um JSON rico
+        image: '', 
         properties: {
             location: {
-                venueName: 'Arena Inter',
+                venueName: '',
                 address: {
-                    street: 'Av. Padre Cacique',
-                    number: '891',
-                    city: 'Porto Alegre',
-                    state: 'RS',
+                    street: '',
+                    number: '',
+                    city: '',
+                    state: '',
                 }
             },
             dateTime: {
-                start: new Date(Date.now() + 3600 * 1000 * 24 * 14), // 14 dias a partir de agora
-                end: new Date(Date.now() + 3600 * 1000 * 24 * 14 + 7200000), // +2 horas
-                timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, // Pega o timezone do browser
+                start: new Date(Date.now() + 3600 * 1000 * 24 * 14), 
+                end: new Date(Date.now() + 3600 * 1000 * 24 * 14 + 7200000),
+                timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, 
             }
         }
     });
 
-    // Passo 2: Dados críticos para o contrato (On-Chain)
+ 
     const [onChainData, setOnChainData] = useState({
         salesStartDate: new Date(),
-        salesEndDate: new Date(Date.now() + 3600 * 1000 * 24 * 7), // 7 dias de vendas
+        salesEndDate: new Date(Date.now() + 3600 * 1000 * 24 * 7),
         royaltyBps: '500', // 5%
         maxTicketsPerWallet: '10',
         tiers: [{ name: 'Pista', price: '0.5', maxTicketsSupply: '100' }],
     });
 
-    // Passo 3: URL final dos metadados e JSON gerado
+    
     const [metadataUrl, setMetadataUrl] = useState('');
     const [generatedJson, setGeneratedJson] = useState(null);
 
@@ -62,7 +59,7 @@ export function CreateEventForm({ program, wallet, onEventCreated }) {
     const handleOffChainChange = (path, value) => {
         setOffChainData(prev => {
             const keys = path.split('.');
-            const new_data = JSON.parse(JSON.stringify(prev)); // Deep copy
+            const new_data = JSON.parse(JSON.stringify(prev)); 
             let current = new_data;
             for (let i = 0; i < keys.length - 1; i++) {
                 current = current[keys[i]];
@@ -88,9 +85,9 @@ export function CreateEventForm({ program, wallet, onEventCreated }) {
         handleOnChainChange('tiers', onChainData.tiers.filter((_, i) => i !== index));
     };
 
-    // Gera o objeto JSON e prepara para download
+   
     const handleGenerateJson = () => {
-        // Validação simples
+      
         if (!offChainData.name || !offChainData.description || !offChainData.image) {
             return toast.error("Preencha Nome, Descrição e URL da Imagem para gerar os metadados.");
         }
@@ -151,7 +148,7 @@ export function CreateEventForm({ program, wallet, onEventCreated }) {
                 maxTicketsSupply: parseInt(tier.maxTicketsSupply, 10),
             }));
     
-            // Chamada para o contrato com a nova assinatura simplificada
+            // Chamada para o contrato com a assinatura simplificada
             await program.methods
                 .createEvent(
                     eventId, 

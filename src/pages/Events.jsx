@@ -5,7 +5,7 @@ import idl from '@/idl/ticketing_system.json';
 import { EventCard } from '@/components/event/EventCard';
 import { MagnifyingGlassIcon, FunnelIcon } from '@heroicons/react/24/outline';
 
-const PROGRAM_ADDRESS = "6BpG2uYeLSgHEynoT7VrNb6BpHSiwXPyayvECgCaizL5";
+import { PROGRAM_ID } from '@/lib/constants';
 
 export function Events() {
     const { connection } = useConnection();
@@ -20,7 +20,7 @@ export function Events() {
     const [isFree, setIsFree] = useState('all'); // 'all', 'yes', 'no'
 
     const provider = useMemo(() => new AnchorProvider(connection, {}, AnchorProvider.defaultOptions()), [connection]);
-    const program = useMemo(() => new Program(idl, PROGRAM_ADDRESS, provider), [provider]);
+    const program = useMemo(() => new Program(idl, PROGRAM_ID, provider), [provider]);
 
     // Efeito para buscar todos os eventos on-chain e seus metadados off-chain
     useEffect(() => {
