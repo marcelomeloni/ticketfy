@@ -18,12 +18,6 @@ Ticketfy é uma plataforma inovadora para a criação, gestão e venda de ingres
 -   [Sobre o Projeto](#-sobre-o-projeto)
 -   [✨ Funcionalidades](#-funcionalidades)
 -   [🚀 Tecnologias Utilizadas](#-tecnologias-utilizadas)
--   [🚀 Começando](#-começando)
-    -   [Pré-requisitos](#pré-requisitos)
-    -   [Instalação](#instalação)
--   [🧑‍💻 Como Usar](#-como-usar)
--   [📂 Estrutura do Projeto](#-estrutura-do-projeto)
--   [🤝 Contribuindo](#-contribuindo)
 
 ---
 
