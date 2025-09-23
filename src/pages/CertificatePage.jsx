@@ -276,4 +276,5 @@ export const CertificatePage = () => {
             </main>
         </div>
     );
+
 };
