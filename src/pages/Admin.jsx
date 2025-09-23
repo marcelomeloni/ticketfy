@@ -11,7 +11,7 @@ import { ActionButton } from '../components/ui/ActionButton';
 import { InfoBox } from '../components/ui/InfoBox';
 import { Spinner } from '../components/ui/Spinner';
 
-const PROGRAM_ADDRESS = "AHRuW77r9tM8RAX7qbhVyjktgSZueb6QVjDjWXjEoCeA"; 
+const PROGRAM_ADDRESS = "6BpG2uYeLSgHEynoT7VrNb6BpHSiwXPyayvECgCaizL5"; 
 const GLOBAL_CONFIG_SEED = Buffer.from("config");
 const WHITELIST_SEED = Buffer.from("whitelist");
 

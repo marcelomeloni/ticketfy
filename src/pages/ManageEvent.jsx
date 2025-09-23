@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { useConnection, useAnchorWallet } from '@solana/wallet-adapter-react';
 import { Program, AnchorProvider, web3, BN } from '@coral-xyz/anchor';
 import toast from 'react-hot-toast';
+import { ParticipantsList } from '@/components/event/manage/ParticipantsList'; 
 import idl from '@/idl/ticketing_system.json';
 import {
     BanknotesIcon, CalendarDaysIcon, ChartBarIcon, ClockIcon, ExclamationTriangleIcon, PlusCircleIcon, TicketIcon, UserPlusIcon, XCircleIcon, ShareIcon, ClipboardDocumentIcon
@@ -14,11 +15,21 @@ import { InputField } from '@/components/ui/InputField';
 import { ActionButton } from '@/components/ui/ActionButton';
 import { Spinner } from '@/components/ui/Spinner';
 
-const PROGRAM_ADDRESS = "AHRuW77r9tM8RAX7qbhVyjktgSZueb6QVjDjWXjEoCeA";
+const PROGRAM_ADDRESS = "6BpG2uYeLSgHEynoT7VrNb6BpHSiwXPyayvECgCaizL5";
 const REFUND_RESERVE_SEED = Buffer.from("refund_reserve");
 
 // Helper para formatar datas
-const formatDate = (timestamp) => new Date(timestamp * 1000).toLocaleString('pt-BR');
+const formatDate = (timestamp) => {
+    const options = {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        timeZone: 'America/Sao_Paulo' 
+    };
+    return new Date(timestamp * 1000).toLocaleString('pt-BR', options);
+};
 
 // Helper para status de vendas
 const getSaleStatus = (event) => {
@@ -211,6 +222,7 @@ export function ManageEvent() {
             
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 <div className="lg:col-span-2 space-y-8">
+                
                     <AdminCard title="Vendas por Lote">
                         <div className="space-y-4">
                             {Array.isArray(event.tiers) && event.tiers.map((tier, index) => (
@@ -233,6 +245,11 @@ export function ManageEvent() {
                              <p className="text-sm text-slate-500">Não é possível adicionar novos lotes a um evento que já teve suas vendas encerradas ou foi cancelado.</p>
                          )}
                     </AdminCard>
+                    <ParticipantsList 
+                        program={program} 
+                        eventAddress={eventAddress}
+                        eventName={metadata?.name || 'evento'}
+                    />
                 </div>
 
                 <div className="space-y-8">
@@ -289,12 +306,18 @@ export function ManageEvent() {
                     </AdminCard>
                     
                     <AdminCard title="Zona de Perigo" icon={ExclamationTriangleIcon}>
-                        <p className="text-sm text-slate-600 mb-4">Cancelar o evento é uma ação irreversível e habilitará reembolsos.</p>
-                        <ActionButton onClick={handleCancelEvent} loading={actionLoading} disabled={event.canceled} className="w-full bg-red-600 hover:bg-red-700 disabled:bg-red-300">
-                            <XCircleIcon className="h-5 w-5 mr-2"/>
-                            {event.canceled ? 'Evento Já Cancelado' : 'Cancelar Evento'}
-                        </ActionButton>
-                    </AdminCard>
+    <p className="text-sm text-slate-600 mb-4">Cancelar o evento é uma ação irreversível e habilitará reembolsos.</p>
+   
+    <ActionButton 
+        onClick={handleCancelEvent} 
+        loading={actionLoading} 
+        disabled={event.canceled} 
+        className="w-full bg-red-600 hover:bg-red-700 disabled:bg-red-300 flex items-center justify-center"
+    >
+        <XCircleIcon className="h-5 w-5 mr-2"/>
+        {event.canceled ? 'Evento Já Cancelado' : 'Cancelar Evento'}
+    </ActionButton>
+</AdminCard>
                 </div>
             </div>
         </div>

@@ -2,10 +2,12 @@ import { useState, useEffect } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
 import toast from 'react-hot-toast';
 
+// Assumindo que estes caminhos estão corretos no seu projeto
+import { supabase } from '@/lib/supabaseClient'; 
 import { ActionButton } from '@/components/ui/ActionButton';
 import { RegistrationModal } from '@/components/modals/RegistrationModal';
 import { TicketSuccessModal } from '@/components/modals/TicketSuccessModal';
-import { TierOption } from './TierOption';
+import { TierOption } from '@/components/event/TierOption';
 import { TicketIcon } from '@heroicons/react/24/outline';
 
 const API_URL = "https://gasless-api-ke68.onrender.com";
@@ -14,118 +16,103 @@ export const PurchaseCard = ({ metadata, eventAccount, eventAddress, onPurchaseS
     const { publicKey } = useWallet();
     const [isMinting, setIsMinting] = useState(false);
     const [selectedTierIndex, setSelectedTierIndex] = useState(0);
-    const [isRegistered, setIsRegistered] = useState(false);
     const [isRegistrationModalOpen, setIsRegistrationModalOpen] = useState(false);
     const [ticketResult, setTicketResult] = useState(null);
-
-    useEffect(() => {
-        setIsRegistered(false);
-    }, [publicKey]);
 
     const handleGetTicket = () => {
         setIsRegistrationModalOpen(true);
     };
 
     const handleRegistrationSubmit = async (formData) => {
-        if (publicKey) {
-            await registerAndMintForConnectedWallet(formData);
-        } else {
-            await generateWalletAndMintForNewUser(formData);
-        }
-    };
-
-    const registerAndMintForConnectedWallet = async (formData) => {
         setIsMinting(true);
-        const loadingToast = toast.loading("Cadastrando seu perfil...");
-        
-        try {
-            const registerResponse = await fetch(`${API_URL}/register-user`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    authority: publicKey.toString(),
-                    ...formData,
-                }),
-            });
-            const registerData = await registerResponse.json();
-            if (!registerResponse.ok) throw new Error(registerData.details || 'Falha ao cadastrar perfil.');
-            
-            toast.loading("Perfil cadastrado! Finalizando a aquisição do ingresso...", { id: loadingToast });
-    
-            const mintResponse = await fetch(`${API_URL}/mint-for-existing-user`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    eventAddress,
-                    buyerAddress: publicKey.toString(),
-                    tierIndex: selectedTierIndex,
-                }),
-            });
-            const mintData = await mintResponse.json();
-            if (!mintResponse.ok) throw new Error(mintData.details || 'Falha ao resgatar o ingresso.');
-    
-            const fullTicketData = {
-                mintAddress: mintData.mintAddress,
-                seedPhrase: null,
-                eventName: metadata.name,
-                eventDate: metadata.properties?.dateTime?.start,
-                eventLocation: metadata.properties?.location?.venueName,
-            };
-            
-            setTicketResult(fullTicketData);
-            
-            setIsRegistrationModalOpen(false);
-            toast.success("Ingresso resgatado com sucesso!", { id: loadingToast });
-            setTimeout(() => onPurchaseSuccess(), 2000);
-    
-        // ✅ CORREÇÃO: Removido o "=>" da sintaxe do catch
-        } catch (error) {
-            console.error("Erro no fluxo Web3:", error);
-            toast.error(`Erro: ${error.message}`, { id: loadingToast });
-        } finally {
-            setIsMinting(false);
-        }
-    };
+        const loadingToast = toast.loading("A processar o seu pedido...");
 
-    const generateWalletAndMintForNewUser = async (formData) => {
-        setIsMinting(true);
-        const loadingToast = toast.loading("Criando sua conta segura e ingresso...");
         try {
-            const response = await fetch(`${API_URL}/generate-wallet-and-mint`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    eventAddress,
-                    tierIndex: selectedTierIndex,
-                    ...formData,
-                }),
-            });
-
-            const data = await response.json();
-            if (!response.ok) {
-                throw new Error(data.details || 'Ocorreu um erro ao criar sua conta.');
+            // Distingue o fluxo com base na conexão da carteira
+            if (publicKey) {
+                await mintForConnectedWallet(formData, loadingToast);
+            } else {
+                await generateWalletAndMintForNewUser(formData, loadingToast);
             }
-            
-            const fullTicketData = {
-                ...data,
-                eventName: metadata.name,
-                eventDate: metadata.properties?.dateTime?.start,
-                eventLocation: metadata.properties?.location?.venueName,
-            };
 
-            setTicketResult(fullTicketData);
-
+            // Lógica de sucesso unificada
             setIsRegistrationModalOpen(false);
-            toast.success("Ingresso e carteira criados com sucesso!", { id: loadingToast });
+            toast.success("Ingresso adquirido com sucesso!", { id: loadingToast });
             setTimeout(() => onPurchaseSuccess(), 2000);
 
-        // ✅ CORREÇÃO: Removido o "=>" da sintaxe do catch
         } catch (error) {
-            console.error("Erro no fluxo Web2:", error);
+            console.error("Erro no fluxo de aquisição:", error);
             toast.error(`Erro: ${error.message}`, { id: loadingToast });
         } finally {
             setIsMinting(false);
         }
+    };
+
+    // Fluxo para utilizador com carteira já conectada
+    const mintForConnectedWallet = async (formData, loadingToast) => {
+        // Passo 1: Salvar/Atualizar no Supabase
+        await supabase
+            .from('user_profiles')
+            .upsert({ wallet_address: publicKey.toString(), ...formData }, { onConflict: 'wallet_address' });
+        
+        toast.loading("Perfil salvo! A adquirir o seu ingresso...", { id: loadingToast });
+
+        // Passo 2: Chamar o endpoint único que regista (se necessário) e faz o mint
+        const response = await fetch(`${API_URL}/mint-for-existing-user`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                eventAddress,
+                buyerAddress: publicKey.toString(),
+                tierIndex: selectedTierIndex,
+                ...formData, // Envia os dados caso o perfil precise ser criado on-chain
+            }),
+        });
+
+        const data = await response.json();
+        if (!response.ok) {
+            throw new Error(data.details || 'Falha ao resgatar o ingresso.');
+        }
+
+        setTicketResult({
+            mintAddress: data.mintAddress,
+            seedPhrase: null,
+            eventName: metadata.name,
+            eventDate: metadata.properties?.dateTime?.start,
+            eventLocation: metadata.properties?.location?.venueName,
+        });
+    };
+
+    // Fluxo para novo utilizador sem carteira
+    const generateWalletAndMintForNewUser = async (formData, loadingToast) => {
+        toast.loading("A criar a sua conta segura e ingresso...", { id: loadingToast });
+        
+        const response = await fetch(`${API_URL}/generate-wallet-and-mint`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                eventAddress,
+                tierIndex: selectedTierIndex,
+                ...formData,
+            }),
+        });
+
+        const data = await response.json();
+        if (!response.ok) {
+            throw new Error(data.details || 'Ocorreu um erro ao criar a sua conta.');
+        }
+
+        // Salva no Supabase depois de a API retornar a nova carteira
+        await supabase
+            .from('user_profiles')
+            .upsert({ wallet_address: data.publicKey, ...formData }, { onConflict: 'wallet_address' });
+
+        setTicketResult({
+            ...data,
+            eventName: metadata.name,
+            eventDate: metadata.properties?.dateTime?.start,
+            eventLocation: metadata.properties?.location?.venueName,
+        });
     };
 
     const selectedTier = eventAccount.tiers[selectedTierIndex];
@@ -143,30 +130,28 @@ export const PurchaseCard = ({ metadata, eventAccount, eventAddress, onPurchaseS
         if (salesHaveNotStarted) return "Vendas em Breve";
         if (salesHaveEnded) return "Vendas Encerradas";
         if (isSoldOut) return "Esgotado";
-        if (!publicKey) return "Pegar Ingresso Grátis Direto";
-        if (publicKey && !isRegistered) return "Cadastre-se para Pegar o Ingresso";
-        return isFree ? "Pegar Ingresso Grátis" : "Comprar Ingresso";
+        return isFree ? "Obter Ingresso Grátis" : "Comprar Ingresso";
     };
 
     return (
         <>
             <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-                 <h2 className="text-xl font-bold text-slate-800 mb-4 flex items-center"><TicketIcon className="w-6 h-6 mr-2 text-indigo-500" /> Ingressos</h2>
-                 <div className="space-y-3 mb-6">
-                      {eventAccount.tiers.map((tier, index) => (
-                           <TierOption 
-                                key={index} tier={tier} isSelected={selectedTierIndex === index}
-                                isSoldOut={tier.ticketsSold >= tier.maxTicketsSupply}
-                                onSelect={() => !(tier.ticketsSold >= tier.maxTicketsSupply) && setSelectedTierIndex(index)}
-                           />
-                      ))}
-                 </div>
-                 <ActionButton 
-                      onClick={handleGetTicket} loading={isMinting} disabled={isButtonDisabled}
-                      className={`w-full ${isFree && !isButtonDisabled && 'bg-green-600 hover:bg-green-700'}`}
-                 >
-                      {getButtonText()}
-                 </ActionButton>
+                <h2 className="text-xl font-bold text-slate-800 mb-4 flex items-center"><TicketIcon className="w-6 h-6 mr-2 text-indigo-500" /> Ingressos</h2>
+                <div className="space-y-3 mb-6">
+                    {eventAccount.tiers.map((tier, index) => (
+                        <TierOption 
+                            key={index} tier={tier} isSelected={selectedTierIndex === index}
+                            isSoldOut={tier.ticketsSold >= tier.maxTicketsSupply}
+                            onSelect={() => !(tier.ticketsSold >= tier.maxTicketsSupply) && setSelectedTierIndex(index)}
+                        />
+                    ))}
+                </div>
+                <ActionButton 
+                    onClick={handleGetTicket} loading={isMinting} disabled={isButtonDisabled}
+                    className={`w-full ${isFree && !isButtonDisabled && 'bg-green-600 hover:bg-green-700'}`}
+                >
+                    {getButtonText()}
+                </ActionButton>
             </div>
 
             <RegistrationModal
@@ -184,3 +169,4 @@ export const PurchaseCard = ({ metadata, eventAccount, eventAddress, onPurchaseS
         </>
     );
 };
+

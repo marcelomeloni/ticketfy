@@ -108,12 +108,31 @@ export function Step1_MetadataForm({ isActive, data, setData, onNextStep }) {
                         <InputField label="Nome do Organizador" value={data.organizer.name} onChange={e => handleChange('organizer.name', e.target.value)} />
                         <InputField label="Website do Organizador" placeholder="https://..." value={data.organizer.website} onChange={e => handleChange('organizer.website', e.target.value)} />
                     </div>
-                     <InputField type="email" label="E-mail de Contato" placeholder="contato@empresa.com" value={data.organizer.contactEmail} onChange={e => handleChange('organizer.contactEmail', e.target.value)} />
+                    <InputField 
+                        label="URL do Logo do Organizador" 
+                        placeholder="https://.../logo.png" 
+                        value={data.organizer.organizerLogo} 
+                        onChange={e => handleChange('organizer.organizerLogo', e.target.value)} 
+                        helperText="Faça o upload do logo e cole o link aqui. Será exibido na página do evento."
+                    />
+                    <InputField type="email" label="E-mail de Contato" placeholder="contato@empresa.com" value={data.organizer.contactEmail} onChange={e => handleChange('organizer.contactEmail', e.target.value)} />
                 </Section>
 
                 {/* --- SEÇÃO: INFORMAÇÕES ADICIONAIS --- */}
                 <Section title="Informações Adicionais">
-                    <InputField label="Restrição de Idade" placeholder="Livre, 16+, 18+" value={data.additionalInfo.ageRestriction} onChange={e => handleChange('additionalInfo.ageRestriction', e.target.value)} />
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <InputField label="Restrição de Idade" placeholder="Livre, 16+, 18+" value={data.additionalInfo.ageRestriction} onChange={e => handleChange('additionalInfo.ageRestriction', e.target.value)} />
+                        {/* ✅ 4. ADICIONADO CAMPO PARA HORAS COMPLEMENTARES */}
+                        <InputField 
+                            label="Horas Complementares" 
+                            type="number" 
+                            min="0"
+                            placeholder="Ex: 10" 
+                            value={data.additionalInfo.complementaryHours} 
+                            onChange={e => handleChange('additionalInfo.complementaryHours', parseInt(e.target.value, 10) || 0)} 
+                            helperText="Número de horas para certificados acadêmicos."
+                        />
+                    </div>
                     <InputField as="textarea" label="Informações de Acessibilidade" placeholder="Ex: Local com rampas de acesso, banheiros adaptados, etc." value={data.additionalInfo.accessibility} onChange={e => handleChange('additionalInfo.accessibility', e.target.value)} />
                 </Section>
             </div>

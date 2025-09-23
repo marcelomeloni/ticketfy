@@ -10,7 +10,7 @@ import { PageSkeleton } from '@/components/ui/PageSkeleton';
 
 import idl from '@/idl/ticketing_system.json';
 
-const PROGRAM_ID = new web3.PublicKey("AHRuW77r9tM8RAX7qbhVyjktgSZueb6QVjDjWXjEoCeA");
+const PROGRAM_ID = new web3.PublicKey("6BpG2uYeLSgHEynoT7VrNb6BpHSiwXPyayvECgCaizL5");
 
 // ✅ CORREÇÃO: "export function" em vez de "export default function"
 export function EventDetail() {

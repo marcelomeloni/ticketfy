@@ -23,11 +23,13 @@ export function CreateEventWizard({ program, wallet, onEventCreated }) {
         organizer: { 
             name: '', 
             website: '',
-            contactEmail: '' // Novo
+            contactEmail: '',
+            organizerLogo: '',
         },
         additionalInfo: { 
-            ageRestriction: 'Livre', // Novo
-            accessibility: '' // Novo
+            ageRestriction: 'Livre', 
+            accessibility: '',
+            complementaryHours: 0, 
         },
         properties: {
             location: {

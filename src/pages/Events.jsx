@@ -5,7 +5,7 @@ import idl from '@/idl/ticketing_system.json';
 import { EventCard } from '@/components/event/EventCard';
 import { MagnifyingGlassIcon, FunnelIcon } from '@heroicons/react/24/outline';
 
-const PROGRAM_ADDRESS = "AHRuW77r9tM8RAX7qbhVyjktgSZueb6QVjDjWXjEoCeA";
+const PROGRAM_ADDRESS = "6BpG2uYeLSgHEynoT7VrNb6BpHSiwXPyayvECgCaizL5";
 
 export function Events() {
     const { connection } = useConnection();

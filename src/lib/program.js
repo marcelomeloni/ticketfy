@@ -3,7 +3,7 @@
 import { Program, AnchorProvider, web3 } from '@coral-xyz/anchor';
 import idl from '@/idl/ticketing_system.json';
 
-const PROGRAM_ADDRESS = "AHRuW77r9tM8RAX7qbhVyjktgSZueb6QVjDjWXjEoCeA";
+const PROGRAM_ADDRESS = "6BpG2uYeLSgHEynoT7VrNb6BpHSiwXPyayvECgCaizL5";
 
 /**
  * Cria uma instância do programa Anchor para transações que exigem assinatura (escrita).

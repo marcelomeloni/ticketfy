@@ -6,12 +6,13 @@ import { getAssociatedTokenAddress } from '@solana/spl-token';
 import toast from 'react-hot-toast';
 import { Html5QrcodeScanner } from 'html5-qrcode';
 import idl from '@/idl/ticketing_system.json';
+import { supabase } from '@/lib/supabaseClient'; // ✅ 1. IMPORTA O CLIENTE SUPABASE
 import { ActionButton } from '@/components/ui/ActionButton';
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
 import { DocumentMagnifyingGlassIcon, ClipboardDocumentCheckIcon, ShieldCheckIcon, ShieldExclamationIcon, TicketIcon, QrCodeIcon, ClockIcon, UserIcon, UserGroupIcon } from '@heroicons/react/24/outline';
 
-const PROGRAM_ID = new web3.PublicKey("AHRuW77r9tM8RAX7qbhVyjktgSZueb6QVjDjWXjEoCeA");
-const API_URL = "https://gasless-api-ke68.onrender.com";
+const PROGRAM_ID = new web3.PublicKey("6BpG2uYeLSgHEynoT7VrNb6BpHSiwXPyayvECgCaizL5");
+const API_URL = "https://gasless-api-ke68.onrender.com"; // Lembre-se de mudar para a URL de produção quando aplicável
 
 // --- Componentes Modulares de UI ---
 
@@ -31,20 +32,22 @@ const ScannerView = ({ onScan, onManualSearch }) => {
     const [manualMintAddress, setManualMintAddress] = useState('');
 
     useEffect(() => {
-        // Previne a reinicialização do scanner se ele já estiver ativo
+        let scanner;
         if (document.getElementById('qr-reader-container')?.innerHTML === "") {
-            const scanner = new Html5QrcodeScanner('qr-reader-container', { fps: 10, qrbox: { width: 250, height: 250 } }, false);
-            const handleSuccess = (decodedText) => {
-                try {
-                    if (scanner.getState()) {
-                        scanner.clear();
-                    }
-                    onScan(decodedText);
-                } catch (e) { console.error("Falha ao limpar o scanner:", e); }
+            scanner = new Html5QrcodeScanner('qr-reader-container', { fps: 10, qrbox: { width: 250, height: 250 } }, false);
+            const handleSuccess = (decodedText, decodedResult) => {
+                onScan(decodedText);
+                if (scanner.getState()) {
+                    scanner.clear().catch(err => console.error("Falha ao limpar scanner", err));
+                }
             };
             scanner.render(handleSuccess, () => {});
-            return () => { if (scanner && scanner.getState()) { scanner.clear().catch(() => {}); } };
         }
+        return () => {
+            if (scanner && scanner.getState()) {
+                scanner.clear().catch(() => {});
+            }
+        };
     }, [onScan]);
 
     return (
@@ -67,6 +70,7 @@ const ScannerView = ({ onScan, onManualSearch }) => {
     );
 };
 
+// ✅ 2. ATUALIZA O COMPONENTE PARA EXIBIR O NOME
 const RecentValidations = ({ entries }) => (
     <div>
         <h2 className="text-lg font-bold text-slate-800 mb-4">Últimas Validações</h2>
@@ -75,7 +79,10 @@ const RecentValidations = ({ entries }) => (
                 <div key={entry.nftMint} className="bg-slate-50 p-3 rounded-lg flex items-center justify-between animate-fade-in border border-slate-200">
                     <div className="flex items-center gap-3">
                         <UserIcon className="h-5 w-5 text-green-500"/>
-                        <p className="font-medium text-slate-700">{entry.name}</p>
+                        {/* Exibe o nome se existir, senão exibe a carteira formatada */}
+                        <p className="font-medium text-slate-700">
+                            {entry.name || `${entry.owner.slice(0, 4)}...${entry.owner.slice(-4)}`}
+                        </p>
                     </div>
                     <p className="text-sm text-slate-500">{entry.redeemedAt}</p>
                 </div>
@@ -83,7 +90,6 @@ const RecentValidations = ({ entries }) => (
         </div>
     </div>
 );
-
 
 // --- Componente Principal da Página ---
 
@@ -133,23 +139,49 @@ export function ValidatorPage() {
         fetchEventAndCheckValidator();
     }, [fetchEventAndCheckValidator]);
     
+    // ✅ 3. ATUALIZA A FUNÇÃO PARA BUSCAR OS NOMES NO SUPABASE
     const fetchRecentEntries = useCallback(async () => {
         if (!isValidator) return;
         try {
+            // Passo 1: Busca as validações da sua API (como antes)
             const response = await fetch(`${API_URL}/event/${eventAddress}/validated-tickets`);
-            if (response.ok) {
-                const data = await response.json();
-                setRecentEntries(data);
+            if (!response.ok) throw new Error('Falha ao buscar validações da API');
+            
+            const entriesFromApi = await response.json();
+            if (entriesFromApi.length === 0) {
+                setRecentEntries([]);
+                return;
             }
+
+            // Passo 2: Pega todos os endereços de carteira
+            const ownerAddresses = entriesFromApi.map(entry => entry.owner);
+
+            // Passo 3: Busca os perfis correspondentes no Supabase
+            const { data: profiles, error: supabaseError } = await supabase
+                .from('user_profiles')
+                .select('wallet_address, name')
+                .in('wallet_address', ownerAddresses);
+
+            if (supabaseError) throw supabaseError;
+
+            // Passo 4: Combina os dados da API com os nomes do Supabase
+            const profilesMap = new Map(profiles.map(p => [p.wallet_address, p.name]));
+            const enrichedEntries = entriesFromApi.map(entry => ({
+                ...entry,
+                name: profilesMap.get(entry.owner) || null // Adiciona o nome ao objeto
+            }));
+
+            setRecentEntries(enrichedEntries);
+
         } catch (error) {
-            console.error("Erro ao buscar entradas recentes:", error);
+            console.error("Erro ao buscar e enriquecer entradas recentes:", error);
         }
     }, [eventAddress, isValidator]);
 
     useEffect(() => {
         if (isValidator) {
             fetchRecentEntries();
-            const interval = setInterval(fetchRecentEntries, 15000); // Atualiza a cada 15s
+            const interval = setInterval(fetchRecentEntries, 15000);
             return () => clearInterval(interval);
         }
     }, [isValidator, fetchRecentEntries]);
@@ -160,8 +192,21 @@ export function ValidatorPage() {
         try {
             const response = await fetch(`${API_URL}/ticket-data/${ticketId}`);
             if (!response.ok) throw new Error("Ingresso não encontrado ou inválido.");
+            
             const data = await response.json();
-            setTicketData(data);
+            
+            // Passo extra: Busca o nome do dono do ingresso escaneado
+            const { data: profile, error } = await supabase
+                .from('user_profiles')
+                .select('name')
+                .eq('wallet_address', data.owner)
+                .single();
+            
+            if (error) console.warn("Perfil Supabase não encontrado para este ingresso:", error.message);
+
+            // Adiciona o nome aos dados do ingresso
+            setTicketData({ ...data, ownerName: profile?.name || null });
+
         } catch (error) {
             toast.error(error.message);
             setScannedMint(null);
@@ -185,13 +230,20 @@ export function ValidatorPage() {
             const nftMint = new web3.PublicKey(ticketData.ticket.nftMint);
             const [ticketPda] = web3.PublicKey.findProgramAddressSync([Buffer.from("ticket"), new web3.PublicKey(eventAddress).toBuffer(), nftMint.toBuffer()], program.programId);
             const nftTokenAccount = await getAssociatedTokenAddress(nftMint, owner);
-            const signature = await program.methods.redeemTicket().accounts({ ticket: ticketPda, event: new web3.PublicKey(eventAddress), validator: publicKey, owner, nftToken: nftTokenAccount, nftMint }).rpc();
             
-            toast.success(`Ingresso validado!`, { id: loadingToast, duration: 5000 });
+            await program.methods.redeemTicket().accounts({ 
+                ticket: ticketPda, 
+                event: new web3.PublicKey(eventAddress), 
+                validator: publicKey, 
+                owner, 
+                nftToken: nftTokenAccount, 
+                nftMint 
+            }).rpc();
             
-            const newEntry = { name: ticketData.profile.name, redeemedAt: new Date().toLocaleTimeString('pt-BR'), nftMint: ticketData.ticket.nftMint };
-            setRecentEntries(prev => [newEntry, ...prev]);
-            await fetchEventAndCheckValidator(); // Re-fetch event data to update total counts
+            toast.success(`Ingresso de ${ticketData.ownerName || 'participante'} validado!`, { id: loadingToast, duration: 5000 });
+            
+            fetchRecentEntries(); // Atualiza a lista de recentes imediatamente
+            fetchEventAndCheckValidator();
 
             setTicketData(null);
             if (ticketToValidate) {
@@ -230,16 +282,16 @@ export function ValidatorPage() {
                 </div>
             </header>
 
-            {/* Modal de Confirmação ou Escolha de Carteira */}
             {ticketData && (
                 <div className="fixed inset-0 bg-black/60 flex justify-center items-center z-50 p-4 animate-fade-in">
+                    {/* Modal para validação via link (validador assina) */}
                     {ticketToValidate ? (
-                        // Tela de Confirmação Final
                         <div className="w-full max-w-md bg-white p-8 rounded-lg shadow-xl text-center">
                             <TicketIcon className="mx-auto h-12 w-12 text-indigo-600"/>
                             <h2 className="mt-4 text-2xl font-bold">Confirmar Validação</h2>
                             <div className="mt-6 text-left space-y-2 bg-slate-50 p-4 rounded-md border border-slate-200">
-                                <p><strong className="text-slate-800">Nome:</strong> {ticketData.profile.name}</p>
+                                {/* ✅ 4. ATUALIZA O MODAL PARA MOSTRAR O NOME */}
+                                <p><strong className="text-slate-800">Dono:</strong> {ticketData.ownerName || <span className="font-mono text-xs">{ticketData.owner}</span>}</p>
                                 <p className="font-mono text-xs break-all"><strong className="text-slate-800 font-sans text-base">Ingresso:</strong> {ticketData.ticket.nftMint}</p>
                                 {ticketData.ticket.redeemed ? <p className="font-bold text-red-500">Status: JÁ VALIDADO!</p> : <p className="font-bold text-green-500">Status: PRONTO PARA VALIDAR</p>}
                             </div>
@@ -249,13 +301,13 @@ export function ValidatorPage() {
                             </div>
                         </div>
                     ) : (
-                        // Tela Intermediária de Copiar e Colar
+                        // Modal para validação via QR Code (participante assina)
                         <div className="w-full max-w-md bg-white p-8 rounded-lg shadow-xl text-center">
                             <QrCodeIcon className="mx-auto h-12 w-12 text-green-600"/>
                             <h2 className="mt-4 text-2xl font-bold">Ingresso Encontrado!</h2>
-                            <p className="mt-2 text-slate-600">Copie o link e cole no navegador da sua carteira para assinar a validação.</p>
+                            <p className="mt-2 text-slate-600">Copie o link e cole no navegador da carteira do participante para ele assinar a validação.</p>
                             <div className="mt-6 text-left space-y-2 bg-slate-50 p-4 rounded-md">
-                                <p><strong className="text-slate-800">Nome:</strong> {ticketData.profile.name}</p>
+                                <p><strong className="text-slate-800">Dono:</strong> {ticketData.ownerName || <span className="font-mono text-xs">{ticketData.owner}</span>}</p>
                                 <p className="font-mono text-xs break-all"><strong className="text-slate-800 font-sans text-base">Ingresso:</strong> {scannedMint}</p>
                             </div>
                             <div className="mt-6">

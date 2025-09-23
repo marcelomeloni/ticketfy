@@ -3,21 +3,31 @@ import { useParams } from 'react-router-dom';
 import QRCode from 'react-qr-code';
 import toast from 'react-hot-toast';
 import { ArrowDownTrayIcon, ExclamationTriangleIcon, ShieldCheckIcon, ClockIcon } from '@heroicons/react/24/outline';
+import { supabase } from '../lib/supabaseClient';
 
-const API_URL = "https://gasless-api-ke68.onrender.com";
+const API_URL = "https://gasless-api-ke68.onrender.com"; // Lembre-se de mudar para a URL de produção
 
-const CertificateDisplay = ({ data, eventName }) => {
+// --- Componente de Exibição do Certificado (Design Profissional) ---
+const CertificateDisplay = ({ profile, ticketData, eventName }) => {
     const qrCodeContainerRef = useRef(null);
+
+    // Extrai os novos dados dos metadados do evento com segurança
+    const organizerLogoUrl = ticketData.event?.metadata?.organizer?.organizerLogo;
+    const complementaryHours = ticketData.event?.metadata?.additionalInfo?.complementaryHours;
 
     const handleDownload = () => {
         const loadingToast = toast.loading("Gerando seu certificado...");
 
         const loadImage = (src) => {
             return new Promise((resolve, reject) => {
+                if (!src) {
+                    // Se a URL for nula ou vazia, resolve com null para não quebrar o Promise.all
+                    return resolve(null);
+                }
                 const img = new Image();
                 img.crossOrigin = "anonymous";
                 img.onload = () => resolve(img);
-                img.onerror = (err) => reject(err);
+                img.onerror = () => reject(new Error(`Falha ao carregar imagem: ${src}`));
                 img.src = src;
             });
         };
@@ -31,75 +41,87 @@ const CertificateDisplay = ({ data, eventName }) => {
         const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
         const qrCodeUrl = URL.createObjectURL(svgBlob);
 
-        Promise.all([
+        // ✅ CORREÇÃO: Carrega todas as imagens necessárias de forma segura.
+        // O logo do organizador é opcional.
+        const imagePromises = [
             loadImage(qrCodeUrl),
-            loadImage('/logo.png')
-        ]).then(([qrCodeImage, logoImage]) => {
+            loadImage('/logo.png'), // Logo da Ticketfy
+            loadImage(organizerLogoUrl)  // Logo do organizador (pode ser nulo)
+        ];
+
+        Promise.all(imagePromises).then(([qrCodeImage, ticketfyLogoImage, organizerLogoImage]) => {
             const scale = 2;
             const canvas = document.createElement('canvas');
             canvas.width = 842 * scale;
             canvas.height = 595 * scale;
             const ctx = canvas.getContext('2d');
 
+            // --- Início do Desenho ---
             ctx.fillStyle = '#FFFFFF';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
             ctx.strokeStyle = '#E2E8F0';
             ctx.lineWidth = 1 * scale;
             ctx.strokeRect(20 * scale, 20 * scale, canvas.width - 40 * scale, canvas.height - 40 * scale);
-
-            // ✅ AJUSTE: Posição do título e da linha movidos para cima para melhor equilíbrio
-            ctx.textAlign = 'center';
-            ctx.fillStyle = '#1E293B';
-            ctx.font = `bold ${40 * scale}px "Times New Roman", serif`;
-            ctx.fillText('Certificado de Participação', canvas.width / 2, 80 * scale);
             
-            ctx.strokeStyle = '#CBD5E1';
-            ctx.lineWidth = 0.5 * scale;
-            ctx.beginPath();
-            ctx.moveTo(canvas.width / 2 - 150 * scale, 105 * scale);
-            ctx.lineTo(canvas.width / 2 + 150 * scale, 105 * scale);
-            ctx.stroke();
+            ctx.textAlign = 'center';
 
-            // ✅ REMOVIDO: Logo do topo que causava sobreposição
-            // O código que desenhava o logo no topo foi removido daqui.
+            // Logo do Organizador (se existir)
+            if (organizerLogoImage) {
+                const logoHeight = 50 * scale;
+                const logoWidth = (logoHeight / organizerLogoImage.height) * organizerLogoImage.width;
+                ctx.drawImage(organizerLogoImage, canvas.width / 2 - logoWidth / 2, 50 * scale, logoWidth, logoHeight);
+            }
 
+            ctx.fillStyle = '#1E293B';
+            ctx.font = `bold ${32 * scale}px "Times New Roman", serif`;
+            ctx.fillText('Certificado de Participação', canvas.width / 2, 140 * scale);
+            
             ctx.fillStyle = '#475569';
             ctx.font = `${18 * scale}px "Helvetica Neue", sans-serif`;
-            ctx.fillText('Este certificado é concedido a', canvas.width / 2, 170 * scale);
+            ctx.fillText('Este certificado é concedido a', canvas.width / 2, 200 * scale);
+
             ctx.fillStyle = '#4338CA';
             ctx.font = `bold ${48 * scale}px "Helvetica Neue", sans-serif`;
-            ctx.fillText(data.profile.name, canvas.width / 2, 240 * scale);
+            ctx.fillText(profile.name, canvas.width / 2, 270 * scale);
+
+            let participationText = `pela sua participação bem-sucedida no evento`;
+            if (complementaryHours && complementaryHours > 0) {
+                participationText = `pela sua participação com carga horária de ${complementaryHours} horas no evento`;
+            }
             ctx.fillStyle = '#475569';
             ctx.font = `${18 * scale}px "Helvetica Neue", sans-serif`;
-            ctx.fillText('pela sua participação bem-sucedida no evento', canvas.width / 2, 300 * scale);
+            ctx.fillText(participationText, canvas.width / 2, 330 * scale);
+
             ctx.fillStyle = '#1E293B';
             ctx.font = `bold ${24 * scale}px "Helvetica Neue", sans-serif`;
-            ctx.fillText(eventName, canvas.width / 2, 340 * scale);
+            ctx.fillText(eventName, canvas.width / 2, 370 * scale);
 
             const issueDate = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
             ctx.textAlign = 'left';
             ctx.fillStyle = '#64748B';
             ctx.font = `normal ${12 * scale}px "Helvetica Neue", sans-serif`;
-            ctx.fillText(`Emitido em: ${issueDate}`, 60 * scale, canvas.height - 80 * scale);
-            ctx.fillText(`ID de Verificação:`, 60 * scale, canvas.height - 60 * scale);
+            ctx.fillText(`Emitido em: ${issueDate}`, 60 * scale, canvas.height - 60 * scale);
             ctx.font = `normal ${12 * scale}px monospace`;
-            ctx.fillStyle = '#475569';
-            ctx.fillText(data.ticket.nftMint, 60 * scale, canvas.height - 45 * scale);
-            
-            // ✅ MANTIDO: Logo único no canto inferior direito, agindo como selo oficial
-            const sealSize = 80 * scale;
-            const sealX = canvas.width - 120 * scale;
-            const sealY = canvas.height - 100 * scale; // Ajustada a posição vertical
-            ctx.drawImage(logoImage, sealX - sealSize / 2, sealY - sealSize / 2, sealSize, sealSize);
+            ctx.fillText(ticketData.ticket.nftMint, 60 * scale, canvas.height - 45 * scale);
 
+            // Selo da Ticketfy
+            const sealSize = 60 * scale;
+            const sealX = canvas.width - 100 * scale;
+            const sealY = canvas.height - 80 * scale;
+            if (ticketfyLogoImage) { // Garante que o logo da Ticketfy carregou
+                 ctx.drawImage(ticketfyLogoImage, sealX - sealSize / 2, sealY - sealSize / 2, sealSize, sealSize);
+            }
+
+            // QR Code
             const qrSize = 80 * scale;
-            ctx.drawImage(qrCodeImage, canvas.width / 2 - qrSize / 2, canvas.height - 110 * scale, qrSize, qrSize);
+            ctx.drawImage(qrCodeImage, canvas.width / 2 - qrSize / 2, canvas.height - 120 * scale, qrSize, qrSize);
             URL.revokeObjectURL(qrCodeUrl);
 
+            // --- Fim do Desenho ---
             const image = canvas.toDataURL('image/png');
             const link = document.createElement('a');
             link.href = image;
-            link.download = `Certificado-${eventName}-${data.profile.name.replace(/\s/g, '_')}.png`;
+            link.download = `Certificado-${eventName}-${profile.name.replace(/\s/g, '_')}.png`;
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
@@ -111,7 +133,7 @@ const CertificateDisplay = ({ data, eventName }) => {
         });
     };
 
-    const certificateId = data.ticket.nftMint;
+    const certificateId = ticketData.ticket.nftMint;
     const issueDate = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
 
     return (
@@ -120,38 +142,46 @@ const CertificateDisplay = ({ data, eventName }) => {
                 <div className="absolute -top-12 -left-12 w-48 h-48 border-8 border-slate-100 rounded-full"></div>
                 <div className="absolute -bottom-16 -right-16 w-64 h-64 border-[12px] border-slate-50"></div>
                 <div className="relative z-10">
-                    <h3 className="text-sm uppercase tracking-widest text-slate-500">Certificado de Participação</h3>
-                    <h1 className="mt-2 text-4xl sm:text-5xl font-serif font-bold text-slate-800">{eventName}</h1>
+                    
+                    {organizerLogoUrl && (
+                        <img src={organizerLogoUrl} alt="Logo do Organizador" className="h-16 mx-auto mb-4 object-contain" />
+                    )}
+
+                    <h1 className="text-4xl sm:text-5xl font-serif font-bold text-slate-800">{eventName}</h1>
+                    <h3 className="mt-4 text-sm uppercase tracking-widest text-slate-500">Certificado de Participação</h3>
+
                     <p className="mt-12 text-lg text-slate-600">Este certificado é concedido a</p>
-                    <p className="mt-3 text-4xl sm:text-5xl font-bold text-indigo-600 tracking-wide">{data.profile.name}</p>
+                    <p className="mt-3 text-4xl sm:text-5xl font-bold text-indigo-600 tracking-wide">{profile.name}</p>
+                    
+                    {complementaryHours && complementaryHours > 0 ? (
+                        <p className="mt-8 text-lg text-slate-600">pela sua participação com carga horária de <strong>{complementaryHours} horas</strong>.</p>
+                    ) : (
+                        <p className="mt-8 text-lg text-slate-600">pela sua participação bem-sucedida no evento.</p>
+                    )}
+
                     <div className="mt-12 grid sm:grid-cols-3 gap-8 items-end">
                         <div className="text-left">
                             <p className="text-sm font-semibold text-slate-700">Emitido em</p>
                             <p className="text-lg text-slate-900">{issueDate}</p>
+                            <p className="mt-2 text-sm font-semibold text-slate-700">ID de Verificação</p>
+                            <p className="text-xs text-slate-500 font-mono break-all" title={certificateId}>
+                                {certificateId}
+                            </p>
                         </div>
                         <div className="flex flex-col items-center">
-                            <img src="/logo.png" alt="Ticketfy Logo" className="h-28 w-28" />
-                            <p className="mt-2 text-xs text-slate-500 font-semibold">Emitido por Ticketfy</p>
+                            <div className="p-1 bg-white rounded-md shadow-sm" ref={qrCodeContainerRef}>
+                                <QRCode value={`https://solscan.io/token/${certificateId}?cluster=devnet`} size={96} />
+                            </div>
+                            <p className="mt-2 text-xs text-slate-500 font-semibold">Verificação On-chain</p>
                         </div>
-                        <div className="text-right">
-                            <p className="text-sm font-semibold text-slate-700">ID de Verificação</p>
-                            <p className="text-sm text-slate-500 font-mono break-all" title={certificateId}>
-                                {certificateId.slice(0, 8)}...{certificateId.slice(-8)}
-                            </p>
+                        <div className="flex flex-col items-end">
+                            <img src="/logo.png" alt="Ticketfy Logo" className="h-20 w-20" />
+                            <p className="mt-2 text-xs text-slate-500 font-semibold">Emitido por Ticketfy</p>
                         </div>
                     </div>
                 </div>
             </div>
-            <div className="mt-8 flex flex-col sm:flex-row items-center justify-between gap-6 p-6 bg-slate-50 rounded-lg">
-                <div className="flex items-center gap-3">
-                    <div className="p-1 bg-white rounded-md shadow-sm" ref={qrCodeContainerRef}>
-                        <QRCode value={`https://solscan.io/token/${data.ticket.nftMint}?cluster=devnet`} size={64} />
-                    </div>
-                    <div>
-                        <h4 className="font-bold text-slate-800">Validação On-chain</h4>
-                        <p className="text-sm text-slate-600">Use o QR code para verificar a autenticidade.</p>
-                    </div>
-                </div>
+            <div className="mt-6 text-center">
                 <button
                     onClick={handleDownload}
                     className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 border border-transparent rounded-md shadow-sm text-base font-medium text-white bg-indigo-600 hover:bg-indigo-700 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
@@ -164,12 +194,13 @@ const CertificateDisplay = ({ data, eventName }) => {
     );
 };
 
+// --- Componente Principal da Página ---
 export const CertificatePage = () => {
     const { mintAddress } = useParams();
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState(null);
-    const [data, setData] = useState(null);
-    const [eventName, setEventName] = useState("Carregando...");
+    const [ticketData, setTicketData] = useState(null);
+    const [userProfile, setUserProfile] = useState(null);
 
     useEffect(() => {
         if (!mintAddress) {
@@ -185,15 +216,24 @@ export const CertificatePage = () => {
                     const errorData = await response.json();
                     throw new Error(errorData.error || "Ingresso não encontrado.");
                 }
-
                 const result = await response.json();
 
                 if (!result.ticket.redeemed) {
                     throw new Error("Este ingresso precisa ser validado no evento para gerar o certificado.");
                 }
+                setTicketData(result);
 
-                setData(result);
-                setEventName(result.event?.name || "Evento Especial");
+                const ownerAddress = result.owner;
+                const { data: profileData, error: profileError } = await supabase
+                    .from('user_profiles')
+                    .select('*')
+                    .eq('wallet_address', ownerAddress)
+                    .single();
+
+                if (profileError || !profileData) {
+                    throw new Error(profileError?.message || "Perfil do usuário não encontrado no banco de dados.");
+                }
+                setUserProfile(profileData);
 
             } catch (err) {
                 setError(err.message);
@@ -226,7 +266,13 @@ export const CertificatePage = () => {
                         <p className="mt-2 text-slate-600">{error}</p>
                     </div>
                 )}
-                {data && <CertificateDisplay data={data} eventName={eventName} />}
+                {ticketData && userProfile && (
+                    <CertificateDisplay 
+                        profile={userProfile} 
+                        ticketData={ticketData} 
+                        eventName={ticketData.event?.name || "Evento Especial"} 
+                    />
+                )}
             </main>
         </div>
     );
