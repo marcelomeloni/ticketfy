@@ -49,27 +49,34 @@ export function Home() {
     return (
         <>
             {/* --- Hero Section --- */}
-            <div className="relative text-center py-20 md:py-32 bg-slate-900 text-white overflow-hidden">
-                <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-slate-900/80 to-transparent z-10"></div>
-                <div className="absolute inset-0 bg-[url('/path-to-your/hero-background.jpg')] bg-cover bg-center opacity-20"></div>
-                
-                <div className="container mx-auto px-4 relative z-20">
-                    <h1 className="text-5xl md:text-7xl font-bold mb-4 leading-tight">
-                        O Futuro dos Eventos é <br />
-                        <span className="text-transparent bg-clip-text bg-gradient-to-r from-fuchsia-500 to-cyan-400">
-                            Descentralizado
-                        </span>
-                    </h1>
-                    <p className="text-lg md:text-xl max-w-3xl mx-auto text-slate-300">
-                        Bem-vindo à Ticketfy. Compre, venda e valide seus ingressos NFT com segurança e transparência na blockchain Solana.
-                    </p>
-                    <div className="mt-8">
-                        <Link to="/events" className="bg-fuchsia-600 hover:bg-fuchsia-700 text-white font-bold py-3 px-8 rounded-lg shadow-lg shadow-fuchsia-500/50 transition-all transform hover:scale-105 inline-block">
-                            Explorar Eventos
-                        </Link>
-                    </div>
-                </div>
-            </div>
+            <div className="relative text-center py-24 md:py-32 bg-slate-900 text-white overflow-hidden">
+    {/* Background e Overlays (sem alteração) */}
+    <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-slate-900/80 to-transparent z-10"></div>
+    <div className="absolute inset-0 bg-[url('/path-to-your/hero-background.jpg')] bg-cover bg-center opacity-20"></div>
+    
+    <div className="container mx-auto px-4 relative z-20">
+        {/* - Título ajustado: text-4xl no celular, text-6xl em telas médias e maiores.
+          - A quebra de linha agora é um <span> que vira um bloco apenas em telas 'md' para cima.
+        */}
+        <h1 className="text-4xl md:text-6xl font-bold mb-4 leading-tight">
+            O Futuro dos Eventos é
+            <span className="md:block text-transparent bg-clip-text bg-gradient-to-r from-fuchsia-500 to-cyan-400">
+                Descentralizado
+            </span>
+        </h1>
+
+        {/* Parágrafo ajustado para uma melhor leitura no celular (leading-relaxed) */}
+        <p className="text-lg md:text-xl max-w-3xl mx-auto text-slate-300 leading-relaxed">
+            Bem-vindo à Ticketfy. Compre, venda e valide seus ingressos NFT com segurança e transparência na blockchain Solana.
+        </p>
+        
+        <div className="mt-8">
+            <Link to="/events" className="bg-fuchsia-600 hover:bg-fuchsia-700 text-white font-bold py-3 px-8 rounded-lg shadow-lg shadow-fuchsia-500/50 transition-all transform hover:scale-105 inline-block">
+                Explorar Eventos
+            </Link>
+        </div>
+    </div>
+</div>
 
             {/* --- Seção de Próximos Eventos --- */}
             <div className="container mx-auto px-4 py-16 md:py-24">
@@ -99,4 +106,5 @@ export function Home() {
             </div>
         </>
     );
+
 }
