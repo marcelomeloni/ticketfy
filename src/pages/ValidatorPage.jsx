@@ -73,17 +73,22 @@ const RecentValidations = ({ entries }) => (
     <div>
         <h2 className="text-lg font-bold text-slate-800 mb-4">Últimas Validações</h2>
         <div className="space-y-3 max-h-80 overflow-y-auto pr-2">
-            {entries.length > 0 ? entries.map((entry) => (
-                <div key={entry.nftMint} className="bg-slate-50 p-3 rounded-lg flex items-center justify-between animate-fade-in border border-slate-200">
-                    <div className="flex items-center gap-3">
-                        <UserIcon className="h-5 w-5 text-green-500"/>
-                        <p className="font-medium text-slate-700">
-                            {entry.name || `${entry.owner.slice(0, 4)}...${entry.owner.slice(-4)}`}
-                        </p>
+            {entries.length > 0 ? entries.map((entry) => {
+                // ✅ Lógica atualizada: Procura por 'entry.name' OU 'entry.ownerName'
+                const displayName = entry.name || entry.ownerName;
+
+                return (
+                    <div key={entry.nftMint} className="bg-slate-50 p-3 rounded-lg flex items-center justify-between animate-fade-in border border-slate-200">
+                        <div className="flex items-center gap-3">
+                            <UserIcon className="h-5 w-5 text-green-500"/>
+                            <p className="font-medium text-slate-700">
+                                {displayName || `${entry.owner.slice(0, 4)}...${entry.owner.slice(-4)}`}
+                            </p>
+                        </div>
+                        <p className="text-sm text-slate-500">{entry.redeemedAt}</p>
                     </div>
-                    <p className="text-sm text-slate-500">{entry.redeemedAt}</p>
-                </div>
-            )) : <p className="text-slate-500 text-center py-4">Nenhum ingresso validado ainda.</p>}
+                );
+            }) : <p className="text-slate-500 text-center py-4">Nenhum ingresso validado ainda.</p>}
         </div>
     </div>
 );
@@ -311,3 +316,4 @@ export function ValidatorPage() {
         </div>
     );
 }
+
