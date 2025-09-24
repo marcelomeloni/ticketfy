@@ -4,6 +4,7 @@ import QRCode from 'react-qr-code';
 import toast from 'react-hot-toast';
 import { ArrowDownTrayIcon, ExclamationTriangleIcon, ShieldCheckIcon, ClockIcon } from '@heroicons/react/24/outline';
 import { supabase } from '../lib/supabaseClient';
+import { jsPDF } from "jspdf"; // Importando a biblioteca jsPDF
 
 import { API_URL } from '@/lib/constants';
 
@@ -16,7 +17,7 @@ const CertificateDisplay = ({ profile, ticketData, eventName }) => {
     const complementaryHours = ticketData.event?.metadata?.additionalInfo?.complementaryHours;
 
     const handleDownload = () => {
-        const loadingToast = toast.loading("Gerando seu certificado...");
+        const loadingToast = toast.loading("Gerando seu certificado em PDF...");
 
         const loadImage = (src) => {
             return new Promise((resolve, reject) => {
@@ -41,8 +42,6 @@ const CertificateDisplay = ({ profile, ticketData, eventName }) => {
         const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
         const qrCodeUrl = URL.createObjectURL(svgBlob);
 
-        // ✅ CORREÇÃO: Carrega todas as imagens necessárias de forma segura.
-        // O logo do organizador é opcional.
         const imagePromises = [
             loadImage(qrCodeUrl),
             loadImage('/logo.png'), // Logo da Ticketfy
@@ -52,11 +51,14 @@ const CertificateDisplay = ({ profile, ticketData, eventName }) => {
         Promise.all(imagePromises).then(([qrCodeImage, ticketfyLogoImage, organizerLogoImage]) => {
             const scale = 2;
             const canvas = document.createElement('canvas');
-            canvas.width = 842 * scale;
-            canvas.height = 595 * scale;
+            // Dimensões padrão A4 paisagem (em pontos)
+            const canvasWidth = 842;
+            const canvasHeight = 595;
+            canvas.width = canvasWidth * scale;
+            canvas.height = canvasHeight * scale;
             const ctx = canvas.getContext('2d');
 
-            // --- Início do Desenho ---
+            // --- Início do Desenho (Lógica inalterada) ---
             ctx.fillStyle = '#FFFFFF';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
             ctx.strokeStyle = '#E2E8F0';
@@ -108,27 +110,38 @@ const CertificateDisplay = ({ profile, ticketData, eventName }) => {
             const sealSize = 60 * scale;
             const sealX = canvas.width - 100 * scale;
             const sealY = canvas.height - 80 * scale;
-            if (ticketfyLogoImage) { // Garante que o logo da Ticketfy carregou
-                 ctx.drawImage(ticketfyLogoImage, sealX - sealSize / 2, sealY - sealSize / 2, sealSize, sealSize);
+            if (ticketfyLogoImage) { 
+                ctx.drawImage(ticketfyLogoImage, sealX - sealSize / 2, sealY - sealSize / 2, sealSize, sealSize);
             }
 
             // QR Code
             const qrSize = 80 * scale;
             ctx.drawImage(qrCodeImage, canvas.width / 2 - qrSize / 2, canvas.height - 120 * scale, qrSize, qrSize);
             URL.revokeObjectURL(qrCodeUrl);
-
             // --- Fim do Desenho ---
-            const image = canvas.toDataURL('image/png');
-            const link = document.createElement('a');
-            link.href = image;
-            link.download = `Certificado-${eventName}-${profile.name.replace(/\s/g, '_')}.png`;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            toast.success("Download do certificado iniciado!", { id: loadingToast });
+
+
+            // --- ALTERAÇÃO: GERAÇÃO DE PDF ---
+            // 1. Converte o canvas para uma imagem PNG em data URL
+            const imgData = canvas.toDataURL('image/png');
+            
+            // 2. Cria uma nova instância do jsPDF em modo paisagem, usando as dimensões do canvas
+            const pdf = new jsPDF({
+                orientation: 'landscape',
+                unit: 'px',
+                format: [canvasWidth, canvasHeight]
+            });
+            
+            // 3. Adiciona a imagem do canvas ao PDF, cobrindo a página inteira
+            pdf.addImage(imgData, 'PNG', 0, 0, canvasWidth, canvasHeight);
+            
+            // 4. Inicia o download do PDF
+            pdf.save(`Certificado-${eventName}-${profile.name.replace(/\s/g, '_')}.pdf`);
+
+            toast.success("Download do PDF iniciado!", { id: loadingToast });
 
         }).catch(error => {
-            console.error("Erro ao carregar imagens:", error);
+            console.error("Erro ao carregar imagens para o certificado:", error);
             toast.error("Não foi possível carregar as imagens para o certificado.", { id: loadingToast });
         });
     };
@@ -187,7 +200,7 @@ const CertificateDisplay = ({ profile, ticketData, eventName }) => {
                     className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 border border-transparent rounded-md shadow-sm text-base font-medium text-white bg-indigo-600 hover:bg-indigo-700 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
                 >
                     <ArrowDownTrayIcon className="h-5 w-5" />
-                    Baixar Certificado
+                    Baixar Certificado em PDF
                 </button>
             </div>
         </div>
@@ -276,6 +289,4 @@ export const CertificatePage = () => {
             </main>
         </div>
     );
-
 };
-
