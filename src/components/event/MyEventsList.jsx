@@ -1,11 +1,9 @@
-// Em: src/components/event/MyEventsList.js
+// Em: src/components/event/MyEventsList.jsx
 
 import { useState, useEffect, useMemo } from 'react';
 import { EventSummaryCard } from './EventSummaryCard';
 import { InfoBox } from '../ui/InfoBox';
 import { Spinner } from '../ui/Spinner';
-
-
 
 export function MyEventsList({ program, wallet }) {
     const [myEvents, setMyEvents] = useState([]);
@@ -14,7 +12,6 @@ export function MyEventsList({ program, wallet }) {
     const [filter, setFilter] = useState('active');
 
     useEffect(() => {
-       
         const fetchMyEvents = async () => {
             if (!program || !wallet) {
                 setIsLoading(false);
@@ -23,46 +20,33 @@ export function MyEventsList({ program, wallet }) {
             try {
                 setIsLoading(true);
                 setError(null);
-
-             
-                // Filtramos diretamente na blockchain por eventos criados pela carteira do usuário.
-                const userEvents = await program.account.event.all([
-                    {
-                        memcmp: {
-                            offset: 8, 
-                            bytes: wallet.publicKey.toBase58(),
-                        },
-                    },
-                ]);
-                
-               
-                const sortedEvents = userEvents.sort(
-                    (a, b) => b.account.salesStartDate.toNumber() - a.account.salesStartDate.toNumber()
-                );
-
-                setMyEvents(sortedEvents);
-
+                const allEvents = await program.account.event.all();
+                const userEvents = allEvents
+                    .filter(event => event.account.controller.equals(wallet.publicKey))
+                    // MODIFICADO: Ordena pela data de início das vendas (dado on-chain)
+                    .sort((a, b) => b.account.salesStartDate.toNumber() - a.account.salesStartDate.toNumber());
+                setMyEvents(userEvents);
             } catch (err) {
-                console.error("Erro ao buscar 'Meus Eventos':", err);
-                setError(err.message || "Não foi possível carregar seus eventos. Tente novamente mais tarde.");
+                console.error("Erro ao buscar eventos:", err);
+                setError("Não foi possível carregar seus eventos. Tente novamente mais tarde.");
             } finally {
                 setIsLoading(false);
             }
         };
-
         fetchMyEvents();
     }, [program, wallet]);
 
-  
     const filteredEvents = useMemo(() => {
         const now = Math.floor(Date.now() / 1000);
         switch (filter) {
             case 'finished':
+                // MODIFICADO: Um evento é considerado "finalizado" após o fim das vendas.
                 return myEvents.filter(e => !e.account.canceled && e.account.salesEndDate.toNumber() < now);
             case 'canceled':
                 return myEvents.filter(e => e.account.canceled);
             case 'active':
             default:
+                // MODIFICADO: Um evento está "ativo" ou "próximo" enquanto não for cancelado e as vendas não tiverem terminado.
                 return myEvents.filter(e => !e.account.canceled && e.account.salesEndDate.toNumber() >= now);
         }
     }, [myEvents, filter]);
@@ -89,7 +73,7 @@ export function MyEventsList({ program, wallet }) {
             ) : (
                 <InfoBox 
                     title="Nenhum Evento Encontrado" 
-                    message={`Você não tem eventos na categoria "${filter}". Crie um novo evento na aba ao lado!`}
+                    message={`Você não tem eventos na categoria "${filter}".`}
                 />
             )}
         </div>
