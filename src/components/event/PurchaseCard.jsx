@@ -1,5 +1,3 @@
-// src/components/event/PurchaseCard.jsx
-
 import { useState } from 'react';
 import { useConnection, useWallet } from '@solana/wallet-adapter-react';
 import { Transaction, Buffer } from '@solana/web3.js';
@@ -82,7 +80,7 @@ export const PurchaseCard = ({ metadata, eventAccount, eventAddress, onPurchaseS
                     mintAddress: data.mintAddress,
                     eventName: metadata.name,
                     eventDate: metadata.properties.dateTime.start,
-                    eventLocation: metadata.properties.location, // Objeto completo (CORRETO)
+                    eventLocation: metadata.properties.location, // Passa o objeto completo
                 });
 
             } else {
@@ -109,8 +107,8 @@ export const PurchaseCard = ({ metadata, eventAccount, eventAddress, onPurchaseS
                     privateKey: data.privateKey,
                     eventName: metadata.name,
                     eventDate: metadata.properties.dateTime.start,
-                    // ✨ CORREÇÃO APLICADA AQUI ✨
-                    eventLocation: metadata.properties.location, // Passa o objeto completo, não só a string
+                    // ✨ CORREÇÃO ESTÁ AQUI ✨
+                    eventLocation: metadata.properties.location, // Passa o objeto completo
                 });
             }
 
