@@ -3,7 +3,7 @@
 import { Program, AnchorProvider, web3 } from '@coral-xyz/anchor';
 import idl from '@/idl/ticketing_system.json';
 
-const PROGRAM_ADDRESS = "2jq7fqT3gxn7Xg2SrxNobqUNxPQeWC5B5griJUpEFwvG";
+const PROGRAM_ADDRESS = "B5guTKgFpRvsqiLNAJb7XAePmoLW9awyLP5BctPRurYo";
 
 /**
  * Cria uma instância do programa Anchor para transações que exigem assinatura (escrita).
@@ -27,4 +27,5 @@ export function createReadOnlyProgram(connection) {
     };
     const provider = new AnchorProvider(connection, dummyWallet, AnchorProvider.defaultOptions());
     return new Program(idl, PROGRAM_ADDRESS, provider);
+
 }
