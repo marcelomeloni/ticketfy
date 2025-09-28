@@ -1,10 +1,13 @@
+// Em: src/components/event/MyEventsList.js
+
 import { useState, useEffect, useMemo } from 'react';
 import { EventSummaryCard } from './EventSummaryCard';
 import { InfoBox } from '../ui/InfoBox';
 import { Spinner } from '../ui/Spinner';
-
-// ✨ 1. Importe o bs58 para o filtro memcmp
 import { bs58 } from '@coral-xyz/anchor/dist/cjs/utils/bytes';
+
+// ✨ NOVO: Importe o coder para desserializar manualmente
+import { BorshAccountsCoder } from '@coral-xyz/anchor';
 
 export function MyEventsList({ program, wallet }) {
     const [myEvents, setMyEvents] = useState([]);
@@ -13,6 +16,7 @@ export function MyEventsList({ program, wallet }) {
     const [filter, setFilter] = useState('active');
 
     useEffect(() => {
+        // ✨ LÓGICA DE BUSCA TOTALMENTE REFEITA PARA SER MAIS ROBUSTA
         const fetchMyEvents = async () => {
             if (!program || !wallet) {
                 setIsLoading(false);
@@ -22,41 +26,75 @@ export function MyEventsList({ program, wallet }) {
                 setIsLoading(true);
                 setError(null);
 
-                // ✨ 2. Lógica de busca modificada para ser mais robusta
-                // Filtramos on-chain por todos os estados válidos para ignorar contas antigas/incompatíveis.
-                // O offset 48 assume a sua nova struct com o campo `state` movido para o topo.
-                const stateFilters = [0, 1, 2, 3].map(stateValue => ({
-                    memcmp: {
-                        offset: 49, // 8 (discriminator) + 8 (event_id) + 32 (controller) = 48
-                        bytes: bs58.encode([stateValue]),
+                // 1. Obter o "discriminator" da conta Event.
+                // É um identificador de 8 bytes que o Anchor coloca no início de cada conta.
+                const eventAccountName = 'event'; // O nome da sua struct em Rust, em camelCase
+                const eventDiscriminator = BorshAccountsCoder.accountDiscriminator(eventAccountName);
+
+                // 2. Buscar TODAS as contas do programa que pertencem ao usuário atual
+                // sem tentar desserializá-las ainda. Isso evita o RangeError.
+                const accounts = await program.provider.connection.getProgramAccounts(
+                    program.programId,
+                    {
+                        filters: [
+                            // Filtro para o tipo de conta (Event)
+                            {
+                                memcmp: {
+                                    offset: 0,
+                                    bytes: bs58.encode(eventDiscriminator),
+                                },
+                            },
+                            // Filtro para o 'controller' (dono do evento)
+                            {
+                                memcmp: {
+                                    offset: 8, // 8 bytes para o discriminator
+                                    bytes: wallet.publicKey.toBase58(),
+                                },
+                            },
+                        ],
                     }
-                }));
-                
-                // Executa as buscas para cada estado em paralelo para mais performance
-                const eventArrays = await Promise.all(
-                    stateFilters.map(filter => program.account.event.all([filter]))
                 );
 
-                // Junta todos os eventos encontrados de todos os estados em um único array
-                const allCompatibleEvents = eventArrays.flat();
+                // 3. Tentar desserializar cada conta individualmente.
+                const successfullyDecodedEvents = [];
+                const coder = new BorshAccountsCoder(program.idl);
 
-                const userEvents = allCompatibleEvents
-                    .filter(event => event.account.controller.equals(wallet.publicKey))
-                    .sort((a, b) => b.account.salesStartDate.toNumber() - a.account.salesStartDate.toNumber());
-                
-                setMyEvents(userEvents);
+                for (const account of accounts) {
+                    try {
+                        // Tenta decodificar o buffer da conta.
+                        const decodedAccount = coder.decode(eventAccountName, account.account.data);
+
+                        // Se bem-sucedido, adiciona à lista com sua chave pública.
+                        successfullyDecodedEvents.push({
+                            publicKey: account.pubkey,
+                            account: decodedAccount,
+                        });
+                    } catch (e) {
+                        // Se falhar (ex: RangeError), loga o erro e a chave da conta problemática e continua.
+                        console.warn(`Falha ao desserializar a conta de evento ${account.pubkey.toBase58()}:`, e);
+                        // Você pode adicionar uma lógica mais complexa aqui se precisar.
+                    }
+                }
+
+                // 4. Ordenar os eventos válidos e atualizar o estado.
+                const sortedEvents = successfullyDecodedEvents.sort(
+                    (a, b) => b.account.salesStartDate.toNumber() - a.account.salesStartDate.toNumber()
+                );
+
+                setMyEvents(sortedEvents);
+
             } catch (err) {
-                console.error("Erro ao buscar eventos:", err);
-                // Mantemos a mensagem de erro original, pois pode ser útil
+                console.error("Erro geral ao buscar eventos:", err);
                 setError(err.message || "Não foi possível carregar seus eventos. Tente novamente mais tarde.");
             } finally {
                 setIsLoading(false);
             }
         };
+
         fetchMyEvents();
     }, [program, wallet]);
 
-    // ✨ 3. A lógica de filtragem local (useMemo) e o JSX não precisam de NENHUMA alteração.
+    // A lógica de filtragem local (useMemo) e o JSX não precisam de NENHUMA alteração.
     const filteredEvents = useMemo(() => {
         const now = Math.floor(Date.now() / 1000);
         switch (filter) {
@@ -104,4 +142,3 @@ const TabButton = ({ name, active, onClick }) => (
         {name}
     </button>
 );
-
