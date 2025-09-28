@@ -1,4 +1,3 @@
-// src/components/modals/RegistrationModal.jsx
 import { useState } from 'react';
 import toast from 'react-hot-toast';
 import { Modal } from '@/components/ui/Modal';
@@ -23,8 +22,10 @@ export const RegistrationModal = ({ isOpen, onClose, onSubmit, isLoading }) => {
     };
 
     return (
-        <Modal isOpen={isOpen} onClose={onClose} title="Complete seu Cadastro">
+        // ✨ ALTERAÇÃO AQUI: Adicionamos a prop `persistent`
+        <Modal isOpen={isOpen} onClose={onClose} title="Complete seu Cadastro" persistent>
             <form onSubmit={handleSubmit} className="space-y-4">
+                {/* O conteúdo do formulário permanece o mesmo... */}
                 <div>
                     <label htmlFor="name" className="block text-sm font-medium text-slate-700">Nome Completo*</label>
                     <input type="text" name="name" id="name" required className="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" value={formData.name} onChange={handleChange} />

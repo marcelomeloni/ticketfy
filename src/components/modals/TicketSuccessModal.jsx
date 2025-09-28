@@ -1,20 +1,19 @@
-import { useRef, useState } from 'react'; 
+import { useRef, useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
 import QRCode from 'react-qr-code';
 import jsPDF from 'jspdf';
-import { 
-    KeyIcon, 
-    ClipboardIcon, 
-    CheckCircleIcon, 
-    ArrowDownTrayIcon, 
+import {
+    KeyIcon,
+    ClipboardIcon,
+    CheckCircleIcon,
+    ArrowDownTrayIcon,
     AcademicCapIcon,
-    TicketIcon 
+    TicketIcon
 } from '@heroicons/react/24/outline';
 import { Modal } from '@/components/ui/Modal';
 import { ActionButton } from '@/components/ui/ActionButton';
 
 const APP_BASE_URL = "https://ticketfy.app";
-
 
 const TabButton = ({ isActive, onClick, icon: Icon, children }) => (
     <button
@@ -30,11 +29,17 @@ const TabButton = ({ isActive, onClick, icon: Icon, children }) => (
     </button>
 );
 
-
 export const TicketSuccessModal = ({ isOpen, onClose, ticketData }) => {
     const qrCodeContainerRef = useRef(null);
-    
-    const [activeTab, setActiveTab] = useState('ticket'); 
+
+    const [activeTab, setActiveTab] = useState('ticket');
+
+    // Efeito para resetar para a primeira aba sempre que o modal for reaberto
+    useEffect(() => {
+        if (isOpen) {
+            setActiveTab('ticket');
+        }
+    }, [isOpen]);
 
     if (!isOpen || !ticketData) {
         return null;
@@ -199,13 +204,13 @@ export const TicketSuccessModal = ({ isOpen, onClose, ticketData }) => {
     const certificateLink = `${APP_BASE_URL}/certificate/${mintAddress}`;
 
     return (
-        <Modal isOpen={isOpen} onClose={onClose} title="Ingresso Garantido!">
+        // ✨ ALTERAÇÃO AQUI: Adicionamos a prop `persistent` para evitar fechamento acidental
+        <Modal isOpen={isOpen} onClose={onClose} title="Ingresso Garantido!" persistent>
             <div className="text-center">
                 <CheckCircleIcon className="mx-auto h-12 w-12 text-green-500" />
                 <h3 className="mt-2 text-xl font-semibold text-slate-900">Tudo Certo! Nos vemos no evento!</h3>
                 <p className="mt-1 text-sm text-slate-500">Gerencie seu ingresso e informações abaixo.</p>
                 
-                {/* ✅ 4. Sistema de Navegação por Abas */}
                 <div className="mt-6 border-b border-slate-200 bg-slate-50 rounded-t-lg flex">
                     <TabButton isActive={activeTab === 'ticket'} onClick={() => setActiveTab('ticket')} icon={TicketIcon}>
                         Ingresso
@@ -220,7 +225,6 @@ export const TicketSuccessModal = ({ isOpen, onClose, ticketData }) => {
                     )}
                 </div>
 
-                {/* ✅ 5. Conteúdo renderizado de acordo com a aba ativa */}
                 <div className="bg-white p-6 rounded-b-lg border border-t-0 border-slate-200">
                     {activeTab === 'ticket' && (
                         <div>
@@ -242,17 +246,17 @@ export const TicketSuccessModal = ({ isOpen, onClose, ticketData }) => {
                              <h4 className="font-bold text-lg text-slate-800">Seu Certificado Digital</h4>
                              <p className="text-sm text-slate-500 mt-1">Após o evento, acesse seu certificado de participação neste link.</p>
                              <div className="mt-4 text-sm text-center p-4 bg-slate-50 rounded-lg">
-                                <AcademicCapIcon className="h-6 w-6 mx-auto text-indigo-500 mb-2"/>
-                                <p className="text-slate-600">
-                                    Disponível após a validação do seu ingresso no local.
-                                </p>
-                                <div className="mt-2 flex items-center justify-center gap-2">
-                                    <input type="text" readOnly value={certificateLink} className="w-full text-xs text-center font-mono bg-slate-200 border-slate-300 rounded-md shadow-sm"/>
-                                    <button onClick={() => handleCopy(certificateLink, 'Link do certificado copiado!')} className="p-2 bg-indigo-100 text-indigo-600 rounded-md hover:bg-indigo-200 flex-shrink-0">
-                                        <ClipboardIcon className="h-4 w-4" />
-                                    </button>
-                                </div>
-                            </div>
+                                 <AcademicCapIcon className="h-6 w-6 mx-auto text-indigo-500 mb-2"/>
+                                 <p className="text-slate-600">
+                                     Disponível após a validação do seu ingresso no local.
+                                 </p>
+                                 <div className="mt-2 flex items-center justify-center gap-2">
+                                     <input type="text" readOnly value={certificateLink} className="w-full text-xs text-center font-mono bg-slate-200 border-slate-300 rounded-md shadow-sm"/>
+                                     <button onClick={() => handleCopy(certificateLink, 'Link do certificado copiado!')} className="p-2 bg-indigo-100 text-indigo-600 rounded-md hover:bg-indigo-200 flex-shrink-0">
+                                         <ClipboardIcon className="h-4 w-4" />
+                                     </button>
+                                 </div>
+                             </div>
                         </div>
                     )}
 
@@ -278,5 +282,4 @@ export const TicketSuccessModal = ({ isOpen, onClose, ticketData }) => {
             </div>
         </Modal>
     );
-
 };
