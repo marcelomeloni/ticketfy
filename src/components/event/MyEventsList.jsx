@@ -1,9 +1,10 @@
-// Em: src/components/event/MyEventsList.jsx
-
 import { useState, useEffect, useMemo } from 'react';
 import { EventSummaryCard } from './EventSummaryCard';
 import { InfoBox } from '../ui/InfoBox';
 import { Spinner } from '../ui/Spinner';
+
+// ✨ 1. Importe o bs58 para o filtro memcmp
+import { bs58 } from '@coral-xyz/anchor/dist/cjs/utils/bytes';
 
 export function MyEventsList({ program, wallet }) {
     const [myEvents, setMyEvents] = useState([]);
@@ -20,15 +21,34 @@ export function MyEventsList({ program, wallet }) {
             try {
                 setIsLoading(true);
                 setError(null);
-                const allEvents = await program.account.event.all();
-                const userEvents = allEvents
+
+                // ✨ 2. Lógica de busca modificada para ser mais robusta
+                // Filtramos on-chain por todos os estados válidos para ignorar contas antigas/incompatíveis.
+                // O offset 48 assume a sua nova struct com o campo `state` movido para o topo.
+                const stateFilters = [0, 1, 2, 3].map(stateValue => ({
+                    memcmp: {
+                        offset: 48, // 8 (discriminator) + 8 (event_id) + 32 (controller) = 48
+                        bytes: bs58.encode([stateValue]),
+                    }
+                }));
+                
+                // Executa as buscas para cada estado em paralelo para mais performance
+                const eventArrays = await Promise.all(
+                    stateFilters.map(filter => program.account.event.all([filter]))
+                );
+
+                // Junta todos os eventos encontrados de todos os estados em um único array
+                const allCompatibleEvents = eventArrays.flat();
+
+                const userEvents = allCompatibleEvents
                     .filter(event => event.account.controller.equals(wallet.publicKey))
-                    // MODIFICADO: Ordena pela data de início das vendas (dado on-chain)
                     .sort((a, b) => b.account.salesStartDate.toNumber() - a.account.salesStartDate.toNumber());
+                
                 setMyEvents(userEvents);
             } catch (err) {
                 console.error("Erro ao buscar eventos:", err);
-                setError("Não foi possível carregar seus eventos. Tente novamente mais tarde.");
+                // Mantemos a mensagem de erro original, pois pode ser útil
+                setError(err.message || "Não foi possível carregar seus eventos. Tente novamente mais tarde.");
             } finally {
                 setIsLoading(false);
             }
@@ -36,17 +56,16 @@ export function MyEventsList({ program, wallet }) {
         fetchMyEvents();
     }, [program, wallet]);
 
+    // ✨ 3. A lógica de filtragem local (useMemo) e o JSX não precisam de NENHUMA alteração.
     const filteredEvents = useMemo(() => {
         const now = Math.floor(Date.now() / 1000);
         switch (filter) {
             case 'finished':
-                // MODIFICADO: Um evento é considerado "finalizado" após o fim das vendas.
                 return myEvents.filter(e => !e.account.canceled && e.account.salesEndDate.toNumber() < now);
             case 'canceled':
                 return myEvents.filter(e => e.account.canceled);
             case 'active':
             default:
-                // MODIFICADO: Um evento está "ativo" ou "próximo" enquanto não for cancelado e as vendas não tiverem terminado.
                 return myEvents.filter(e => !e.account.canceled && e.account.salesEndDate.toNumber() >= now);
         }
     }, [myEvents, filter]);
@@ -73,7 +92,7 @@ export function MyEventsList({ program, wallet }) {
             ) : (
                 <InfoBox 
                     title="Nenhum Evento Encontrado" 
-                    message={`Você não tem eventos na categoria "${filter}".`}
+                    message={`Você não tem eventos na categoria "${filter}". Crie um novo evento na aba ao lado!`}
                 />
             )}
         </div>
