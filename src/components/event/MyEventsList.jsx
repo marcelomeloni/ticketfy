@@ -27,7 +27,7 @@ export function MyEventsList({ program, wallet }) {
                 // O offset 48 assume a sua nova struct com o campo `state` movido para o topo.
                 const stateFilters = [0, 1, 2, 3].map(stateValue => ({
                     memcmp: {
-                        offset: 48, // 8 (discriminator) + 8 (event_id) + 32 (controller) = 48
+                        offset: 49, // 8 (discriminator) + 8 (event_id) + 32 (controller) = 48
                         bytes: bs58.encode([stateValue]),
                     }
                 }));
@@ -104,3 +104,4 @@ const TabButton = ({ name, active, onClick }) => (
         {name}
     </button>
 );
+
