@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useConnection, useWallet } from '@solana/wallet-adapter-react';
-import { Transaction, Buffer } from '@solana/web3.js';
+import { Transaction } from '@solana/web3.js';
 import toast from 'react-hot-toast';
 import { Buffer } from 'buffer';
 import { TierOption } from '@/components/event/TierOption';
@@ -172,4 +172,5 @@ export const PurchaseCard = ({ metadata, eventAccount, eventAddress, onPurchaseS
         </>
     );
 };
+
 
