@@ -109,7 +109,8 @@ export const PurchaseCard = ({ metadata, eventAccount, eventAddress, onPurchaseS
                 // O backend já fez tudo, pegamos os dados, incluindo a seed phrase
                 setTicketData({
                     mintAddress: data.mintAddress,
-                    seedPhrase: data.seedPhrase, // A chave secreta para o novo usuário
+                    seedPhrase: data.seedPhrase,
+                    privateKey: data.privateKey,
                     eventName: metadata.name,
                     eventDate: metadata.properties.dateTime.start,
                     eventLocation: metadata.properties.location.venueName || 'Online'
@@ -179,3 +180,4 @@ export const PurchaseCard = ({ metadata, eventAccount, eventAddress, onPurchaseS
     );
 
 };
+
