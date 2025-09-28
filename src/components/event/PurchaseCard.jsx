@@ -84,7 +84,7 @@ export const PurchaseCard = ({ metadata, eventAccount, eventAddress, onPurchaseS
                     mintAddress: data.mintAddress,
                     eventName: metadata.name,
                     eventDate: metadata.properties.dateTime.start,
-                    eventLocation: metadata.properties.location.venueName || 'Online'
+                    eventLocation: metadata.properties.location
                     // Nenhuma seedPhrase aqui, pois o usuário já tem sua carteira
                 });
 
@@ -177,4 +177,5 @@ export const PurchaseCard = ({ metadata, eventAccount, eventAddress, onPurchaseS
             />
         </>
     );
+
 };
