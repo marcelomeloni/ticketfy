@@ -8,7 +8,8 @@ import {
     CheckCircleIcon,
     ArrowDownTrayIcon,
     AcademicCapIcon,
-    TicketIcon
+    TicketIcon,
+    MapPinIcon 
 } from '@heroicons/react/24/outline';
 import { Modal } from '@/components/ui/Modal';
 import { ActionButton } from '@/components/ui/ActionButton';
@@ -31,10 +32,8 @@ const TabButton = ({ isActive, onClick, icon: Icon, children }) => (
 
 export const TicketSuccessModal = ({ isOpen, onClose, ticketData }) => {
     const qrCodeContainerRef = useRef(null);
-
     const [activeTab, setActiveTab] = useState('ticket');
 
-    // Efeito para resetar para a primeira aba sempre que o modal for reaberto
     useEffect(() => {
         if (isOpen) {
             setActiveTab('ticket');
@@ -45,10 +44,23 @@ export const TicketSuccessModal = ({ isOpen, onClose, ticketData }) => {
         return null;
     }
 
-    const { mintAddress, seedPhrase } = ticketData;
+    // Função auxiliar para formatar o endereço completo de forma legível
+    const formatFullAddress = (location) => {
+        if (!location || location.type !== 'Physical' || !location.address) {
+            return location?.onlineUrl ? "Evento Online" : "Local a definir";
+        }
+        const { street, number, neighborhood, city, state } = location.address;
+        const parts = [
+            `${street}${number ? `, ${number}` : ''}`,
+            neighborhood,
+            `${city} - ${state}`
+        ];
+        return parts.filter(Boolean).join(', '); // Filtra partes vazias e junta com vírgula
+    };
+
+    const { mintAddress, seedPhrase, eventLocation } = ticketData;
     const words = seedPhrase ? seedPhrase.split(' ') : [];
 
-    // Funções handleCopy e handleDownload permanecem as mesmas
     const handleCopy = (textToCopy, successMessage) => {
         navigator.clipboard.writeText(textToCopy);
         toast.success(successMessage);
@@ -66,7 +78,6 @@ export const TicketSuccessModal = ({ isOpen, onClose, ticketData }) => {
         const {
             eventName = 'Nome do Evento',
             eventDate,
-            eventLocation,
             mintAddress
         } = ticketData;
 
@@ -75,17 +86,14 @@ export const TicketSuccessModal = ({ isOpen, onClose, ticketData }) => {
                 return 'Data a definir';
             }
             return new Date(dateString).toLocaleString('pt-BR', {
-                day: '2-digit',
-                month: 'long',
-                year: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit',
+                weekday: 'long', day: '2-digit', month: 'long', year: 'numeric',
+                hour: '2-digit', minute: '2-digit',
                 timeZone: 'America/Sao_Paulo'
             });
         };
 
         const formattedDate = formatDisplayDate(eventDate);
-        const displayLocation = eventLocation || 'Local a definir';
+        const displayLocation = formatFullAddress(eventLocation); // Usa a função de formatação
 
         const svgData = new XMLSerializer().serializeToString(svgElement);
         const img = new Image();
@@ -102,9 +110,7 @@ export const TicketSuccessModal = ({ isOpen, onClose, ticketData }) => {
             URL.revokeObjectURL(url);
 
             const doc = new jsPDF({
-                orientation: 'portrait',
-                unit: 'mm',
-                format: 'a5'
+                orientation: 'portrait', unit: 'mm', format: 'a5'
             });
 
             const PAGE_WIDTH = doc.internal.pageSize.getWidth();
@@ -114,7 +120,6 @@ export const TicketSuccessModal = ({ isOpen, onClose, ticketData }) => {
             const TEXT_COLOR_DARK = '#1E293B';
             const TEXT_COLOR_LIGHT = '#64748B';
 
-            // === CABEÇALHO ===
             doc.setFillColor(PRIMARY_COLOR);
             doc.rect(0, 0, PAGE_WIDTH, 30, 'F');
             doc.setFont('helvetica', 'bold');
@@ -125,7 +130,6 @@ export const TicketSuccessModal = ({ isOpen, onClose, ticketData }) => {
             doc.setFontSize(10);
             doc.text('O Futuro dos Eventos é Descentralizado', MARGIN, 23);
 
-            // === CORPO DO INGRESSO ===
             let currentY = 45;
             doc.setFontSize(12);
             doc.setTextColor(TEXT_COLOR_LIGHT);
@@ -139,9 +143,9 @@ export const TicketSuccessModal = ({ isOpen, onClose, ticketData }) => {
             doc.setFontSize(12);
             doc.setFont('helvetica', 'normal');
             doc.setTextColor(TEXT_COLOR_DARK);
-            doc.text(`Data: ${formattedDate}`, MARGIN, currentY);
+            doc.text(`Data: ${formattedDate}`, MARGIN, currentY, { maxWidth: PAGE_WIDTH - MARGIN * 2 });
             currentY += 7;
-            doc.text(`Local: ${displayLocation}`, MARGIN, currentY);
+            doc.text(`Local: ${displayLocation}`, MARGIN, currentY, { maxWidth: PAGE_WIDTH - MARGIN * 2 });
             currentY += 15;
             const qrSize = 65;
             const qrX = (PAGE_WIDTH - qrSize) / 2;
@@ -156,36 +160,29 @@ export const TicketSuccessModal = ({ isOpen, onClose, ticketData }) => {
             doc.line(MARGIN, currentY, PAGE_WIDTH - MARGIN, currentY);
             doc.setLineDashPattern([], 0);
             currentY += 10;
-
-            // --- Seção do Certificado ---
+            
+            const certificateLink = `${APP_BASE_URL}/certificate/${mintAddress}`;
             doc.setFontSize(14);
             doc.setFont('helvetica', 'bold');
             doc.setTextColor(PRIMARY_COLOR);
             doc.text('Seu Certificado Digital', PAGE_WIDTH / 2, currentY, { align: 'center' });
             currentY += 7;
-
             doc.setFontSize(10);
             doc.setFont('helvetica', 'normal');
             doc.setTextColor(TEXT_COLOR_DARK);
             doc.text('Após o evento, seu certificado estará disponível em:', PAGE_WIDTH / 2, currentY, { align: 'center' });
             currentY += 7;
-
-            const certificateLink = `${APP_BASE_URL}/certificate/${mintAddress}`;
-            
             const linkText = 'Clique aqui para acessar seu certificado';
             doc.setTextColor('#1D4ED8');
             doc.textWithLink(linkText, PAGE_WIDTH / 2, currentY, { url: certificateLink, align: 'center' });
-
-            // === RODAPÉ ===
+            
             const footerY = PAGE_HEIGHT - 18;
             doc.setFillColor('#F1F5F9');
             doc.rect(0, footerY - 5, PAGE_WIDTH, 23, 'F');
-            
             doc.setFontSize(8);
-            doc.setTextColor('#1D4ED8'); // Cor de link
+            doc.setTextColor('#1D4ED8');
             doc.setFont('helvetica', 'normal');
             doc.textWithLink('Link para o Certificado Digital', MARGIN, footerY + 2, { url: certificateLink });
-            
             doc.setFont('helvetica', 'bold');
             doc.setTextColor(PRIMARY_COLOR);
             doc.text('www.ticketfy.app', PAGE_WIDTH - MARGIN, footerY + 2, { align: 'right' });
@@ -194,7 +191,6 @@ export const TicketSuccessModal = ({ isOpen, onClose, ticketData }) => {
             
             toast.success('Seu ingresso foi gerado com sucesso!', { id: loadingToast });
         };
-
         img.onerror = () => { 
             toast.error('Falha ao carregar a imagem do QR Code.', { id: loadingToast }); 
         };
@@ -204,7 +200,6 @@ export const TicketSuccessModal = ({ isOpen, onClose, ticketData }) => {
     const certificateLink = `${APP_BASE_URL}/certificate/${mintAddress}`;
 
     return (
-        // ✨ ALTERAÇÃO AQUI: Adicionamos a prop `persistent` para evitar fechamento acidental
         <Modal isOpen={isOpen} onClose={onClose} title="Ingresso Garantido!" persistent>
             <div className="text-center">
                 <CheckCircleIcon className="mx-auto h-12 w-12 text-green-500" />
@@ -230,6 +225,17 @@ export const TicketSuccessModal = ({ isOpen, onClose, ticketData }) => {
                         <div>
                             <h4 className="font-bold text-lg text-slate-800">Seu Ingresso Digital</h4>
                             <p className="text-sm text-slate-500 mt-1">Apresente este QR Code na entrada do evento.</p>
+                            
+                            {eventLocation?.type === 'Physical' && (
+                                <div className="mt-4 text-sm text-slate-600 bg-slate-50 p-3 rounded-lg flex items-start text-left">
+                                    <MapPinIcon className="h-5 w-5 text-slate-400 mr-3 mt-0.5 flex-shrink-0" />
+                                    <div>
+                                        <div className="font-semibold text-slate-800">{eventLocation.venueName}</div>
+                                        <div>{formatFullAddress(eventLocation)}</div>
+                                    </div>
+                                </div>
+                            )}
+
                             <div ref={qrCodeContainerRef} className="mt-4 p-4 bg-white inline-block rounded-lg border">
                                 <QRCode value={mintAddress} size={180} />
                             </div>
@@ -240,7 +246,7 @@ export const TicketSuccessModal = ({ isOpen, onClose, ticketData }) => {
                             </button>
                         </div>
                     )}
-
+                    
                     {activeTab === 'certificate' && (
                         <div>
                              <h4 className="font-bold text-lg text-slate-800">Seu Certificado Digital</h4>
