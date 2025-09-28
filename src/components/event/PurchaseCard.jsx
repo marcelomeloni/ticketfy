@@ -51,7 +51,7 @@ export const PurchaseCard = ({ metadata, eventAccount, eventAddress, onPurchaseS
             let response;
             let data;
 
-            // ✅ LÓGICA PRINCIPAL: Decide qual endpoint chamar
+           
             if (publicKey) {
                 // --- FLUXO 1: USUÁRIO WEB3 (CARTEIRA CONECTADA) ---
                 console.log('Iniciando fluxo para usuário com carteira...');
@@ -72,7 +72,7 @@ export const PurchaseCard = ({ metadata, eventAccount, eventAddress, onPurchaseS
                 }
                 
                 if (data.isPaid) {
-                    // Lógica para ingresso pago continua a mesma
+                    // Lógica para ingresso pago 
                     toast.loading('Aguardando sua aprovação na carteira...', { id: toastId });
                     const buffer = Buffer.from(data.transaction, 'base64');
                     const transaction = Transaction.from(buffer);
@@ -106,7 +106,7 @@ export const PurchaseCard = ({ metadata, eventAccount, eventAddress, onPurchaseS
                     throw new Error(data.details || 'Falha ao criar carteira e ingresso.');
                 }
                 
-                // O backend já fez tudo, agora pegamos os dados, incluindo a seed phrase
+                // O backend já fez tudo, pegamos os dados, incluindo a seed phrase
                 setTicketData({
                     mintAddress: data.mintAddress,
                     seedPhrase: data.seedPhrase, // A chave secreta para o novo usuário
@@ -144,7 +144,7 @@ export const PurchaseCard = ({ metadata, eventAccount, eventAddress, onPurchaseS
                     ))}
                 </div>
                 <div className="mt-8">
-                     {/* ✅ BOTÃO SEMPRE APARECE, A LÓGICA DECIDE O QUE FAZER */}
+                     {/* BOTÃO SEMPRE APARECE, A LÓGICA DECIDE O QUE FAZER */}
                     <ActionButton
                         onClick={handlePurchaseClick}
                         loading={isLoading}

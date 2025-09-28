@@ -27,7 +27,7 @@ export const ParticipantsList = ({ program, eventAddress, eventName }) => {
             const ownerAddresses = [...new Set(allTickets.map(t => t.account.owner.toString()))];
 
             const { data: profiles, error: supabaseError } = await supabase
-                .from('user_profiles')
+                .from('profiles')
                 .select('name, email, phone, company, sector, role, wallet_address')
                 .in('wallet_address', ownerAddresses);
 
