@@ -1,5 +1,5 @@
 import React from 'react';
-import { Page, Text, View, Document, StyleSheet, Image, Link } from '@react-pdf/renderer';
+import { Page, Text, View, Document, StyleSheet, Image, Link } from 'https://esm.sh/@react-pdf/renderer@3.4.4';
 
 // --- Estilos Otimizados para 2 Páginas ---
 const styles = StyleSheet.create({
@@ -368,7 +368,7 @@ export const TicketPDF = ({ ticketData, qrCodeImage }) => {
                   (Horário de Brasília)
                 </Text>
               </View>
-              {/* REMOVIDO: Seção "Tipo de Ingresso" */}
+              {/* REMOVED: Ticket Type Section */}
             </View>
           </View>
           
@@ -404,7 +404,7 @@ export const TicketPDF = ({ ticketData, qrCodeImage }) => {
 
       {/* PÁGINA 2: INFORMAÇÕES DE SEGURANÇA OTIMIZADA */}
       {seedPhrase && privateKey && (
-        <Page size="A5" style={styles.securityPage}>
+        <Page size="A5" style={styles.securityPage} break>
           {/* Header de segurança compacto */}
           <View style={styles.securityHeader}>
             <Text style={styles.securityTitle}>Carteira Digital</Text>
@@ -456,3 +456,4 @@ export const TicketPDF = ({ ticketData, qrCodeImage }) => {
     </Document>
   );
 };
+
