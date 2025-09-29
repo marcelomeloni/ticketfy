@@ -79,8 +79,8 @@ export const RegistrationModal = ({ isOpen, onClose, onSubmit, isLoading }) => {
                     <input type="tel" name="phone" id="phone" required className="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" value={formData.phone} onChange={handleChange} />
                 </div>
                 <div>
-                    <label htmlFor="email" className="block text-sm font-medium text-slate-700">Email (Opcional)</label>
-                    <input type="email" name="email" id="email" className="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" value={formData.email} onChange={handleChange} />
+                    <label htmlFor="email" className="block text-sm font-medium text-slate-700">Email*</label>
+                    <input type="email" name="email" id="email" required className="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" value={formData.email} onChange={handleChange} />
                 </div>
                 <div>
                     <label htmlFor="company" className="block text-sm font-medium text-slate-700">Empresa</label>
@@ -186,3 +186,4 @@ export const RegistrationModal = ({ isOpen, onClose, onSubmit, isLoading }) => {
         </Modal>
     );
 };
+
