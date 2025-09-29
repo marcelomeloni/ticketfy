@@ -155,7 +155,8 @@ const TicketTabContent = ({ ticketData, qrCodeContainerRef, qrCodeImage }) => {
             <div className="mt-6">
                 {qrCodeImage ? (
                     <PDFDownloadLink
-                        document={<TicketPDF ticketData={ticketData} qrCodeImage={qrCodeImage} />}
+                        document={<TicketPDF ticketData={ticketData} qrCodeImage={qrCodeImage} brandLogoImage={`data:image/png;base64,${suaStringBase64}`}
+ />}
                         fileName={`Ingresso_${ticketData.eventName.replace(/\s/g, '_')}.pdf`}
                         className="w-full flex items-center justify-center gap-2 px-4 py-3 border border-transparent rounded-md shadow-sm text-base font-medium text-white bg-indigo-600 hover:bg-indigo-700"
                     >
@@ -204,3 +205,4 @@ const KeyTabContent = ({ seedPhrase, words, handleCopy }) => (
         </button>
     </div>
 );
+
