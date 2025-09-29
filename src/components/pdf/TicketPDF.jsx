@@ -1,6 +1,10 @@
 import React from 'react';
 import { Page, Text, View, Document, StyleSheet, Image, Link } from 'https://esm.sh/@react-pdf/renderer@3.4.4';
 
+// --- ATENÇÃO: COLOQUE A URL PÚBLICA DO SEU LOGO AQUI ---
+// Para que funcione, a imagem do seu logo precisa estar hospedada em algum lugar online.
+const LOGO_URL = 'https://red-obedient-stingray-854.mypinata.cloud/ipfs/bafkreigpqj7473y2mly3dn6rjnnm3ww4cngbz6kjkgeagt7ifxe2d2g53u'; 
+
 // --- Estilos Otimizados para 2 Páginas ---
 const styles = StyleSheet.create({
   // Documento
@@ -31,7 +35,6 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     marginRight: 8,
-    backgroundColor: '#FFFFFF',
     borderRadius: 6,
   },
   
@@ -336,7 +339,7 @@ export const TicketPDF = ({ ticketData, qrCodeImage }) => {
         {/* Header compacto */}
         <View style={styles.header}>
           <View style={styles.brandSection}>
-            <View style={styles.brandLogo} />
+            <Image style={styles.brandLogo} src={LOGO_URL} />
             <Text style={styles.brandTitle}>TICKETFY</Text>
           </View>
           
