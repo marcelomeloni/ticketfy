@@ -1,7 +1,7 @@
 import React from 'react';
-import { Page, Text, View, Document, StyleSheet, Image, Link, Canvas } from '@react-pdf/renderer';
+import { Page, Text, View, Document, StyleSheet, Image, Link } from '@react-pdf/renderer';
 
-// --- Estilos Premium ---
+// --- Estilos Otimizados para 2 Páginas ---
 const styles = StyleSheet.create({
   // Documento
   document: {
@@ -14,69 +14,58 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
   },
   
-  // Header com gradiente
+  // Header compacto
   header: {
     backgroundColor: '#4F46E5',
-    paddingVertical: 25,
-    paddingHorizontal: 30,
-    position: 'relative',
-  },
-  
-  // Elementos decorativos do header
-  headerDecoration: {
-    position: 'absolute',
-    top: 0,
-    right: 0,
-    width: 150,
-    height: 150,
-    opacity: 0.1,
+    paddingVertical: 20,
+    paddingHorizontal: 25,
   },
   
   brandSection: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 10,
+    marginBottom: 8,
   },
   
   brandLogo: {
-    width: 32,
-    height: 32,
-    marginRight: 10,
+    width: 28,
+    height: 28,
+    marginRight: 8,
     backgroundColor: '#FFFFFF',
     borderRadius: 6,
   },
   
   brandTitle: {
-    fontSize: 20,
+    fontSize: 18,
     color: '#FFFFFF',
     fontFamily: 'Helvetica-Bold',
     letterSpacing: 0.5,
   },
   
   ticketType: {
-    fontSize: 10,
+    fontSize: 9,
     color: '#E0E7FF',
     textTransform: 'uppercase',
     letterSpacing: 1,
-    marginBottom: 5,
+    marginBottom: 4,
   },
   
   eventName: {
-    fontSize: 22,
+    fontSize: 20,
     color: '#FFFFFF',
     fontFamily: 'Helvetica-Bold',
-    lineHeight: 1.3,
+    lineHeight: 1.2,
   },
   
-  // Corpo do ingresso
+  // Corpo do ingresso mais compacto
   ticketBody: {
-    padding: 30,
+    padding: 25,
   },
   
-  // Grid de informações
+  // Grid de informações mais compacto
   infoGrid: {
     flexDirection: 'row',
-    marginBottom: 25,
+    marginBottom: 15,
   },
   
   infoColumn: {
@@ -84,151 +73,147 @@ const styles = StyleSheet.create({
   },
   
   infoBlock: {
-    marginBottom: 20,
+    marginBottom: 12,
   },
   
   infoLabel: {
+    fontSize: 8,
+    color: '#64748B',
+    fontFamily: 'Helvetica-Bold',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    marginBottom: 3,
+  },
+  
+  infoValue: {
+    fontSize: 10,
+    color: '#1E293B',
+    lineHeight: 1.3,
+  },
+  
+  // Seção QR Code mais compacta
+  qrSection: {
+    alignItems: 'center',
+    marginVertical: 15,
+    padding: 20,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+  },
+  
+  qrCodeImage: {
+    width: 120,
+    height: 120,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 6,
+  },
+  
+  qrLabel: {
     fontSize: 9,
     color: '#64748B',
     fontFamily: 'Helvetica-Bold',
     textTransform: 'uppercase',
     letterSpacing: 0.8,
-    marginBottom: 4,
-  },
-  
-  infoValue: {
-    fontSize: 12,
-    color: '#1E293B',
-    lineHeight: 1.4,
-  },
-  
-  // Seção QR Code
-  qrSection: {
-    alignItems: 'center',
-    marginVertical: 20,
-    padding: 25,
-    backgroundColor: '#F8FAFC',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#F1F5F9',
-  },
-  
-  qrContainer: {
-    alignItems: 'center',
-  },
-  
-  qrCodeImage: {
-    width: 140,
-    height: 140,
-    marginBottom: 15,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    borderRadius: 8,
-  },
-  
-  qrLabel: {
-    fontSize: 10,
-    color: '#64748B',
-    fontFamily: 'Helvetica-Bold',
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
-    marginBottom: 8,
+    marginBottom: 6,
   },
   
   mintAddress: {
-    fontSize: 8,
+    fontSize: 7,
     color: '#94A3B8',
     fontFamily: 'Courier',
     textAlign: 'center',
-    lineHeight: 1.3,
+    lineHeight: 1.2,
   },
   
-  // Footer profissional
+  // Footer compacto
   footer: {
-    marginTop: 30,
-    paddingTop: 20,
+    marginTop: 20,
+    paddingTop: 15,
     borderTopWidth: 1,
     borderTopColor: '#F1F5F9',
   },
   
   securityNotice: {
-    fontSize: 9,
+    fontSize: 8,
     color: '#64748B',
     textAlign: 'center',
-    lineHeight: 1.4,
-    marginBottom: 15,
+    lineHeight: 1.3,
+    marginBottom: 10,
   },
   
   certificateLink: {
-    fontSize: 10,
+    fontSize: 9,
     color: '#4F46E5',
     textAlign: 'center',
     textDecoration: 'none',
     fontFamily: 'Helvetica-Bold',
   },
   
-  // Página 2: Segurança
+  // Página 2: Segurança otimizada
   securityPage: {
-    padding: 40,
+    padding: 30,
     backgroundColor: '#FFFFFF',
   },
   
   securityHeader: {
     backgroundColor: '#4F46E5',
-    padding: 25,
-    marginBottom: 30,
-    borderRadius: 12,
+    padding: 20,
+    marginBottom: 20,
+    borderRadius: 8,
   },
   
   securityTitle: {
-    fontSize: 18,
+    fontSize: 16,
     color: '#FFFFFF',
     fontFamily: 'Helvetica-Bold',
     textAlign: 'center',
-    marginBottom: 8,
+    marginBottom: 6,
   },
   
   securitySubtitle: {
-    fontSize: 11,
+    fontSize: 10,
     color: '#E0E7FF',
     textAlign: 'center',
-    lineHeight: 1.4,
+    lineHeight: 1.3,
   },
   
-  // Alertas de segurança
+  // Alertas de segurança compactos
   warningBox: {
     backgroundColor: '#FEF2F2',
     borderLeftWidth: 4,
     borderLeftColor: '#DC2626',
-    padding: 20,
-    marginBottom: 25,
-    borderRadius: 8,
+    padding: 15,
+    marginBottom: 20,
+    borderRadius: 6,
   },
   
   warningTitle: {
-    fontSize: 12,
+    fontSize: 11,
     color: '#DC2626',
     fontFamily: 'Helvetica-Bold',
-    marginBottom: 8,
+    marginBottom: 6,
   },
   
   warningText: {
-    fontSize: 10,
+    fontSize: 9,
     color: '#991B1B',
-    lineHeight: 1.5,
+    lineHeight: 1.4,
   },
   
-  // Seção da seed phrase
+  // Seções compactas
   seedSection: {
-    marginBottom: 25,
+    marginBottom: 20,
   },
   
   sectionTitle: {
-    fontSize: 14,
+    fontSize: 12,
     color: '#1E293B',
     fontFamily: 'Helvetica-Bold',
-    marginBottom: 15,
-    paddingBottom: 8,
+    marginBottom: 12,
+    paddingBottom: 6,
     borderBottomWidth: 2,
     borderBottomColor: '#4F46E5',
   },
@@ -239,114 +224,77 @@ const styles = StyleSheet.create({
     backgroundColor: '#F8FAFC',
     borderWidth: 1,
     borderColor: '#E2E8F0',
-    borderRadius: 8,
-    padding: 15,
+    borderRadius: 6,
+    padding: 12,
   },
   
   seedWordBox: {
     width: '33.33%',
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 6,
+    paddingVertical: 4,
   },
   
   seedNumber: {
-    fontSize: 9,
+    fontSize: 8,
     color: '#64748B',
     fontFamily: 'Courier',
-    width: 20,
+    width: 16,
   },
   
   seedWord: {
-    fontSize: 10,
+    fontSize: 9,
     color: '#1E293B',
     fontFamily: 'Helvetica-Bold',
   },
   
-  // Seção da private key
+  // Seção da private key compacta
   privateKeySection: {
-    marginBottom: 20,
+    marginBottom: 15,
   },
   
   privateKeyBox: {
     backgroundColor: '#1E293B',
-    borderRadius: 8,
-    padding: 20,
+    borderRadius: 6,
+    padding: 15,
   },
   
   privateKeyLabel: {
-    fontSize: 10,
+    fontSize: 9,
     color: '#94A3B8',
     fontFamily: 'Helvetica-Bold',
     textTransform: 'uppercase',
     letterSpacing: 0.8,
-    marginBottom: 10,
+    marginBottom: 8,
   },
   
   privateKeyText: {
-    fontSize: 8,
+    fontSize: 7,
     color: '#E2E8F0',
     fontFamily: 'Courier',
-    lineHeight: 1.4,
+    lineHeight: 1.3,
     wordBreak: 'break-all',
   },
   
-  // Final da página de segurança
+  // Aviso final compacto
   finalNotice: {
     backgroundColor: '#F0FDF4',
-    padding: 20,
-    borderRadius: 8,
+    padding: 15,
+    borderRadius: 6,
     borderWidth: 1,
     borderColor: '#BBF7D0',
-    marginTop: 10,
   },
   
   finalNoticeText: {
-    fontSize: 10,
+    fontSize: 9,
     color: '#166534',
     textAlign: 'center',
-    lineHeight: 1.4,
+    lineHeight: 1.3,
     fontFamily: 'Helvetica-Bold',
   },
-  
-  // Elementos decorativos
-  decorativeLine: {
-    height: 3,
-    backgroundColor: '#4F46E5',
-    marginVertical: 15,
-    borderRadius: 2,
-  },
-  
-  dotPattern: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    marginVertical: 10,
-  },
-  
-  dot: {
-    width: 4,
-    height: 4,
-    backgroundColor: '#CBD5E1',
-    borderRadius: 2,
-    marginHorizontal: 3,
-  }
 });
 
-// --- COMPONENTES PERSONALIZADOS ---
-
-const DotPattern = () => (
-  <View style={styles.dotPattern}>
-    {[...Array(20)].map((_, i) => (
-      <View key={i} style={styles.dot} />
-    ))}
-  </View>
-);
-
-const DecorativeLine = () => (
-  <View style={styles.decorativeLine} />
-);
-
-// --- COMPONENTE PRINCIPAL DO DOCUMENTO ---
+// --- COMPONENTE PRINCIPAL OTIMIZADO ---
 
 export const TicketPDF = ({ ticketData, qrCodeImage }) => {
   const { eventName, eventDate, eventLocation, mintAddress, seedPhrase, privateKey } = ticketData;
@@ -383,9 +331,9 @@ export const TicketPDF = ({ ticketData, qrCodeImage }) => {
 
   return (
     <Document style={styles.document} author="Ticketfy" title={`Ingresso - ${eventName}`}>
-      {/* PÁGINA 1: INGRESSO PRINCIPAL */}
+      {/* PÁGINA 1: INGRESSO PRINCIPAL OTIMIZADO */}
       <Page size="A5" style={styles.page}>
-        {/* Header com gradiente */}
+        {/* Header compacto */}
         <View style={styles.header}>
           <View style={styles.brandSection}>
             <View style={styles.brandLogo} />
@@ -396,9 +344,9 @@ export const TicketPDF = ({ ticketData, qrCodeImage }) => {
           <Text style={styles.eventName}>{eventName}</Text>
         </View>
 
-        {/* Corpo do ingresso */}
+        {/* Corpo do ingresso otimizado */}
         <View style={styles.ticketBody}>
-          {/* Grid de informações */}
+          {/* Grid de informações compacto - REMOVIDO "TIPO DE INGRESSO" */}
           <View style={styles.infoGrid}>
             <View style={styles.infoColumn}>
               <View style={styles.infoBlock}>
@@ -416,21 +364,15 @@ export const TicketPDF = ({ ticketData, qrCodeImage }) => {
               <View style={styles.infoBlock}>
                 <Text style={styles.infoLabel}>Horário</Text>
                 <Text style={styles.infoValue}>{formatDisplayTime(eventDate)}</Text>
-                <Text style={[styles.infoValue, { fontSize: 9, color: '#64748B' }]}>
+                <Text style={[styles.infoValue, { fontSize: 8, color: '#64748B' }]}>
                   (Horário de Brasília)
                 </Text>
               </View>
-              
-              <View style={styles.infoBlock}>
-                <Text style={styles.infoLabel}>Tipo de Ingresso</Text>
-                <Text style={styles.infoValue}>NFT Digital • Único</Text>
-              </View>
+              {/* REMOVIDO: Seção "Tipo de Ingresso" */}
             </View>
           </View>
-
-          <DotPattern />
           
-          {/* Seção QR Code */}
+          {/* Seção QR Code compacta */}
           <View style={styles.qrSection}>
             <Text style={styles.qrLabel}>Código de Validação</Text>
             {qrCodeImage && <Image style={styles.qrCodeImage} src={qrCodeImage} />}
@@ -439,9 +381,7 @@ export const TicketPDF = ({ ticketData, qrCodeImage }) => {
             </Text>
           </View>
 
-          <DotPattern />
-
-          {/* Informações adicionais */}
+          {/* Informações adicionais compactas */}
           <View style={styles.footer}>
             <Text style={styles.securityNotice}>
               Este ingresso é um token NFT único na blockchain Solana. 
@@ -462,10 +402,10 @@ export const TicketPDF = ({ ticketData, qrCodeImage }) => {
         </View>
       </Page>
 
-      {/* PÁGINA 2: INFORMAÇÕES DE SEGURANÇA (SE NECESSÁRIO) */}
+      {/* PÁGINA 2: INFORMAÇÕES DE SEGURANÇA OTIMIZADA */}
       {seedPhrase && privateKey && (
         <Page size="A5" style={styles.securityPage}>
-          {/* Header de segurança */}
+          {/* Header de segurança compacto */}
           <View style={styles.securityHeader}>
             <Text style={styles.securityTitle}>Carteira Digital</Text>
             <Text style={styles.securitySubtitle}>
@@ -473,7 +413,7 @@ export const TicketPDF = ({ ticketData, qrCodeImage }) => {
             </Text>
           </View>
 
-          {/* Alerta de segurança */}
+          {/* Alerta de segurança compacto */}
           <View style={styles.warningBox}>
             <Text style={styles.warningTitle}>⚠️ INFORMAÇÕES EXTREMAMENTE CONFIDENCIAIS</Text>
             <Text style={styles.warningText}>
@@ -482,7 +422,7 @@ export const TicketPDF = ({ ticketData, qrCodeImage }) => {
             </Text>
           </View>
 
-          {/* Seed Phrase */}
+          {/* Seed Phrase compacta */}
           <View style={styles.seedSection}>
             <Text style={styles.sectionTitle}>Frase de Recuperação (Seed Phrase)</Text>
             <View style={styles.seedGrid}>
@@ -495,7 +435,7 @@ export const TicketPDF = ({ ticketData, qrCodeImage }) => {
             </View>
           </View>
 
-          {/* Private Key */}
+          {/* Private Key compacta */}
           <View style={styles.privateKeySection}>
             <Text style={styles.sectionTitle}>Chave Privada</Text>
             <View style={styles.privateKeyBox}>
@@ -504,7 +444,7 @@ export const TicketPDF = ({ ticketData, qrCodeImage }) => {
             </View>
           </View>
 
-          {/* Aviso final */}
+          {/* Aviso final compacto */}
           <View style={styles.finalNotice}>
             <Text style={styles.finalNoticeText}>
               ✅ Recomendamos guardar este documento em cofre físico. 
