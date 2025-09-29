@@ -1,9 +1,5 @@
 import React from 'react';
-import { Page, Text, View, Document, StyleSheet, Image, Link } from 'https://esm.sh/@react-pdf/renderer@3.4.4';
-
-// --- ATENÇÃO: COLOQUE A URL PÚBLICA DO SEU LOGO AQUI ---
-// Para que funcione, a imagem do seu logo precisa estar hospedada em algum lugar online.
-const LOGO_URL = 'https://exemplo.com/caminho/para/seu/logo.png'; 
+import { Page, Text, View, Document, StyleSheet, Image, Link } from '@react-pdf/renderer';
 
 // --- Estilos Otimizados para 2 Páginas ---
 const styles = StyleSheet.create({
@@ -35,6 +31,7 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     marginRight: 8,
+    backgroundColor: '#FFFFFF',
     borderRadius: 6,
   },
   
@@ -276,6 +273,7 @@ const styles = StyleSheet.create({
     color: '#E2E8F0',
     fontFamily: 'Courier',
     lineHeight: 1.3,
+    wordBreak: 'break-all',
   },
   
   // Aviso final compacto
@@ -338,7 +336,7 @@ export const TicketPDF = ({ ticketData, qrCodeImage }) => {
         {/* Header compacto */}
         <View style={styles.header}>
           <View style={styles.brandSection}>
-            <Image style={styles.brandLogo} src={LOGO_URL} />
+            <View style={styles.brandLogo} />
             <Text style={styles.brandTitle}>TICKETFY</Text>
           </View>
           
@@ -370,7 +368,7 @@ export const TicketPDF = ({ ticketData, qrCodeImage }) => {
                   (Horário de Brasília)
                 </Text>
               </View>
-              {/* REMOVED: Ticket Type Section */}
+              {/* REMOVIDO: Seção "Tipo de Ingresso" */}
             </View>
           </View>
           
@@ -406,7 +404,7 @@ export const TicketPDF = ({ ticketData, qrCodeImage }) => {
 
       {/* PÁGINA 2: INFORMAÇÕES DE SEGURANÇA OTIMIZADA */}
       {seedPhrase && privateKey && (
-        <Page size="A5" style={styles.securityPage} break>
+        <Page size="A5" style={styles.securityPage}>
           {/* Header de segurança compacto */}
           <View style={styles.securityHeader}>
             <Text style={styles.securityTitle}>Carteira Digital</Text>
@@ -458,4 +456,3 @@ export const TicketPDF = ({ ticketData, qrCodeImage }) => {
     </Document>
   );
 };
-
