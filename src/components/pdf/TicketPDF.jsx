@@ -3,7 +3,7 @@ import { Page, Text, View, Document, StyleSheet, Image, Link } from 'https://esm
 
 // --- ATENÇÃO: COLOQUE A URL PÚBLICA DO SEU LOGO AQUI ---
 // Para que funcione, a imagem do seu logo precisa estar hospedada em algum lugar online.
-const LOGO_URL = 'https://red-obedient-stingray-854.mypinata.cloud/ipfs/bafkreigpqj7473y2mly3dn6rjnnm3ww4cngbz6kjkgeagt7ifxe2d2g53u'; 
+const LOGO_URL = 'https://exemplo.com/caminho/para/seu/logo.png'; 
 
 // --- Estilos Otimizados para 2 Páginas ---
 const styles = StyleSheet.create({
@@ -276,7 +276,6 @@ const styles = StyleSheet.create({
     color: '#E2E8F0',
     fontFamily: 'Courier',
     lineHeight: 1.3,
-    wordBreak: 'break-all',
   },
   
   // Aviso final compacto
