@@ -22,7 +22,6 @@ const StatusBadge = ({ status }) => {
     return <span className={`px-3 py-1 text-xs font-medium rounded-full ${styles[status]}`}>{text[status]}</span>;
 };
 
-
 // --- COMPONENTE DE ESQUELETO (LOADING STATE) ---
 const EventCardSkeleton = () => (
     <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden animate-pulse">
@@ -36,7 +35,6 @@ const EventCardSkeleton = () => (
         </div>
     </div>
 );
-
 
 // --- COMPONENTE PRINCIPAL DO CARD ---
 export function EventCard({ event }) {
@@ -65,7 +63,6 @@ export function EventCard({ event }) {
         fetchMetadata();
     }, [metadataUri]);
 
-
     const status = useMemo(() => {
         if (canceled) return 'canceled';
         if (!metadata?.properties?.dateTime) return null;
@@ -79,62 +76,92 @@ export function EventCard({ event }) {
         return 'upcoming';
     }, [metadata, canceled]);
     
-    // Lógica para preço inicial e barra de progresso
+    // Lógica para preço inicial e barra de progresso - CORRIGIDA
     const { startingPriceLamports, totalSold, totalSupply, progress } = useMemo(() => {
         if (!Array.isArray(tiers) || tiers.length === 0) {
             return { startingPriceLamports: 0, totalSold: 0, totalSupply: 0, progress: 0 };
         }
-        const startingPrice = Math.min(...tiers.map(tier => tier.priceLamports.toNumber()));
+
+        // ⭐ CORREÇÃO: priceLamports já é um número, não precisa de toNumber()
+        const startingPrice = Math.min(...tiers.map(tier => {
+            // Se for um objeto BN, usa toNumber(), se for número, usa diretamente
+            return typeof tier.priceLamports === 'object' && tier.priceLamports.toNumber 
+                ? tier.priceLamports.toNumber() 
+                : tier.priceLamports;
+        }));
+
         const sold = event.account.totalTicketsSold || 0;
         const supply = tiers.reduce((sum, tier) => sum + tier.maxTicketsSupply, 0);
         const prog = supply > 0 ? (sold / supply) * 100 : 0;
-        return { startingPriceLamports: startingPrice, totalSold: sold, totalSupply: supply, progress: prog };
+        
+        return { 
+            startingPriceLamports: startingPrice, 
+            totalSold: sold, 
+            totalSupply: supply, 
+            progress: prog 
+        };
     }, [tiers, event.account.totalTicketsSold]);
-
 
     if (isLoading) {
         return <EventCardSkeleton />;
     }
 
     const eventDate = metadata?.properties?.dateTime?.start 
-        ? new Date(metadata.properties.dateTime.start).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })
+        ? new Date(metadata.properties.dateTime.start).toLocaleDateString('pt-BR', { 
+            day: '2-digit', 
+            month: 'long', 
+            year: 'numeric' 
+        })
         : 'Data a definir';
 
     return (
         <Link to={`/event/${eventAddress}`} className="group block">
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden transform transition-all duration-300 hover:shadow-lg hover:-translate-y-1 h-full flex flex-col">
                 <div className="relative h-48 w-full overflow-hidden">
-                    <img src={metadata.image} alt={metadata.name} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" />
+                    <img 
+                        src={metadata.image} 
+                        alt={metadata.name} 
+                        className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" 
+                    />
                     <div className="absolute top-3 right-3">
                         <StatusBadge status={status} />
                     </div>
                 </div>
                 
                 <div className="p-5 flex-grow flex flex-col">
-                    <h3 className="text-lg font-bold text-slate-900 truncate group-hover:text-indigo-600 transition-colors">{metadata.name}</h3>
+                    <h3 className="text-lg font-bold text-slate-900 truncate group-hover:text-indigo-600 transition-colors">
+                        {metadata.name}
+                    </h3>
                     
                     <div className="mt-3 space-y-2 text-sm text-slate-600">
                         <div className="flex items-center">
                             <ClockIcon className="h-4 w-4 mr-2 text-slate-400 flex-shrink-0" />
-                           
                             <span>{eventDate}</span>
                         </div>
                         <div className="flex items-center">
                             <MapPinIcon className="h-4 w-4 mr-2 text-slate-400 flex-shrink-0" />
-                            <span className="truncate">{metadata.properties?.location?.address?.city || 'Online'}</span>
+                            <span className="truncate">
+                                {metadata.properties?.location?.address?.city || 'Online'}
+                            </span>
                         </div>
                     </div>
 
-                  
                     <div className="mt-4 pt-4 border-t border-slate-100 flex-grow flex flex-col justify-end">
                         {status !== 'finished' && status !== 'canceled' && totalSupply > 0 && (
                             <div className="mb-3">
                                 <div className="flex justify-between items-center mb-1">
-                                    <span className="text-xs font-medium text-slate-500 flex items-center gap-1"><TicketIcon className="h-4 w-4"/> Ingressos</span>
-                                    <span className="text-xs font-bold text-slate-600">{totalSold} / {totalSupply}</span>
+                                    <span className="text-xs font-medium text-slate-500 flex items-center gap-1">
+                                        <TicketIcon className="h-4 w-4"/> Ingressos
+                                    </span>
+                                    <span className="text-xs font-bold text-slate-600">
+                                        {totalSold} / {totalSupply}
+                                    </span>
                                 </div>
                                 <div className="w-full bg-slate-200 rounded-full h-2">
-                                    <div className="bg-indigo-500 h-2 rounded-full" style={{ width: `${progress}%` }}></div>
+                                    <div 
+                                        className="bg-indigo-500 h-2 rounded-full" 
+                                        style={{ width: `${progress}%` }}
+                                    ></div>
                                 </div>
                             </div>
                         )}
@@ -147,7 +174,7 @@ export function EventCard({ event }) {
                                 </p>
                             </div>
                         ) : (
-                             <p className="text-lg text-right font-bold text-green-600">Gratuito</p>
+                            <p className="text-lg text-right font-bold text-green-600">Gratuito</p>
                         )}
                     </div>
                 </div>
