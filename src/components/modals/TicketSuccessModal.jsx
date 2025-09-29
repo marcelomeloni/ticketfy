@@ -155,7 +155,7 @@ const TicketTabContent = ({ ticketData, qrCodeContainerRef, qrCodeImage }) => {
             <div className="mt-6">
                 {qrCodeImage ? (
                     <PDFDownloadLink
-                        document={<TicketPDF ticketData={ticketData} qrCodeImage={qrCodeImage} brandLogoImage="https://red-obedient-stingray-854.mypinata.cloud/ipfs/bafkreidwbv56unyck552x7nn6dwumpzkcvhh2svczkv3cnvdmxvi5w53s4"
+                        document={<TicketPDF ticketData={ticketData} qrCodeImage={qrCodeImage} brandLogoImage="https://red-obedient-stingray-854.mypinata.cloud/ipfs/bafkreih7ofsa246z5vnjvrol6xk5tpj4zys42tcaotxq7tp7ptgraalrya"
 
  />}
                         fileName={`Ingresso_${ticketData.eventName.replace(/\s/g, '_')}.pdf`}
@@ -206,5 +206,6 @@ const KeyTabContent = ({ seedPhrase, words, handleCopy }) => (
         </button>
     </div>
 );
+
 
 
