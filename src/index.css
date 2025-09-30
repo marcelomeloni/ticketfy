@@ -16,4 +16,6 @@ body {
 /* Componente customizado para botões do wallet-adapter */
 .wallet-adapter-button-trigger {
   @apply bg-indigo-600 text-white hover:bg-indigo-700 transition-colors duration-200;
+} .leaflet-map-container .leaflet-container {
+  z-index: 10 !important;
 }

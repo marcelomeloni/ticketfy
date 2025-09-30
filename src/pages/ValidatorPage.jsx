@@ -1,19 +1,18 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
-import { useConnection, useAnchorWallet, useWallet } from '@solana/wallet-adapter-react';
+import { useConnection } from '@solana/wallet-adapter-react';
+import { useAppWallet } from '@/hooks/useAppWallet';
 import { Program, AnchorProvider, web3 } from '@coral-xyz/anchor';
-import { getAssociatedTokenAddress } from '@solana/spl-token';
 import toast from 'react-hot-toast';
 import { Html5QrcodeScanner } from 'html5-qrcode';
 import idl from '@/idl/ticketing_system.json';
-// import { supabase } from '@/lib/supabaseClient'; // ✅ REMOVIDO: Não é mais necessário aqui.
 import { ActionButton } from '@/components/ui/ActionButton';
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
-import { DocumentMagnifyingGlassIcon, ClipboardDocumentCheckIcon, ShieldCheckIcon, ShieldExclamationIcon, TicketIcon, QrCodeIcon, ClockIcon, UserIcon, UserGroupIcon } from '@heroicons/react/24/outline';
+import { DocumentMagnifyingGlassIcon, ShieldCheckIcon, ShieldExclamationIcon, TicketIcon, QrCodeIcon, ClockIcon, UserIcon, UserGroupIcon } from '@heroicons/react/24/outline';
 import { PROGRAM_ID, API_URL } from '@/lib/constants';
 
 
-// --- Componentes Modulares de UI (Inalterados) ---
+// --- Componentes Modulares de UI ---
 
 const StatCard = ({ title, value, icon: Icon, color }) => (
     <div className="bg-white p-4 rounded-lg flex items-center gap-4 border border-slate-200">
@@ -32,18 +31,21 @@ const ScannerView = ({ onScan, onManualSearch }) => {
 
     useEffect(() => {
         let scanner;
+        // Garante que o scanner não seja renderizado múltiplas vezes
         if (document.getElementById('qr-reader-container')?.innerHTML === "") {
             scanner = new Html5QrcodeScanner('qr-reader-container', { fps: 10, qrbox: { width: 250, height: 250 } }, false);
             const handleSuccess = (decodedText, decodedResult) => {
                 onScan(decodedText);
-                if (scanner.getState() && scanner.getState() !== 1) { // 1 = NOT_STARTED
+                // Checa o estado antes de tentar limpar
+                if (scanner && scanner.getState() && scanner.getState() !== 1) { 
                     scanner.clear().catch(err => console.error("Falha ao limpar scanner", err));
                 }
             };
             scanner.render(handleSuccess, () => {});
         }
         return () => {
-            if (scanner && scanner.getState() && scanner.getState() !== 1) {
+            // Limpeza robusta ao desmontar o componente
+            if (scanner && scanner.getState && scanner.getState() !== 1) {
                 scanner.clear().catch(() => {});
             }
         };
@@ -74,7 +76,6 @@ const RecentValidations = ({ entries }) => (
         <h2 className="text-lg font-bold text-slate-800 mb-4">Últimas Validações</h2>
         <div className="space-y-3 max-h-80 overflow-y-auto pr-2">
             {entries.length > 0 ? entries.map((entry) => {
-                // ✅ Lógica atualizada: Procura por 'entry.name' OU 'entry.ownerName'
                 const displayName = entry.name || entry.ownerName;
 
                 return (
@@ -93,14 +94,15 @@ const RecentValidations = ({ entries }) => (
     </div>
 );
 
-// --- Componente Principal da Página ---
 
+// --- Componente Principal da Página ---
 export function ValidatorPage() {
+    // LOGGING: Informações iniciais sobre os hooks
+    console.log('[ValidatorPage] Componente renderizando...');
     const { eventAddress } = useParams();
-    const [searchParams] = useSearchParams();
+    const [searchParams, setSearchParams] = useSearchParams();
     const { connection } = useConnection();
-    const { publicKey } = useWallet();
-    const anchorWallet = useAnchorWallet();
+    const { publicKey, connected } = useAppWallet();
 
     const [eventAccount, setEventAccount] = useState(null);
     const [isValidator, setIsValidator] = useState(false);
@@ -109,49 +111,78 @@ export function ValidatorPage() {
     const [scannedMint, setScannedMint] = useState(null);
     const [recentEntries, setRecentEntries] = useState([]);
 
+    // LOGGING: Mostra o estado atual em cada renderização
+    console.log('[ValidatorPage] Estado atual:', {
+        connected,
+        publicKey: publicKey?.toString(),
+        isLoading,
+        isValidator,
+        eventAddress
+    });
+
     const ticketToValidate = searchParams.get('ticket');
 
-    const program = useMemo(() => {
-        if (!anchorWallet) return null;
-        const provider = new AnchorProvider(connection, anchorWallet, AnchorProvider.defaultOptions());
+    const readOnlyProgram = useMemo(() => {
+        // LOGGING: Informa quando o programa Anchor está sendo recriado
+        console.log('[ValidatorPage] Recriando o objeto do programa Anchor.');
+        const provider = new AnchorProvider(connection, {}, AnchorProvider.defaultOptions());
         return new Program(idl, PROGRAM_ID, provider);
-    }, [connection, anchorWallet]);
-
-    const fetchEventAndCheckValidator = useCallback(async () => {
-        if (!publicKey || !program) {
-            setIsValidator(false);
-            if (publicKey) setIsLoading(false);
-            return;
-        }
-        setIsLoading(true);
-        try {
-            const event = await program.account.event.fetch(new web3.PublicKey(eventAddress));
-            setEventAccount(event);
-            const validatorPubkeys = event.validators.map(v => v.toString());
-            setIsValidator(validatorPubkeys.includes(publicKey.toString()));
-        } catch (error) {
-            console.error("Erro ao verificar status do validador:", error);
-            setIsValidator(false);
-        } finally {
-            setIsLoading(false);
-        }
-    }, [publicKey, program, eventAddress]);
+    }, [connection]);
     
+    // useEffect corrigido para evitar o loop infinito.
     useEffect(() => {
-        fetchEventAndCheckValidator();
-    }, [fetchEventAndCheckValidator]);
+        // LOGGING: Informa que o efeito principal foi acionado e com quais valores.
+        console.log('[ValidatorPage] useEffect principal disparado. Deps:', {
+            connected,
+            publicKey: publicKey?.toString()
+        });
+        
+        const checkValidatorStatus = async () => {
+            if (!publicKey || !readOnlyProgram) {
+                console.log('[ValidatorPage] checkValidatorStatus: Precondições (publicKey, readOnlyProgram) não atendidas. Retornando.');
+                setIsValidator(false);
+                return;
+            }
+
+            console.log('[ValidatorPage] Iniciando busca de dados do validador...');
+            setIsLoading(true);
+            try {
+                const event = await readOnlyProgram.account.event.fetch(new web3.PublicKey(eventAddress));
+                console.log('[ValidatorPage] Sucesso! Dados do evento recebidos:', event);
+                setEventAccount(event);
+                const validatorPubkeys = event.validators.map(v => v.toString());
+                const isUserAValidator = validatorPubkeys.includes(publicKey.toString());
+                
+                console.log(`[ValidatorPage] A carteira ${publicKey.toString()} é um validador?`, isUserAValidator);
+                setIsValidator(isUserAValidator);
+
+            } catch (error) {
+                console.error("[ValidatorPage] ERRO ao buscar dados do validador:", error);
+                toast.error("Não foi possível carregar os dados do evento.");
+                setIsValidator(false);
+            } finally {
+                console.log('[ValidatorPage] Bloco finally: Definindo isLoading para false.');
+                setIsLoading(false);
+            }
+        };
+
+        if (connected) {
+            console.log('[ValidatorPage] Usuário está CONECTADO. Chamando checkValidatorStatus.');
+            checkValidatorStatus();
+        } else {
+            console.log('[ValidatorPage] Usuário NÃO está conectado. Definindo isLoading para false.');
+            setIsLoading(false);
+            setIsValidator(false);
+        }
+    }, [connected, publicKey, readOnlyProgram, eventAddress]);
     
-    // ✅ FUNÇÃO SIMPLIFICADA
     const fetchRecentEntries = useCallback(async () => {
         if (!isValidator) return;
         try {
             const response = await fetch(`${API_URL}/event/${eventAddress}/validated-tickets`);
             if (!response.ok) throw new Error('Falha ao buscar validações da API');
-            
             const entriesFromApi = await response.json();
-            // Os dados já vêm enriquecidos com o nome, basta setar o estado.
             setRecentEntries(entriesFromApi);
-
         } catch (error) {
             console.error("Erro ao buscar entradas recentes:", error);
         }
@@ -160,12 +191,11 @@ export function ValidatorPage() {
     useEffect(() => {
         if (isValidator) {
             fetchRecentEntries();
-            const interval = setInterval(fetchRecentEntries, 15000); // Atualiza a cada 15s
+            const interval = setInterval(fetchRecentEntries, 15000);
             return () => clearInterval(interval);
         }
     }, [isValidator, fetchRecentEntries]);
     
-    // ✅ FUNÇÃO SIMPLIFICADA
     const fetchTicketData = useCallback(async (ticketId) => {
         if (!ticketId) return;
         setIsLoading(true);
@@ -175,11 +205,8 @@ export function ValidatorPage() {
                 const errorData = await response.json();
                 throw new Error(errorData.error || "Ingresso não encontrado ou inválido.");
             }
-            
             const data = await response.json();
-            // A 'data' agora JÁ CONTÉM o 'ownerName' vindo da API.
             setTicketData(data);
-
         } catch (error) {
             toast.error(error.message);
             setScannedMint(null);
@@ -196,50 +223,62 @@ export function ValidatorPage() {
     }, [ticketToValidate, scannedMint, fetchTicketData]);
     
     const handleRedeemTicket = async () => {
-        if (!program || !ticketData || !publicKey) return;
-        const loadingToast = toast.loading("Validando ingresso na blockchain...");
+        if (!ticketData || !publicKey) return;
+        const loadingToast = toast.loading("Validando ingresso...");
         try {
-            const owner = new web3.PublicKey(ticketData.owner);
-            const nftMint = new web3.PublicKey(ticketData.ticket.nftMint);
-            const [ticketPda] = web3.PublicKey.findProgramAddressSync([Buffer.from("ticket"), new web3.PublicKey(eventAddress).toBuffer(), nftMint.toBuffer()], program.programId);
-            const nftTokenAccount = await getAssociatedTokenAddress(nftMint, owner);
+            const response = await fetch(`${API_URL}/validate-ticket`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    eventAddress,
+                    nftMint: ticketData.ticket.nftMint,
+                    validatorAddress: publicKey.toString(),
+                }),
+            });
+            const result = await response.json();
+            if (!response.ok || !result.success) {
+                throw new Error(result.details || 'Falha na validação via API.');
+            }
+            toast.success(`Ingresso de ${result.ownerName || 'participante'} validado!`, { id: loadingToast, duration: 5000 });
             
-            await program.methods.redeemTicket().accounts({ 
-                ticket: ticketPda, 
-                event: new web3.PublicKey(eventAddress), 
-                validator: publicKey, 
-                owner, 
-                nftToken: nftTokenAccount, 
-                nftMint 
-            }).rpc();
-            
-            toast.success(`Ingresso de ${ticketData.ownerName || 'participante'} validado!`, { id: loadingToast, duration: 5000 });
-            
+            const event = await readOnlyProgram.account.event.fetch(new web3.PublicKey(eventAddress));
+            setEventAccount(event);
             fetchRecentEntries();
-            fetchEventAndCheckValidator();
-
+            
             setTicketData(null);
             if (ticketToValidate) {
-                // Remove o query param da URL sem recarregar a página
-                window.history.replaceState(null, '', window.location.pathname);
+                const newParams = new URLSearchParams(searchParams);
+                newParams.delete('ticket');
+                setSearchParams(newParams, { replace: true });
             } else {
                 setScannedMint(null);
             }
         } catch (error) {
-            console.error("Erro ao validar ingresso:", error);
-            const errorMsg = error.error?.errorMessage || error.message || "Erro desconhecido.";
-            toast.error(`Falha na validação: ${errorMsg}`, { id: loadingToast });
+            console.error("Erro ao validar ingresso via API:", error);
+            toast.error(`Falha na validação: ${error.message}`, { id: loadingToast });
         }
     };
     
     // --- Telas de Estado ---
-
-    if (!publicKey) return ( <div className="flex flex-col justify-center items-center h-screen bg-slate-100 text-center p-4"> <ShieldExclamationIcon className="h-16 w-16 text-slate-500" /> <h1 className="mt-4 text-2xl font-bold">Área do Validador</h1> <p className="mt-2 text-slate-600">Conecte sua carteira para continuar.</p> <div className="mt-6"><WalletMultiButton /></div></div>);
-    if (isLoading && !ticketData) return <div className="flex justify-center items-center h-screen bg-slate-100"><ClockIcon className="h-12 w-12 text-slate-500 animate-spin"/></div>;
-    if (!isValidator) return <div className="text-center py-20 text-red-500"><h1>Acesso Negado</h1><p>A carteira conectada não é um validador autorizado.</p></div>;
+    
+    if (!connected) {
+        console.log('[ValidatorPage] Renderizando: Tela "Conecte sua carteira"');
+        return ( <div className="flex flex-col justify-center items-center h-screen bg-slate-100 text-center p-4"> <ShieldExclamationIcon className="h-16 w-16 text-slate-500" /> <h1 className="mt-4 text-2xl font-bold">Área do Validador</h1> <p className="mt-2 text-slate-600">Conecte sua carteira para continuar.</p> <div className="mt-6"><WalletMultiButton /></div></div>);
+    }
+    
+    if (isLoading) {
+        console.log('[ValidatorPage] Renderizando: Tela de LOADING (Spinner)');
+        return <div className="flex justify-center items-center h-screen bg-slate-100"><ClockIcon className="h-12 w-12 text-slate-500 animate-spin"/></div>;
+    }
+    
+    if (!isValidator) {
+        console.log('[ValidatorPage] Renderizando: Tela "Acesso Negado"');
+        return <div className="flex flex-col justify-center items-center h-screen bg-slate-100 text-center p-4 text-red-600"> <ShieldExclamationIcon className="h-16 w-16" /> <h1 className="mt-4 text-2xl font-bold">Acesso Negado</h1><p className="mt-2">A carteira conectada não é um validador autorizado para este evento.</p></div>;
+    }
     
     // --- Layout Principal ---
 
+    console.log('[ValidatorPage] Renderizando: Layout PRINCIPAL');
     return (
         <div className="bg-slate-50 min-h-screen">
             <header className="bg-white shadow-sm sticky top-0 z-10">
@@ -248,8 +287,12 @@ export function ValidatorPage() {
                         <ShieldCheckIcon className="h-8 w-8 text-indigo-600"/>
                         <div>
                             <h1 className="text-xl font-bold text-slate-800">Painel do Validador</h1>
-                            <p className="text-sm text-slate-500 font-mono hidden sm:block">{publicKey.toString()}</p>
-                            <p className="text-sm text-slate-500 font-mono sm:hidden">{publicKey.toString().slice(0, 4)}...{publicKey.toString().slice(-4)}</p>
+                            {publicKey && (
+                                <>
+                                    <p className="text-sm text-slate-500 font-mono hidden sm:block">{publicKey.toString()}</p>
+                                    <p className="text-sm text-slate-500 font-mono sm:hidden">{publicKey.toString().slice(0, 4)}...{publicKey.toString().slice(-4)}</p>
+                                </>
+                            )}
                         </div>
                     </div>
                     <WalletMultiButton />
@@ -258,41 +301,19 @@ export function ValidatorPage() {
 
             {ticketData && (
                 <div className="fixed inset-0 bg-black/60 flex justify-center items-center z-50 p-4 animate-fade-in">
-                    {/* Modal para validação via link (validador assina) */}
-                    {ticketToValidate ? (
-                        <div className="w-full max-w-md bg-white p-8 rounded-lg shadow-xl text-center">
-                            <TicketIcon className="mx-auto h-12 w-12 text-indigo-600"/>
-                            <h2 className="mt-4 text-2xl font-bold">Confirmar Validação</h2>
-                            <div className="mt-6 text-left space-y-2 bg-slate-50 p-4 rounded-md border border-slate-200">
-                                <p><strong className="text-slate-800">Dono:</strong> {ticketData.ownerName || <span className="font-mono text-xs">{ticketData.owner}</span>}</p>
-                                <p className="font-mono text-xs break-all"><strong className="text-slate-800 font-sans text-base">Ingresso:</strong> {ticketData.ticket.nftMint}</p>
-                                {ticketData.ticket.redeemed ? <p className="font-bold text-red-500">Status: JÁ VALIDADO!</p> : <p className="font-bold text-green-500">Status: PRONTO PARA VALIDAR</p>}
-                            </div>
-                            <div className="mt-6 flex flex-col gap-3">
-                                <ActionButton onClick={handleRedeemTicket} disabled={ticketData.ticket.redeemed}>Assinar e Concluir Check-in</ActionButton>
-                                <button onClick={() => window.history.replaceState(null, '', window.location.pathname)} className="text-slate-600 hover:underline">Cancelar</button>
-                            </div>
+                    <div className="w-full max-w-md bg-white p-8 rounded-lg shadow-xl text-center">
+                        <TicketIcon className="mx-auto h-12 w-12 text-indigo-600"/>
+                        <h2 className="mt-4 text-2xl font-bold">Confirmar Validação</h2>
+                        <div className="mt-6 text-left space-y-2 bg-slate-50 p-4 rounded-md border border-slate-200">
+                            <p><strong className="text-slate-800">Dono:</strong> {ticketData.ownerName || <span className="font-mono text-xs">{ticketData.owner}</span>}</p>
+                            <p className="font-mono text-xs break-all"><strong className="text-slate-800 font-sans text-base">Ingresso:</strong> {ticketData.ticket.nftMint}</p>
+                            {ticketData.ticket.redeemed ? <p className="font-bold text-red-500">Status: JÁ VALIDADO!</p> : <p className="font-bold text-green-500">Status: PRONTO PARA VALIDAR</p>}
                         </div>
-                    ) : (
-                        // Modal para validação via QR Code (participante assina)
-                        <div className="w-full max-w-md bg-white p-8 rounded-lg shadow-xl text-center">
-                            <QrCodeIcon className="mx-auto h-12 w-12 text-green-600"/>
-                            <h2 className="mt-4 text-2xl font-bold">Ingresso Encontrado!</h2>
-                            <p className="mt-2 text-slate-600">Copie o link e cole no navegador da carteira do participante para ele assinar a validação.</p>
-                            <div className="mt-6 text-left space-y-2 bg-slate-50 p-4 rounded-md">
-                                <p><strong className="text-slate-800">Dono:</strong> {ticketData.ownerName || <span className="font-mono text-xs">{ticketData.owner}</span>}</p>
-                                <p className="font-mono text-xs break-all"><strong className="text-slate-800 font-sans text-base">Ingresso:</strong> {scannedMint}</p>
-                            </div>
-                            <div className="mt-6">
-                                <label className="text-sm font-semibold text-slate-700 text-left block mb-2">Link de Validação:</label>
-                                <div className="flex gap-2">
-                                    <input type="text" readOnly value={`${window.location.origin}${window.location.pathname}?ticket=${scannedMint}`} className="w-full text-xs font-mono bg-slate-100 border-slate-300 rounded-md shadow-sm"/>
-                                    <button onClick={() => { navigator.clipboard.writeText(`${window.location.origin}${window.location.pathname}?ticket=${scannedMint}`); toast.success("Link copiado!"); }} className="p-3 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 flex-shrink-0"><ClipboardDocumentCheckIcon className="h-6 w-6" /></button>
-                                </div>
-                            </div>
-                            <button onClick={() => { setTicketData(null); setScannedMint(null); }} className="mt-6 text-slate-600 hover:underline">Voltar</button>
+                        <div className="mt-6 flex flex-col gap-3">
+                            <ActionButton onClick={handleRedeemTicket} disabled={ticketData.ticket.redeemed}>Concluir Check-in</ActionButton>
+                            <button onClick={() => { setTicketData(null); setScannedMint(null); }} className="text-slate-600 hover:underline">Cancelar</button>
                         </div>
-                    )}
+                    </div>
                 </div>
             )}
 
@@ -316,4 +337,3 @@ export function ValidatorPage() {
         </div>
     );
 }
-

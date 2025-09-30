@@ -36,12 +36,16 @@ export const TicketSuccessModal = ({ isOpen, onClose, ticketData }) => {
     const qrCodeContainerRef = useRef(null);
     const [activeTab, setActiveTab] = useState('ticket');
     const [qrCodeImage, setQrCodeImage] = useState(null);
+    const [eventImageBase64, setEventImageBase64] = useState(null);
+    const [isLoadingPdfAssets, setIsLoadingPdfAssets] = useState(true);
 
     useEffect(() => {
         if (isOpen) {
             setActiveTab('ticket');
         } else {
             setQrCodeImage(null);
+            setEventImageBase64(null);
+            setIsLoadingPdfAssets(true);
         }
     }, [isOpen]);
 
@@ -67,6 +71,62 @@ export const TicketSuccessModal = ({ isOpen, onClose, ticketData }) => {
         }
     }, [ticketData, activeTab, isOpen]);
 
+    // ✅ useEffect ATUALIZADO com a conversão de WEBP para JPEG
+    useEffect(() => {
+        if (isOpen && ticketData?.eventImage) {
+            setIsLoadingPdfAssets(true);
+            
+            const fetchAndConvertImage = async () => {
+                try {
+                    const response = await fetch(ticketData.eventImage);
+                    if (!response.ok) throw new Error('Falha ao baixar imagem do evento');
+                    const blob = await response.blob();
+
+                    // Lógica de conversão usando Canvas
+                    const convertedImage = await new Promise((resolve, reject) => {
+                        const img = new Image();
+                        const url = URL.createObjectURL(blob);
+                        
+                        img.onload = () => {
+                            const canvas = document.createElement('canvas');
+                            canvas.width = img.naturalWidth;
+                            canvas.height = img.naturalHeight;
+                            const ctx = canvas.getContext('2d');
+                            
+                            ctx.fillStyle = '#FFFFFF';
+                            ctx.fillRect(0, 0, canvas.width, canvas.height);
+                            ctx.drawImage(img, 0, 0);
+                            
+                            const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+                            
+                            URL.revokeObjectURL(url);
+                            resolve(dataUrl);
+                        };
+
+                        img.onerror = (error) => {
+                            URL.revokeObjectURL(url);
+                            reject(error);
+                        };
+
+                        img.src = url;
+                    });
+                    
+                    setEventImageBase64(convertedImage);
+
+                } catch (error) {
+                    console.error("Erro no processamento da imagem do evento:", error);
+                    setEventImageBase64(null);
+                } finally {
+                    setIsLoadingPdfAssets(false);
+                }
+            };
+            
+            fetchAndConvertImage();
+        } else if (isOpen) {
+            setIsLoadingPdfAssets(false);
+        }
+    }, [isOpen, ticketData]);
+
     if (!isOpen || !ticketData) {
         return null;
     }
@@ -90,7 +150,7 @@ export const TicketSuccessModal = ({ isOpen, onClose, ticketData }) => {
                 
                 {seedPhrase && (
                      <div className="mt-4 text-sm text-red-700 bg-red-50 p-3 rounded-lg flex items-start text-left">
-                        <ExclamationTriangleIcon className="h-5 w-5 text-red-500 mr-3 mt-0.5 flex-shrink-0" />
+                        <ExclamationTriangleIcon className="h-5 w-5 text-red-500 mr-3 mt-0-5 flex-shrink-0" />
                         <div>
                             <span className="font-semibold">Atenção:</span> Sua chave de acesso foi adicionada ao seu PDF para backup. Guarde este arquivo em um local muito seguro.
                         </div>
@@ -105,7 +165,13 @@ export const TicketSuccessModal = ({ isOpen, onClose, ticketData }) => {
 
                 <div className="bg-white p-6 rounded-b-lg border border-t-0 border-slate-200">
                     {activeTab === 'ticket' && (
-                        <TicketTabContent ticketData={ticketData} qrCodeContainerRef={qrCodeContainerRef} qrCodeImage={qrCodeImage} />
+                        <TicketTabContent 
+                            ticketData={ticketData} 
+                            qrCodeContainerRef={qrCodeContainerRef} 
+                            qrCodeImage={qrCodeImage}
+                            eventImageBase64={eventImageBase64}
+                            isLoadingPdfAssets={isLoadingPdfAssets}
+                        />
                     )}
                     {activeTab === 'certificate' && (
                          <CertificateTabContent certificateLink={certificateLink} handleCopy={handleCopy} />
@@ -123,9 +189,9 @@ export const TicketSuccessModal = ({ isOpen, onClose, ticketData }) => {
     );
 };
 
-// --- Sub-componentes para cada Aba (para organização) ---
+// --- Sub-componentes para cada Aba ---
 
-const TicketTabContent = ({ ticketData, qrCodeContainerRef, qrCodeImage }) => {
+const TicketTabContent = ({ ticketData, qrCodeContainerRef, qrCodeImage, eventImageBase64, isLoadingPdfAssets }) => {
     const { mintAddress, eventLocation } = ticketData;
 
     const formatFullAddress = (location) => {
@@ -153,11 +219,17 @@ const TicketTabContent = ({ ticketData, qrCodeContainerRef, qrCodeImage }) => {
             <p className="text-xs text-slate-400 mt-2 font-mono break-all">{mintAddress}</p>
             
             <div className="mt-6">
-                {qrCodeImage ? (
+                {(isLoadingPdfAssets || !qrCodeImage) ? (
+                    <button disabled className="w-full flex items-center justify-center gap-2 px-4 py-3 border border-transparent rounded-md shadow-sm text-base font-medium text-white bg-slate-400 cursor-not-allowed">
+                        Preparando PDF...
+                    </button>
+                ) : (
                     <PDFDownloadLink
-                        document={<TicketPDF ticketData={ticketData} qrCodeImage={qrCodeImage} brandLogoImage="https://red-obedient-stingray-854.mypinata.cloud/ipfs/bafkreih7ofsa246z5vnjvrol6xk5tpj4zys42tcaotxq7tp7ptgraalrya"
-
- />}
+                        document={<TicketPDF 
+                            ticketData={{ ...ticketData, eventImage: eventImageBase64 }} 
+                            qrCodeImage={qrCodeImage} 
+                            brandLogoImage="https://red-obedient-stingray-854.mypinata.cloud/ipfs/bafkreih7ofsa246z5vnjvrol6xk5tpj4zys42tcaotxq7tp7ptgraalrya"
+                         />}
                         fileName={`Ingresso_${ticketData.eventName.replace(/\s/g, '_')}.pdf`}
                         className="w-full flex items-center justify-center gap-2 px-4 py-3 border border-transparent rounded-md shadow-sm text-base font-medium text-white bg-indigo-600 hover:bg-indigo-700"
                     >
@@ -167,10 +239,6 @@ const TicketTabContent = ({ ticketData, qrCodeContainerRef, qrCodeImage }) => {
                             </>
                         )}
                     </PDFDownloadLink>
-                ) : (
-                    <button disabled className="w-full flex items-center justify-center gap-2 px-4 py-3 border border-transparent rounded-md shadow-sm text-base font-medium text-white bg-slate-400 cursor-not-allowed">
-                        Preparando PDF...
-                    </button>
                 )}
             </div>
         </div>
@@ -206,6 +274,3 @@ const KeyTabContent = ({ seedPhrase, words, handleCopy }) => (
         </button>
     </div>
 );
-
-
-

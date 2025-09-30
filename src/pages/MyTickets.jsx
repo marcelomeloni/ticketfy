@@ -1,56 +1,67 @@
 import { useState, useMemo, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { useConnection, useAnchorWallet } from '@solana/wallet-adapter-react';
-import { Program, web3, BN } from '@coral-xyz/anchor';
+import { useConnection } from '@solana/wallet-adapter-react';
+import { Program, web3, BN, AnchorProvider } from '@coral-xyz/anchor';
 import { getAssociatedTokenAddress } from '@solana/spl-token';
 import toast from 'react-hot-toast';
-import ReactDOM from 'react-dom'; // ✅ ALTERAÇÃO: Importa o ReactDOM legado para usar o callback
-import QRCode from 'react-qr-code';
-import jsPDF from 'jspdf';
+import { pdf } from '@react-pdf/renderer';
+import QRCode from 'qrcode';
 
+import { useAppWallet } from '@/hooks/useAppWallet';
+import { TicketPDF } from '@/components/pdf/TicketPDF';
 import idl from '@/idl/ticketing_system.json';
-import { createReadOnlyProgram, createWritableProgram } from '@/lib/program';
+import { PROGRAM_ID, API_URL } from '@/lib/constants';
 import { AcademicCapIcon, ArrowDownTrayIcon, CalendarIcon, MapPinIcon, TagIcon } from '@heroicons/react/24/outline';
 
 // --- Constantes ---
-const TICKET_ACCOUNT_OWNER_FIELD_OFFSET = 72;
 const LISTING_SEED = Buffer.from("listing");
 const ESCROW_SEED = Buffer.from("escrow");
 const REFUND_RESERVE_SEED = Buffer.from("refund_reserve");
 const APP_BASE_URL = "https://ticketfy.onrender.com";
 
+
 export function MyTickets() {
     const { connection } = useConnection();
-    const wallet = useAnchorWallet();
+    const wallet = useAppWallet();
     const [tickets, setTickets] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isSellModalOpen, setIsSellModalOpen] = useState(false);
     const [selectedTicket, setSelectedTicket] = useState(null);
-    const [listedMints, setListedMints] = useState(new Set());
     const [isSubmitting, setIsSubmitting] = useState(false);
 
-    const readOnlyProgram = useMemo(() => createReadOnlyProgram(connection), [connection]);
-    const writableProgram = useMemo(() => createWritableProgram(connection, wallet), [connection, wallet]);
+    const program = useMemo(() => {
+        const anchorWallet = (wallet.connected && wallet.publicKey) ? {
+            publicKey: wallet.publicKey,
+            signTransaction: wallet.signTransaction,
+            signAllTransactions: wallet.signAllTransactions,
+        } : {};
+        const provider = new AnchorProvider(connection, anchorWallet, AnchorProvider.defaultOptions());
+        return new Program(idl, PROGRAM_ID, provider);
+    }, [connection, wallet]);
 
     const fetchAllData = async () => {
-        if (!readOnlyProgram || !wallet) {
+        if (!wallet.publicKey) {
+            setTickets([]);
             setIsLoading(false);
             return;
         }
         setIsLoading(true);
         try {
-            const userTicketAccounts = await readOnlyProgram.account.ticket.all([
-                { memcmp: { offset: TICKET_ACCOUNT_OWNER_FIELD_OFFSET, bytes: wallet.publicKey.toBase58() } }
-            ]);
-            setTickets(userTicketAccounts);
+            const response = await fetch(`${API_URL}/user-tickets/${wallet.publicKey.toString()}`);
+            if (!response.ok) {
+                throw new Error('Falha ao buscar ingressos na API.');
+            }
+            const data = await response.json();
 
-            const allListings = await readOnlyProgram.account.marketplaceListing.all();
-            const activeListings = allListings.filter(l => l.account.price > 0);
-            const listedNftMints = new Set(activeListings.map(l => l.account.nftMint.toString()));
-            setListedMints(listedNftMints);
+            if (data.success) {
+                setTickets(data.tickets);
+            } else {
+                throw new Error(data.error || 'Erro desconhecido da API.');
+            }
         } catch (error) {
-            console.error("Erro ao buscar dados:", error);
+            console.error("Erro ao buscar dados via API:", error);
             toast.error("Não foi possível carregar seus ingressos.");
+            setTickets([]);
         } finally {
             setIsLoading(false);
         }
@@ -58,32 +69,32 @@ export function MyTickets() {
 
     useEffect(() => {
         fetchAllData();
-    }, [readOnlyProgram, wallet]);
+    }, [wallet.publicKey]);
 
     const openSellModal = (ticket) => { setSelectedTicket(ticket); setIsSellModalOpen(true); };
     const closeSellModal = () => { setSelectedTicket(null); setIsSellModalOpen(false); };
 
     const handleListForSale = async (priceInSol) => {
-        if (!writableProgram || !wallet || !selectedTicket) return;
+        if (!program || !wallet.connected || !selectedTicket) return;
         if (priceInSol <= 0) { toast.error("O preço deve ser maior que zero."); return; }
         
         setIsSubmitting(true);
         const loadingToast = toast.loading("Listando seu ingresso...");
         try {
             const priceInLamports = Math.round(priceInSol * web3.LAMPORTS_PER_SOL);
-            const nftMint = selectedTicket.account.nftMint;
+            const nftMint = new web3.PublicKey(selectedTicket.account.nftMint);
             
             const sellerTokenAccount = await getAssociatedTokenAddress(nftMint, wallet.publicKey);
-            const [listingPda] = web3.PublicKey.findProgramAddressSync([LISTING_SEED, nftMint.toBuffer()], writableProgram.programId);
-            const [escrowAccountPda] = web3.PublicKey.findProgramAddressSync([ESCROW_SEED, nftMint.toBuffer()], writableProgram.programId);
+            const [listingPda] = web3.PublicKey.findProgramAddressSync([LISTING_SEED, nftMint.toBuffer()], program.programId);
+            const [escrowAccountPda] = web3.PublicKey.findProgramAddressSync([ESCROW_SEED, nftMint.toBuffer()], program.programId);
             const escrowTokenAccount = await getAssociatedTokenAddress(nftMint, escrowAccountPda, true);
             
-            await writableProgram.methods
+            await program.methods
                 .listForSale(new BN(priceInLamports))
                 .accounts({
                     seller: wallet.publicKey,
-                    event: selectedTicket.account.event,
-                    ticket: selectedTicket.publicKey,
+                    event: new web3.PublicKey(selectedTicket.account.event),
+                    ticket: new web3.PublicKey(selectedTicket.publicKey),
                     nftMint: nftMint,
                     sellerTokenAccount: sellerTokenAccount,
                     listing: listingPda,
@@ -103,23 +114,22 @@ export function MyTickets() {
     };
 
     const handleCancelListing = async (ticket) => {
-        if (!writableProgram || !wallet) return;
-
+        if (!program || !wallet.connected) return;
         setIsSubmitting(true);
         const loadingToast = toast.loading("Cancelando listagem...");
         try {
-            const nftMint = ticket.account.nftMint;
-            const [listingPda] = web3.PublicKey.findProgramAddressSync([LISTING_SEED, nftMint.toBuffer()], writableProgram.programId);
-            const [escrowAccountPda] = web3.PublicKey.findProgramAddressSync([ESCROW_SEED, nftMint.toBuffer()], writableProgram.programId);
+            const nftMint = new web3.PublicKey(ticket.account.nftMint);
+            const [listingPda] = web3.PublicKey.findProgramAddressSync([LISTING_SEED, nftMint.toBuffer()], program.programId);
+            const [escrowAccountPda] = web3.PublicKey.findProgramAddressSync([ESCROW_SEED, nftMint.toBuffer()], program.programId);
             const sellerTokenAccount = await getAssociatedTokenAddress(nftMint, wallet.publicKey);
             const escrowTokenAccount = await getAssociatedTokenAddress(nftMint, escrowAccountPda, true);
             
-            await writableProgram.methods
+            await program.methods
                 .cancelListing()
                 .accounts({
                     seller: wallet.publicKey,
                     listing: listingPda,
-                    ticket: ticket.publicKey,
+                    ticket: new web3.PublicKey(ticket.publicKey),
                     nftMint: nftMint,
                     escrowAccount: escrowAccountPda,
                     sellerTokenAccount: sellerTokenAccount,
@@ -128,7 +138,6 @@ export function MyTickets() {
 
             toast.success("Listagem cancelada! Atualizando...", { id: loadingToast });
             setTimeout(() => { fetchAllData() }, 2500);
-
         } catch (error) {
             console.error("Erro ao cancelar listagem:", error);
             toast.error(`Falha ao cancelar: Verifique o console.`, { id: loadingToast });
@@ -138,25 +147,23 @@ export function MyTickets() {
     };
 
     const handleClaimRefund = async (ticket) => {
-        if (!writableProgram || !wallet) return;
-
+        if (!program || !wallet.connected) return;
         setIsSubmitting(true);
         const loadingToast = toast.loading("Processando seu reembolso...");
         try {
-            const eventKey = ticket.account.event;
-            const nftMint = ticket.account.nftMint;
+            const eventKey = new web3.PublicKey(ticket.account.event);
+            const nftMint = new web3.PublicKey(ticket.account.nftMint);
 
             const [refundReservePda] = web3.PublicKey.findProgramAddressSync(
-                [REFUND_RESERVE_SEED, eventKey.toBuffer()],
-                writableProgram.programId
+                [REFUND_RESERVE_SEED, eventKey.toBuffer()], program.programId
             );
             const nftTokenAccount = await getAssociatedTokenAddress(nftMint, wallet.publicKey);
-            await writableProgram.methods
+            await program.methods
                 .claimRefund()
                 .accounts({
                     event: eventKey,
                     buyer: wallet.publicKey,
-                    ticket: ticket.publicKey,
+                    ticket: new web3.PublicKey(ticket.publicKey),
                     nftToken: nftTokenAccount,
                     nftMint: nftMint,
                     refundReserve: refundReservePda,
@@ -164,7 +171,6 @@ export function MyTickets() {
                 .rpc();
             toast.success("Reembolso solicitado com sucesso! O ingresso foi queimado.", { id: loadingToast, duration: 4000 });
             setTimeout(() => { fetchAllData() }, 2500);
-
         } catch (error) {
             console.error("Erro ao solicitar reembolso:", error);
             toast.error(`Falha ao solicitar reembolso: Verifique o console.`, { id: loadingToast });
@@ -175,11 +181,11 @@ export function MyTickets() {
 
     const renderContent = () => {
         if (isLoading) return <div className="text-center text-slate-500">Carregando seus ingressos...</div>;
-        if (!wallet) return <div className="text-center text-slate-500">Conecte sua carteira para ver seus ingressos.</div>;
+        if (!wallet.connected) return <div className="text-center text-slate-500">Conecte sua carteira ou faça login para ver seus ingressos.</div>;
         if (tickets.length === 0) return (
             <div className="text-center text-slate-500">
                 <p>Você ainda não possui ingressos.</p>
-                <Link to="/" className="text-indigo-600 hover:underline mt-2 inline-block">Ver eventos</Link>
+                <Link to="/events" className="text-indigo-600 hover:underline mt-2 inline-block">Ver eventos</Link>
             </div>
         );
 
@@ -187,9 +193,8 @@ export function MyTickets() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
                 {tickets.map(ticket => (
                     <TicketCard 
-                        key={ticket.account.nftMint.toString()} 
+                        key={ticket.publicKey} 
                         ticket={ticket}
-                        isListed={listedMints.has(ticket.account.nftMint.toString())}
                         isSubmitting={isSubmitting}
                         onSellClick={() => openSellModal(ticket)}
                         onCancelClick={() => handleCancelListing(ticket)}
@@ -212,7 +217,6 @@ export function MyTickets() {
                     isOpen={isSellModalOpen}
                     onClose={closeSellModal}
                     onSubmit={handleListForSale}
-                    ticket={selectedTicket}
                     isSubmitting={isSubmitting}
                 />
             )}
@@ -220,178 +224,116 @@ export function MyTickets() {
     );
 }
 
-function TicketCard({ ticket, isListed, isSubmitting, onSellClick, onCancelClick, onRefundClick }) {
-    const ticketData = ticket.account;
-    const { connection } = useConnection();
-    const [eventData, setEventData] = useState(null);
-    const [isLoading, setIsLoading] = useState(true);
-    const program = useMemo(() => createReadOnlyProgram(connection), [connection]);
+function TicketCard({ ticket, isSubmitting, onSellClick, onCancelClick, onRefundClick }) {
+    const { account: ticketData, event: eventDetails, isListed } = ticket;
 
-    useEffect(() => {
-        const fetchEventDetails = async () => {
-            if (!program || !ticketData.event) return;
-            setIsLoading(true);
-            try {
-                const onChainEvent = await program.account.event.fetch(ticketData.event);
-                const metadataUrl = onChainEvent.metadataUri.startsWith('http') ? onChainEvent.metadataUri : `https://${onChainEvent.metadataUri}`;
-                const response = await fetch(metadataUrl);
-                if (!response.ok) throw new Error(`Falha ao buscar metadados`);
-                const offChainMetadata = await response.json();
-                setEventData({ ...onChainEvent, ...offChainMetadata, publicKey: ticketData.event });
-            } catch (error) {
-                console.error("Erro ao buscar detalhes do evento:", error);
-            } finally {
-                setIsLoading(false);
-            }
-        };
-        fetchEventDetails();
-    }, [program, ticketData.event]);
+    // ✅ Função de download 100% corrigida com pré-carregamento de imagens
+    // Dentro do componente `TicketCard` no seu arquivo MyTickets.jsx
 
-    const handleDownload = () => {
-        const tempContainer = document.createElement("div");
-        tempContainer.style.position = 'absolute';
-        tempContainer.style.left = '-9999px';
-        document.body.appendChild(tempContainer);
+const handleDownload = async () => {
+    if (!eventDetails) return toast.error("Detalhes do evento não encontrados.");
+    const loadingToast = toast.loading('Gerando PDF do ingresso...');
 
-        const onRender = () => {
-            const svgElement = tempContainer.querySelector('svg');
-            if (!svgElement) {
-                toast.error("Erro ao gerar QR Code.");
-                document.body.removeChild(tempContainer);
-                return;
-            }
-            
-            const loadingToast = toast.loading('Gerando PDF do ingresso...');
-            const svgData = new XMLSerializer().serializeToString(svgElement);
-            const img = new Image();
-            const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
-            const url = URL.createObjectURL(svgBlob);
+    try {
+        // Passo A: Gerar a imagem do QR Code como Base64 (Data URL) - Inalterado
+        const qrCodeImage = await QRCode.toDataURL(ticketData.nftMint.toString(), {
+            width: 512,
+            margin: 1,
+        });
 
-            img.onload = () => {
-                const canvas = document.createElement('canvas');
-                canvas.width = img.width;
-                canvas.height = img.height;
-                const ctx = canvas.getContext('2d');
-                ctx.drawImage(img, 0, 0);
-                const qrImageDataUrl = canvas.toDataURL('image/png');
-                URL.revokeObjectURL(url);
+        // ✅ PASSO B ATUALIZADO: Baixar a imagem do evento e CONVERTÊ-LA para JPEG
+        let eventImageBase64 = null;
+        if (eventDetails.metadata.image) {
+            const response = await fetch(eventDetails.metadata.image);
+            if (!response.ok) throw new Error('Falha ao buscar a imagem do evento.');
+            const blob = await response.blob();
 
-                const doc = new jsPDF({
-                    orientation: 'portrait', unit: 'mm', format: 'a5'
-                });
-
-                const PAGE_WIDTH = doc.internal.pageSize.getWidth();
-                const PAGE_HEIGHT = doc.internal.pageSize.getHeight();
-                const MARGIN = 15;
-                const PRIMARY_COLOR = '#4F46E5';
-                const TEXT_COLOR_DARK = '#1E293B';
-                const TEXT_COLOR_LIGHT = '#64748B';
-
-                doc.setFillColor(PRIMARY_COLOR);
-                doc.rect(0, 0, PAGE_WIDTH, 30, 'F');
-                doc.setFont('helvetica', 'bold');
-                doc.setFontSize(24);
-                doc.setTextColor('#FFFFFF');
-                doc.text('Ticketfy', MARGIN, 15);
-                doc.setFont('helvetica', 'normal');
-                doc.setFontSize(10);
-                doc.text('O Futuro dos Eventos é Descentralizado', MARGIN, 23);
-
-                let currentY = 45;
-                doc.setFontSize(12);
-                doc.setTextColor(TEXT_COLOR_LIGHT);
-                doc.text('Ingresso Válido Para:', MARGIN, currentY);
-                currentY += 8;
-                doc.setFontSize(20);
-                doc.setFont('helvetica', 'bold');
-                doc.setTextColor(TEXT_COLOR_DARK);
-                doc.text(eventData.name || 'Nome do Evento', MARGIN, currentY, { maxWidth: PAGE_WIDTH - MARGIN * 2 });
-                currentY += 15;
-                doc.setFontSize(12);
-                doc.setFont('helvetica', 'normal');
-                doc.setTextColor(TEXT_COLOR_DARK);
-                doc.text(`Data: ${new Date(eventData.properties.dateTime.start).toLocaleString('pt-BR')}`, MARGIN, currentY);
-                currentY += 7;
-                doc.text(`Local: ${eventData.properties.location.venueName || 'Online'}`, MARGIN, currentY);
-                currentY += 15;
-
-                const qrSize = 65;
-                const qrX = (PAGE_WIDTH - qrSize) / 2;
-                doc.addImage(qrImageDataUrl, 'PNG', qrX, currentY, qrSize, qrSize);
-                currentY += qrSize + 5;
-                doc.setFontSize(11);
-                doc.setTextColor(TEXT_COLOR_LIGHT);
-                doc.text('Apresente este QR Code na entrada do evento.', PAGE_WIDTH / 2, currentY, { align: 'center' });
-                currentY += 15;
+            // Lógica de conversão usando Canvas
+            eventImageBase64 = await new Promise((resolve, reject) => {
+                const img = new Image();
+                const url = URL.createObjectURL(blob); // Cria uma URL temporária para a imagem
                 
-                doc.setLineDashPattern([2, 2], 0);
-                doc.setDrawColor(TEXT_COLOR_LIGHT);
-                doc.line(MARGIN, currentY, PAGE_WIDTH - MARGIN, currentY);
-                doc.setLineDashPattern([], 0);
-                currentY += 10;
-                doc.setFontSize(14);
-                doc.setFont('helvetica', 'bold');
-                doc.setTextColor(PRIMARY_COLOR);
-                doc.text('Seu Certificado Digital', PAGE_WIDTH / 2, currentY, { align: 'center' });
-                currentY += 7;
-                doc.setFontSize(10);
-                doc.setFont('helvetica', 'normal');
-                doc.setTextColor(TEXT_COLOR_DARK);
-                doc.text('Após o evento, seu certificado estará disponível em:', PAGE_WIDTH / 2, currentY, { align: 'center' });
-                currentY += 7;
-                const certificateLink = `${APP_BASE_URL}/certificate/${ticketData.nftMint.toString()}`;
-                doc.setTextColor('#1D4ED8');
-                doc.textWithLink(certificateLink, PAGE_WIDTH / 2, currentY, { url: certificateLink, align: 'center' });
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = img.naturalWidth;
+                    canvas.height = img.naturalHeight;
+                    const ctx = canvas.getContext('2d');
+                    
+                    // Adiciona um fundo branco. Importante se a imagem original (PNG/WEBP) tiver transparência.
+                    ctx.fillStyle = '#FFFFFF';
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    
+                    // Desenha a imagem (WEBP, PNG, etc.) no canvas
+                    ctx.drawImage(img, 0, 0);
+                    
+                    // Converte o conteúdo do canvas para JPEG em formato Base64 com 90% de qualidade
+                    const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+                    
+                    URL.revokeObjectURL(url); // Limpa a URL temporária da memória
+                    resolve(dataUrl); // Retorna a string Base64 do JPEG
+                };
 
-                const footerY = PAGE_HEIGHT - 18;
-                doc.setFillColor('#F1F5F9');
-                doc.rect(0, footerY - 5, PAGE_WIDTH, 23, 'F');
-                doc.setFontSize(8);
-                doc.setFont('courier', 'italic');
-                doc.setTextColor(TEXT_COLOR_LIGHT);
-                doc.text('ID do Ingresso (Mint Address):', MARGIN, footerY);
-                doc.text(ticketData.nftMint.toString(), MARGIN, footerY + 4);
-                doc.setFont('helvetica', 'bold');
-                doc.setTextColor(PRIMARY_COLOR);
-                doc.text('www.ticketfy.com', PAGE_WIDTH - MARGIN, footerY + 2, { align: 'right' });
+                img.onerror = (error) => {
+                    URL.revokeObjectURL(url);
+                    reject(error);
+                };
 
-                doc.save(`ingresso-ticketfy-${ticketData.nftMint.toString().slice(0, 6)}.pdf`);
-                toast.success('Seu ingresso foi gerado com sucesso!', { id: loadingToast });
-                
-                document.body.removeChild(tempContainer);
-            };
-            
-            img.onerror = () => { 
-                toast.error('Falha ao carregar a imagem do QR Code.', { id: loadingToast });
-                document.body.removeChild(tempContainer);
-            };
+                img.src = url; // Inicia o carregamento da imagem
+            });
+        }
 
-            img.src = url;
+        // Passo C: Montar os dados para o PDF
+        const pdfData = {
+            eventName: eventDetails.metadata.name,
+            eventDate: eventDetails.metadata.properties.dateTime.start,
+            eventLocation: eventDetails.metadata.properties.location,
+            mintAddress: ticketData.nftMint.toString(),
+            eventImage: eventImageBase64, // Passando a imagem JÁ CONVERTIDA
         };
 
-        // ✅ ALTERAÇÃO: Usa ReactDOM.render com callback para garantir que o QR Code exista antes de continuar.
-        ReactDOM.render(<QRCode value={ticketData.nftMint.toString()} size={256} />, tempContainer, onRender);
-    };
-
-    if (isLoading || !eventData) {
+        // Passo D: Gerar o blob do PDF e iniciar o download (Inalterado)
+        const blob = await pdf(
+            <TicketPDF 
+                ticketData={pdfData} 
+                qrCodeImage={qrCodeImage}
+                brandLogoImage="https://red-obedient-stingray-854.mypinata.cloud/ipfs/bafkreih7ofsa246z5vnjvrol6xk5tpj4zys42tcaotxq7tp7ptgraalrya"
+            />
+        ).toBlob();
+        
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `Ingresso_${pdfData.eventName.replace(/\s/g, '_')}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        toast.success('Ingresso baixado com sucesso!', { id: loadingToast });
+    } catch (error) {
+        console.error('Erro ao gerar PDF:', error);
+        toast.error('Erro ao gerar PDF. Verifique o console.', { id: loadingToast });
+    }
+};
+    
+    if (!eventDetails) {
         return (
-            <div className="bg-white rounded-xl shadow-lg overflow-hidden h-[420px]">
-                <div className="h-48 bg-slate-200 animate-pulse"></div>
-                <div className="p-6 space-y-4"><div className="h-6 bg-slate-200 rounded w-3/4"></div><div className="h-4 bg-slate-200 rounded w-1/2"></div><div className="h-4 bg-slate-200 rounded w-1/3"></div><div className="pt-4 mt-auto"><div className="h-10 bg-slate-200 rounded-lg"></div></div></div>
+            <div className="bg-white rounded-xl shadow-lg overflow-hidden h-[420px] p-6 flex flex-col justify-center items-center">
+                 <p className="text-slate-500">Não foi possível carregar os detalhes deste ingresso.</p>
             </div>
         );
     }
     
+    const eventData = { ...eventDetails.account, ...eventDetails.metadata, publicKey: new web3.PublicKey(ticketData.event) };
     const eventDate = new Date(eventData.properties.dateTime.start).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' });
     const location = eventData.properties.location.venueName || 'Online';
     const isEventCanceled = eventData.canceled;
-    const isFreeTicket = ticketData.pricePaid.toNumber() === 0;
+    const isFreeTicket = new BN(ticketData.pricePaid).toNumber() === 0;
 
     const getStatusInfo = () => {
         if (isEventCanceled) return { text: 'Evento Cancelado', color: 'bg-red-100 text-red-800' };
         if (ticketData.redeemed) return { text: 'Utilizado', color: 'bg-slate-100 text-slate-800' };
         if (isListed) return { text: 'À Venda', color: 'bg-blue-100 text-blue-800' };
-        if (isFreeTicket) return { text: 'Ingresso Gratuito', color: 'bg-green-100 text-green-800' };
         return { text: 'Disponível', color: 'bg-green-100 text-green-800' };
     };
 
@@ -400,19 +342,17 @@ function TicketCard({ ticket, isListed, isSubmitting, onSellClick, onCancelClick
     
     const renderActionArea = () => {
         if (isFreeTicket) {
-            return (
-                <div className="flex flex-col gap-2">
-                    <Link to={certificateUrl} className={`w-full text-center px-4 py-2 rounded-lg font-bold transition flex items-center justify-center gap-2 ${ticketData.redeemed ? 'bg-indigo-600 text-white hover:bg-indigo-700' : 'bg-slate-200 text-slate-500 cursor-not-allowed'}`} disabled={!ticketData.redeemed}>
-                        <AcademicCapIcon className="h-5 w-5"/>
-                        Ver Certificado
-                    </Link>
-                    <button onClick={handleDownload} className="w-full bg-slate-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-slate-700 transition flex items-center justify-center gap-2">
-                        <ArrowDownTrayIcon className="h-5 w-5"/>
-                        Baixar Ingresso
-                    </button>
-                    {!ticketData.redeemed && <p className="text-xs text-center text-slate-500 mt-1">Certificado disponível após check-in.</p>}
-                </div>
-            );
+             return (
+                 <div className="flex flex-col gap-2">
+                     <Link to={certificateUrl} className={`w-full text-center px-4 py-2 rounded-lg font-bold transition flex items-center justify-center gap-2 ${ticketData.redeemed ? 'bg-indigo-600 text-white hover:bg-indigo-700' : 'bg-slate-200 text-slate-500 cursor-not-allowed'}`} disabled={!ticketData.redeemed}>
+                          <AcademicCapIcon className="h-5 w-5"/> Ver Certificado
+                     </Link>
+                     <button onClick={handleDownload} className="w-full bg-slate-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-slate-700 transition flex items-center justify-center gap-2">
+                          <ArrowDownTrayIcon className="h-5 w-5"/> Baixar Ingresso
+                     </button>
+                     {!ticketData.redeemed && <p className="text-xs text-center text-slate-500 mt-1">Certificado disponível após check-in.</p>}
+                 </div>
+             );
         }
 
         if (isEventCanceled && isListed) {

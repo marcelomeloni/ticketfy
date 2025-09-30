@@ -1,9 +1,8 @@
 import React from 'react';
 import { Page, Text, View, Document, StyleSheet, Image, Link } from '@react-pdf/renderer';
 
-// --- Estilos Ajustados ---
+// --- Estilos ---
 const styles = StyleSheet.create({
-  // Documento
   document: {
     fontFamily: 'Helvetica',
   },
@@ -14,53 +13,72 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
   },
   
-  // Header
   header: {
     backgroundColor: '#4F46E5',
-    paddingVertical: 18,
-    paddingHorizontal: 22,
+    paddingVertical: 15,
+    paddingHorizontal: 20,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    minHeight: 80,
+  },
+  
+  // ✅ Layout do header mais robusto com larguras definidas
+  brandContainer: {
+    width: '60%',
   },
   
   brandSection: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 7,
+    marginBottom: 5,
   },
   
   brandLogo: {
-    width: 32,
-    height: 32,
+    width: 28,
+    height: 28,
     marginRight: 8,
   },
   
   brandTitle: {
-    fontSize: 19,
+    fontSize: 16,
     color: '#FFFFFF',
     fontFamily: 'Helvetica-Bold',
-    letterSpacing: 0.4,
+    letterSpacing: 0.3,
   },
   
   ticketType: {
-    fontSize: 9,
+    fontSize: 8,
     color: '#E0E7FF',
     textTransform: 'uppercase',
-    letterSpacing: 0.9,
-    marginBottom: 3,
+    letterSpacing: 0.7,
+    marginBottom: 2,
   },
   
   eventName: {
-    fontSize: 18,
+    fontSize: 14,
     color: '#FFFFFF',
     fontFamily: 'Helvetica-Bold',
     lineHeight: 1.2,
   },
   
+  eventImageContainer: {
+    width: '35%',
+    alignItems: 'flex-end',
+  },
+  
+  // ✅ Estilo da imagem final: sem borda para evitar riscos caso algo falhe
+  eventImage: {
+    maxWidth: 120,
+    maxHeight: 60,
+    objectFit: 'contain', // Garante que a imagem caiba inteira
+  },
+
   // Corpo do ingresso
   ticketBody: {
     padding: 22,
   },
   
-  // Grid de informações
   infoGrid: {
     flexDirection: 'row',
     marginBottom: 14,
@@ -89,7 +107,6 @@ const styles = StyleSheet.create({
     lineHeight: 1.25,
   },
   
-  // Seção QR Code
   qrSection: {
     alignItems: 'center',
     marginVertical: 14,
@@ -104,9 +121,6 @@ const styles = StyleSheet.create({
     width: 110,
     height: 110,
     marginBottom: 10,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    borderRadius: 5,
   },
   
   qrLabel: {
@@ -126,7 +140,6 @@ const styles = StyleSheet.create({
     lineHeight: 1.15,
   },
   
-  // Footer
   footer: {
     marginTop: 18,
     paddingTop: 14,
@@ -178,7 +191,6 @@ const styles = StyleSheet.create({
     lineHeight: 1.3,
   },
   
-  // Alertas de segurança
   warningBox: {
     backgroundColor: '#FEF2F2',
     borderLeftWidth: 4,
@@ -201,7 +213,6 @@ const styles = StyleSheet.create({
     lineHeight: 1.4,
   },
   
-  // Seções
   seedSection: {
     marginBottom: 20,
   },
@@ -246,7 +257,6 @@ const styles = StyleSheet.create({
     fontFamily: 'Helvetica-Bold',
   },
   
-  // Seção da private key
   privateKeySection: {
     marginBottom: 15,
   },
@@ -274,7 +284,6 @@ const styles = StyleSheet.create({
     wordBreak: 'break-all',
   },
   
-  // Aviso final
   finalNotice: {
     backgroundColor: '#F0FDF4',
     padding: 15,
@@ -292,12 +301,12 @@ const styles = StyleSheet.create({
   },
 });
 
-// --- COMPONENTE PRINCIPAL ATUALIZADO ---
+// --- COMPONENTE PRINCIPAL ---
 
 export const TicketPDF = ({ ticketData, qrCodeImage, brandLogoImage }) => {
-  const { eventName, eventDate, eventLocation, mintAddress, seedPhrase, privateKey } = ticketData;
+  // A `eventImage` agora é uma string Base64 (Data URI) passada pelo TicketSuccessModal
+  const { eventName, eventDate, eventLocation, mintAddress, seedPhrase, privateKey, eventImage } = ticketData;
 
-  // Funções auxiliares para formatação
   const formatFullAddress = (location) => {
     if (!location || location.type !== 'Physical' || !location.address) { 
       return "Local a definir"; 
@@ -331,36 +340,43 @@ export const TicketPDF = ({ ticketData, qrCodeImage, brandLogoImage }) => {
     <Document style={styles.document} author="Ticketfy" title={`Ingresso - ${eventName}`}>
       {/* PÁGINA 1: INGRESSO PRINCIPAL */}
       <Page size="A5" style={styles.page}>
-        {/* Header com imagem do logo */}
         <View style={styles.header}>
-          <View style={styles.brandSection}>
-            <Image 
-              style={styles.brandLogo} 
-              src={brandLogoImage} 
-            />
-            <Text style={styles.brandTitle}>TICKETFY</Text>
+          <View style={styles.brandContainer}>
+            <View style={styles.brandSection}>
+              <Image 
+                style={styles.brandLogo} 
+                src={brandLogoImage} 
+              />
+              <Text style={styles.brandTitle}>TICKETFY</Text>
+            </View>
+            <Text style={styles.ticketType}>Ingresso Digital NFT</Text>
+            <Text style={styles.eventName}>{eventName}</Text>
           </View>
-          
-          <Text style={styles.ticketType}>Ingresso Digital NFT</Text>
-          <Text style={styles.eventName}>{eventName}</Text>
+
+          <View style={styles.eventImageContainer}>
+            {eventImage && (
+              <Image 
+                style={styles.eventImage} 
+                // ✅ Esta sintaxe funciona perfeitamente para Base64 Data URIs
+                src={eventImage} 
+              />
+            )}
+          </View>
         </View>
 
         {/* Corpo do ingresso */}
         <View style={styles.ticketBody}>
-          {/* Grid de informações */}
           <View style={styles.infoGrid}>
             <View style={styles.infoColumn}>
               <View style={styles.infoBlock}>
                 <Text style={styles.infoLabel}>Data do Evento</Text>
                 <Text style={styles.infoValue}>{formatDisplayDate(eventDate)}</Text>
               </View>
-              
               <View style={styles.infoBlock}>
                 <Text style={styles.infoLabel}>Localização</Text>
                 <Text style={styles.infoValue}>{formatFullAddress(eventLocation)}</Text>
               </View>
             </View>
-            
             <View style={styles.infoColumn}>
               <View style={styles.infoBlock}>
                 <Text style={styles.infoLabel}>Horário</Text>
@@ -372,7 +388,6 @@ export const TicketPDF = ({ ticketData, qrCodeImage, brandLogoImage }) => {
             </View>
           </View>
           
-          {/* Seção QR Code */}
           <View style={styles.qrSection}>
             <Text style={styles.qrLabel}>Código de Validação</Text>
             {qrCodeImage && <Image style={styles.qrCodeImage} src={qrCodeImage} />}
@@ -381,17 +396,14 @@ export const TicketPDF = ({ ticketData, qrCodeImage, brandLogoImage }) => {
             </Text>
           </View>
 
-          {/* Informações adicionais */}
           <View style={styles.footer}>
             <Text style={styles.securityNotice}>
               Este ingresso é um token NFT único na blockchain Solana. 
               Apresente este QR code na entrada do evento.
             </Text>
-            
             <Text style={styles.securityNotice}>
               Após o evento, seu certificado de participação estará disponível em:
             </Text>
-            
             <Link 
               src={`https://ticketfy.app/certificate/${mintAddress}`} 
               style={styles.certificateLink}
@@ -405,7 +417,6 @@ export const TicketPDF = ({ ticketData, qrCodeImage, brandLogoImage }) => {
       {/* PÁGINA 2: INFORMAÇÕES DE SEGURANÇA */}
       {seedPhrase && privateKey && (
         <Page size="A5" style={styles.securityPage}>
-          {/* Header de segurança */}
           <View style={styles.securityHeader}>
             <Text style={styles.securityTitle}>Carteira Digital</Text>
             <Text style={styles.securitySubtitle}>
@@ -413,7 +424,6 @@ export const TicketPDF = ({ ticketData, qrCodeImage, brandLogoImage }) => {
             </Text>
           </View>
 
-          {/* Alerta de segurança */}
           <View style={styles.warningBox}>
             <Text style={styles.warningTitle}>⚠️ INFORMAÇÕES EXTREMAMENTE CONFIDENCIAIS</Text>
             <Text style={styles.warningText}>
@@ -422,7 +432,6 @@ export const TicketPDF = ({ ticketData, qrCodeImage, brandLogoImage }) => {
             </Text>
           </View>
 
-          {/* Seed Phrase */}
           <View style={styles.seedSection}>
             <Text style={styles.sectionTitle}>Frase de Recuperação (Seed Phrase)</Text>
             <View style={styles.seedGrid}>
@@ -435,7 +444,6 @@ export const TicketPDF = ({ ticketData, qrCodeImage, brandLogoImage }) => {
             </View>
           </View>
 
-          {/* Private Key */}
           <View style={styles.privateKeySection}>
             <Text style={styles.sectionTitle}>Chave Privada</Text>
             <View style={styles.privateKeyBox}>
@@ -444,7 +452,6 @@ export const TicketPDF = ({ ticketData, qrCodeImage, brandLogoImage }) => {
             </View>
           </View>
 
-          {/* Aviso final */}
           <View style={styles.finalNotice}>
             <Text style={styles.finalNoticeText}>
               ✅ Recomendamos guardar este documento em cofre físico. 

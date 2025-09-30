@@ -1,65 +1,105 @@
 import { useState, useMemo, useEffect } from 'react';
-import { useConnection, useAnchorWallet } from '@solana/wallet-adapter-react';
+import { useConnection } from '@solana/wallet-adapter-react';
 import { Program, AnchorProvider, web3 } from '@coral-xyz/anchor';
 import idl from '@/idl/ticketing_system.json';
 
-// MODIFICADO: Importando o novo componente Wizard da sua nova pasta
-import { CreateEventWizard } from '@/components/event/create/CreateEventWizard'; 
+// 1. Importar componentes adicionais para a nova UI
+import { Link } from 'react-router-dom';
+import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
+import { ArrowRightIcon } from '@heroicons/react/24/outline';
+
+import { useAppWallet } from '@/hooks/useAppWallet';
+import { CreateEventWizard } from '@/components/event/create/CreateEventWizard';
 import { MyEventsList } from '@/components/event/MyEventsList';
 import { InfoBox } from '@/components/ui/InfoBox';
-
 import { PROGRAM_ID } from '@/lib/constants';
+
 const GLOBAL_CONFIG_SEED = Buffer.from("config");
 const WHITELIST_SEED = Buffer.from("whitelist");
 
+/**
+ * Novo componente de UI para usuários deslogados, com ações claras.
+ */
+const LoginPrompt = () => (
+    <div className="max-w-2xl mx-auto bg-white p-8 rounded-2xl shadow-lg border border-slate-200 text-center">
+        <div className="w-16 h-16 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-6">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-8 h-8 text-indigo-600">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
+            </svg>
+        </div>
+        <h2 className="text-2xl font-bold text-slate-900">Acesso Necessário</h2>
+        <p className="mt-2 text-slate-600">Para criar ou gerenciar um evento, você precisa estar conectado.</p>
+        <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-4">
+            <Link 
+                to="/login"
+                className="flex items-center justify-center gap-2 w-full sm:w-auto px-6 py-3 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700 transition-colors duration-200"
+            >
+                Fazer Login com Usuário
+                <ArrowRightIcon className="h-5 w-5" />
+            </Link>
+             {/* O WalletMultiButton já vem estilizado, mas podemos envolvê-lo para consistência */}
+            <div className="w-full sm:w-auto">
+                 <WalletMultiButton style={{ width: '100%' }} />
+            </div>
+        </div>
+        <p className="mt-6 text-xs text-slate-500">Escolha o método de sua preferência para continuar.</p>
+    </div>
+);
+
+
 export function CreateEvent() {
     const { connection } = useConnection();
-    const wallet = useAnchorWallet();
+    const wallet = useAppWallet();
     const [activeTab, setActiveTab] = useState('create');
     const [isAllowed, setIsAllowed] = useState(false);
     const [isLoadingPermissions, setIsLoadingPermissions] = useState(true);
 
     const provider = useMemo(() => {
-        if (!wallet) return null;
-        return new AnchorProvider(connection, wallet, AnchorProvider.defaultOptions());
+        if (!wallet.connected || !wallet.publicKey) return null;
+        
+        const anchorWallet = {
+            publicKey: wallet.publicKey,
+            signTransaction: wallet.signTransaction,
+            signAllTransactions: wallet.signAllTransactions,
+        };
+        return new AnchorProvider(connection, anchorWallet, AnchorProvider.defaultOptions());
     }, [connection, wallet]);
 
     const program = useMemo(() => {
-        if (!provider) return null;
+        if (!provider) {
+             const readOnlyProvider = new AnchorProvider(connection, {}, AnchorProvider.defaultOptions());
+             return new Program(idl, PROGRAM_ID, readOnlyProvider);
+        }
         return new Program(idl, PROGRAM_ID, provider);
-    }, [provider]);
+    }, [provider, connection]);
 
     useEffect(() => {
         const checkPermissions = async () => {
-            if (!program || !wallet) {
+            if (!program || !wallet.publicKey) {
                 setIsLoadingPermissions(false);
                 setIsAllowed(false);
                 return;
             }
             
             setIsLoadingPermissions(true);
-
-            // 1. Verificar se é Admin
+            // ... (lógica de permissões permanece a mesma) ...
             try {
                 const [globalConfigPda] = web3.PublicKey.findProgramAddressSync([GLOBAL_CONFIG_SEED], program.programId);
                 const globalConfig = await program.account.globalConfig.fetch(globalConfigPda);
                 if (globalConfig.authority.equals(wallet.publicKey)) {
                     setIsAllowed(true);
                     setIsLoadingPermissions(false);
-                    return; // É admin, permissão concedida
+                    return; 
                 }
             } catch (e) {
-                // Não é admin ou config não existe, continua para checar whitelist
                 console.log("Usuário não é admin, verificando whitelist...");
             }
 
-            // 2. Se não for admin, verificar se está na whitelist
             try {
                 const [whitelistPda] = web3.PublicKey.findProgramAddressSync([WHITELIST_SEED, wallet.publicKey.toBuffer()], program.programId);
                 const whitelistAccount = await program.account.whitelist.fetch(whitelistPda);
                 setIsAllowed(whitelistAccount.isWhitelisted);
             } catch (e) {
-                // Se a conta de whitelist não existe, o usuário não tem permissão
                 setIsAllowed(false);
             } finally {
                 setIsLoadingPermissions(false);
@@ -67,12 +107,21 @@ export function CreateEvent() {
         };
 
         checkPermissions();
-    }, [wallet, program]);
+    }, [wallet.publicKey, program]);
 
     const renderContent = () => {
-        if (isLoadingPermissions) return <div className="text-center text-slate-500">Verificando permissões...</div>;
-        if (!wallet) return <InfoBox title="Conecte sua Carteira" message="Conecte sua carteira para criar ou gerenciar eventos." />;
-        if (!isAllowed) return <InfoBox title="Acesso Negado" message="Você precisa ser admin ou estar na whitelist para criar eventos." status="error" />;
+        // 2. Substituir o InfoBox pelo novo LoginPrompt
+        if (!wallet.connected) {
+            return <LoginPrompt />;
+        }
+        
+        if (isLoadingPermissions) {
+            return <div className="text-center text-slate-500">Verificando permissões...</div>;
+        }
+
+        if (!isAllowed) {
+            return <InfoBox title="Acesso Negado" message="Você precisa ser um administrador ou estar na lista de permissões (whitelist) para criar eventos." status="error" />;
+        }
         
         return (
             <div>
@@ -83,7 +132,6 @@ export function CreateEvent() {
                     </nav>
                 </div>
                 <div>
-                    {/* MODIFICADO: Renderizando o novo componente Wizard */}
                     {activeTab === 'create' && <CreateEventWizard program={program} wallet={wallet} onEventCreated={() => setActiveTab('manage')} />}
                     {activeTab === 'manage' && <MyEventsList program={program} wallet={wallet} />}
                 </div>
@@ -91,7 +139,15 @@ export function CreateEvent() {
         );
     };
 
-    return <div className="container mx-auto px-4 py-12">{renderContent()}</div>;
+    return (
+        <div className="container mx-auto px-4 py-12">
+            <header className="text-center mb-12">
+                <h1 className="text-4xl font-bold text-slate-900">Gerenciador de Eventos</h1>
+                <p className="mt-2 text-slate-600">Crie e administre seus eventos com facilidade.</p>
+            </header>
+            {renderContent()}
+        </div>
+    );
 }
 
 const TabButton = ({ name, active, onClick }) => (
@@ -99,3 +155,4 @@ const TabButton = ({ name, active, onClick }) => (
         {name}
     </button>
 );
+

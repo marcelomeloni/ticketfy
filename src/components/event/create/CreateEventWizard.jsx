@@ -33,22 +33,11 @@ export function CreateEventWizard({ program, wallet, onEventCreated }) {
         },
         properties: {
             location: {
-                type: 'Physical', //'Physical' ou 'Online'
+                type: 'Physical',
                 venueName: '',
-                address: { 
-                    street: '', 
-                    number: '',     
-                    neighborhood: '', 
-                    city: '', 
-                    state: '',
-                    zipCode: '',    
-                    country: 'BR'    
-                },
-                coordinates: {   
-                    latitude: '',
-                    longitude: ''
-                },
-                onlineUrl: ''     
+                address: { street: '', number: '', neighborhood: '', city: '', state: '', zipCode: '', country: 'BR' },
+                coordinates: { latitude: '', longitude: '' },
+                onlineUrl: ''
             },
             dateTime: {
                 start: new Date(Date.now() + 3600 * 1000 * 24 * 14),
@@ -69,14 +58,70 @@ export function CreateEventWizard({ program, wallet, onEventCreated }) {
     const [metadataUrl, setMetadataUrl] = useState('');
     const [generatedJson, setGeneratedJson] = useState(null);
 
-    const handleGenerateJson = () => {
-        if (!offChainData.name || !offChainData.description || !offChainData.image) {
-            return toast.error("Preencha Nome, Descrição e URL da Imagem para gerar os metadados.");
+    // --- ✅ 1. FUNÇÕES DE VALIDAÇÃO ---
+    const validateStep1 = () => {
+        const { name, description, image, properties } = offChainData;
+        if (!name.trim()) { toast.error("O nome do evento é obrigatório."); return false; }
+        if (!description.trim()) { toast.error("A descrição do evento é obrigatória."); return false; }
+        try { new URL(image); } catch (_) { toast.error("A URL da imagem principal é inválida."); return false; }
+
+        if (properties.location.type === 'Physical') {
+            const { venueName, address } = properties.location;
+            if (!venueName.trim() || !address.street.trim() || !address.city.trim() || !address.state.trim()) {
+                toast.error("Para eventos presenciais, preencha o nome do local e o endereço.");
+                return false;
+            }
         }
+        if (properties.location.type === 'Online') {
+            try { new URL(properties.location.onlineUrl); } 
+            catch (_) { toast.error("A URL do evento online é inválida."); return false; }
+        }
+        if (new Date(properties.dateTime.start) >= new Date(properties.dateTime.end)) {
+            toast.error("A data de término do evento deve ser posterior à data de início.");
+            return false;
+        }
+        return true;
+    };
+
+    const validateStep2 = () => {
+        const { salesStartDate, salesEndDate, tiers, royaltyBps, maxTicketsPerWallet } = onChainData;
+        if (new Date(salesStartDate) >= new Date(salesEndDate)) {
+            toast.error("A data de fim das vendas deve ser posterior à data de início.");
+            return false;
+        }
+        if (isNaN(parseInt(royaltyBps, 10)) || royaltyBps < 0) {
+            toast.error("O valor dos royalties é inválido."); return false;
+        }
+        if (isNaN(parseInt(maxTicketsPerWallet, 10)) || maxTicketsPerWallet < 0) {
+            toast.error("O valor de ingressos máximos por carteira é inválido."); return false;
+        }
+        for (const tier of tiers) {
+            if (!tier.name.trim()) { toast.error("Todos os lotes devem ter um nome."); return false; }
+            if (isNaN(parseFloat(tier.price)) || parseFloat(tier.price) < 0) {
+                toast.error(`O preço do lote "${tier.name}" é inválido.`); return false;
+            }
+            if (!/^\d+$/.test(tier.maxTicketsSupply) || parseInt(tier.maxTicketsSupply, 10) <= 0) {
+                toast.error(`O fornecimento máximo do lote "${tier.name}" deve ser um número inteiro maior que zero.`); return false;
+            }
+        }
+        return true;
+    };
+
+    // --- ✅ 2. FUNÇÕES DE TRANSIÇÃO COM VALIDAÇÃO ---
+    const handleGoToStep2 = () => {
+        if (validateStep1()) {
+            setStep(2);
+        }
+    };
+    
+    const handleGenerateJson = () => {
+        // Valida ambos os passos antes de gerar o JSON
+        if (!validateStep1()) return;
+        if (!validateStep2()) return;
+
         const jsonContent = { ...offChainData, properties: { ...offChainData.properties,
             dateTime: {
                 ...offChainData.properties.dateTime,
-               
                 start: new Date(offChainData.properties.dateTime.start).toISOString(),
                 end: new Date(offChainData.properties.dateTime.end).toISOString(),
             }
@@ -131,13 +176,13 @@ export function CreateEventWizard({ program, wallet, onEventCreated }) {
                     isActive={step === 1}
                     data={offChainData}
                     setData={setOffChainData}
-                    onNextStep={() => setStep(2)}
+                    onNextStep={handleGoToStep2} // ✅ USA A FUNÇÃO COM VALIDAÇÃO
                 />
                 <Step2_OnChainForm
                     isActive={step === 2}
                     data={onChainData}
                     setData={setOnChainData}
-                    onGenerateJson={handleGenerateJson}
+                    onGenerateJson={handleGenerateJson} // ✅ USA A FUNÇÃO COM VALIDAÇÃO
                 />
                 <Step3_UploadAndSubmit
                     isActive={step === 3}

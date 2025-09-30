@@ -4,11 +4,17 @@ import { DatePickerField } from './common/DatePickerField';
 import { TierInputRow } from './TierInputRow';
 import { PlusCircleIcon } from '@heroicons/react/24/outline';
 import { InputField } from '@/components/ui/InputField';
+import { useMemo } from 'react';
 
 
 export function Step2_OnChainForm({ isActive, data, setData, onGenerateJson }) {
+    // ✅ 1. Lógica para determinar se o passo foi completado
+    const isComplete = useMemo(() => {
+        return data.tiers.every(t => t.name && t.price && t.maxTicketsSupply);
+    }, [data]);
+
     if (!isActive) {
-         return <Step title="Passo 2: Configurações On-Chain" disabled={true} />;
+         return <Step title="Passo 2: Configurações On-Chain" disabled={true} isComplete={isComplete} />;
     }
 
     const handleDataChange = (field, value) => {
@@ -48,9 +54,10 @@ export function Step2_OnChainForm({ isActive, data, setData, onGenerateJson }) {
             <h4 className="font-semibold text-md pt-6">Configurações Adicionais</h4>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
                  <InputField label="Royalties (BPS, ex: 500 = 5%)" type="number" value={data.royaltyBps} onChange={(e) => handleDataChange('royaltyBps', e.target.value)} required />
-                 <InputField label="Max Ingressos por Carteira (0=ilimitado)" type="number" value={data.maxTicketsPerWallet} onChange={(e) => handleDataChange('maxTicketsPerWallet', e.target.value)} required />
+                 <InputField label="Max Ingressos por Carteira" type="number" placeholder="0 para ilimitado" value={data.maxTicketsPerWallet} onChange={(e) => handleDataChange('maxTicketsPerWallet', e.target.value)} required />
             </div>
 
+            {/* ✅ 2. O botão agora chama a função que contém a validação */}
             <ActionButton type="button" onClick={onGenerateJson} className="mt-6 w-full">Gerar Arquivo de Metadados</ActionButton>
         </Step>
     );

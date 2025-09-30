@@ -1,19 +1,21 @@
 import { useState } from 'react';
-import { useConnection, useWallet } from '@solana/wallet-adapter-react';
+import { useConnection } from '@solana/wallet-adapter-react';
 import { Transaction } from '@solana/web3.js';
 import toast from 'react-hot-toast';
 import { Buffer } from 'buffer';
+import { Link } from 'react-router-dom';
+
+import { useAppWallet } from '@/hooks/useAppWallet';
 import { TierOption } from '@/components/event/TierOption';
 import { ActionButton } from '@/components/ui/ActionButton';
 import { RegistrationModal } from '@/components/modals/RegistrationModal';
 import { TicketSuccessModal } from '@/components/modals/TicketSuccessModal';
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
-
 import { API_URL } from '@/lib/constants';
 
 export const PurchaseCard = ({ metadata, eventAccount, eventAddress, onPurchaseSuccess }) => {
     const { connection } = useConnection();
-    const { publicKey, sendTransaction } = useWallet();
+    const wallet = useAppWallet();
     
     const [selectedTierIndex, setSelectedTierIndex] = useState(null);
     const [isLoading, setIsLoading] = useState(false);
@@ -22,13 +24,6 @@ export const PurchaseCard = ({ metadata, eventAccount, eventAddress, onPurchaseS
     const [ticketData, setTicketData] = useState(null);
 
     const handleSelectTier = (index) => {
-        if (!publicKey) {
-            const selectedTier = eventAccount.tiers[index];
-            if (selectedTier.priceLamports.toNumber() > 0) {
-                toast.error("Conecte sua carteira para comprar um ingresso pago.");
-                return;
-            }
-        }
         setSelectedTierIndex(index);
     };
 
@@ -46,33 +41,40 @@ export const PurchaseCard = ({ metadata, eventAccount, eventAddress, onPurchaseS
         const toastId = toast.loading('Processando sua aquisição...');
 
         try {
-            let response;
-            let data;
+            const selectedTier = eventAccount.tiers[selectedTierIndex];
+            const isPaidTier = Number(selectedTier.priceLamports) > 0;
 
-            if (publicKey) {
-                // --- FLUXO 1: USUÁRIO WEB3 (CARTEIRA CONECTADA) ---
-                console.log('Iniciando fluxo para usuário com carteira...');
-                response = await fetch(`${API_URL}/mint-for-existing-user`, {
+            // CASO 1: Usuário está conectado
+            if (wallet.connected && wallet.publicKey) {
+                // ... (lógica de compra para usuário conectado)
+                if (isPaidTier && wallet.walletType === 'local') {
+                    toast.dismiss(toastId);
+                    toast.error("Ingressos pagos não estão disponíveis para compra com login local. Por favor, conecte uma carteira externa.");
+                    setIsLoading(false);
+                    return;
+                }
+
+                const response = await fetch(`${API_URL}/mint-for-existing-user`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         eventAddress,
-                        buyerAddress: publicKey.toString(),
+                        buyerAddress: wallet.publicKey.toString(),
                         tierIndex: selectedTierIndex,
                         ...formData,
                     }),
                 });
-                data = await response.json();
+                const data = await response.json();
 
                 if (!response.ok || !data.success) {
                     throw new Error(data.details || 'Falha ao processar a solicitação.');
                 }
                 
-                if (data.isPaid) {
+                if (data.isPaid && wallet.walletType === 'adapter' && wallet.sendTransaction) {
                     toast.loading('Aguardando sua aprovação na carteira...', { id: toastId });
                     const buffer = Buffer.from(data.transaction, 'base64');
                     const transaction = Transaction.from(buffer);
-                    const signature = await sendTransaction(transaction, connection);
+                    const signature = await wallet.sendTransaction(transaction, connection);
                     await connection.confirmTransaction(signature, 'confirmed');
                 }
 
@@ -80,13 +82,22 @@ export const PurchaseCard = ({ metadata, eventAccount, eventAddress, onPurchaseS
                     mintAddress: data.mintAddress,
                     eventName: metadata.name,
                     eventDate: metadata.properties.dateTime.start,
-                    eventLocation: metadata.properties.location, // Passa o objeto completo
+                    eventLocation: metadata.properties.location,
+                    eventImage: metadata.image,
                 });
 
-            } else {
-                // --- FLUXO 2: USUÁRIO WEB2 (SEM CARTEIRA CONECTADA) ---
-                console.log('Iniciando fluxo de onboarding para usuário sem carteira...');
-                response = await fetch(`${API_URL}/generate-wallet-and-mint`, {
+            } 
+            // CASO 2: Usuário NÃO está conectado
+            else {
+                // ... (lógica de compra para novo usuário)
+                if (isPaidTier) {
+                    toast.dismiss(toastId);
+                    toast.error("Para ingressos pagos, por favor, conecte sua carteira ou faça login primeiro.");
+                    setIsLoading(false);
+                    return;
+                }
+
+                const response = await fetch(`${API_URL}/generate-wallet-and-mint`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -95,7 +106,7 @@ export const PurchaseCard = ({ metadata, eventAccount, eventAddress, onPurchaseS
                         ...formData,
                     }),
                 });
-                data = await response.json();
+                const data = await response.json();
 
                 if (!response.ok || !data.success) {
                     throw new Error(data.details || 'Falha ao criar carteira e ingresso.');
@@ -107,13 +118,21 @@ export const PurchaseCard = ({ metadata, eventAccount, eventAddress, onPurchaseS
                     privateKey: data.privateKey,
                     eventName: metadata.name,
                     eventDate: metadata.properties.dateTime.start,
-                    // ✨ CORREÇÃO ESTÁ AQUI ✨
-                    eventLocation: metadata.properties.location, // Passa o objeto completo
+                    eventLocation: metadata.properties.location,
+                    eventImage: metadata.image,
                 });
             }
 
             toast.success('Ingresso adquirido com sucesso!', { id: toastId });
+            
+            // ✅ PONTO CHAVE 1:
+            // Esta função agora chama a `refetchEventDataInBackground` no componente pai.
+            // Ela atualiza os dados do evento (ex: ingressos vendidos) SEM disparar a tela de loading.
             onPurchaseSuccess();
+            
+            // ✅ PONTO CHAVE 2:
+            // Como o `onPurchaseSuccess` não remove mais este componente da tela,
+            // esta linha agora funciona perfeitamente, abrindo o modal de sucesso.
             setSuccessModalOpen(true);
 
         } catch (error) {
@@ -133,8 +152,10 @@ export const PurchaseCard = ({ metadata, eventAccount, eventAddress, onPurchaseS
                 <div className="mt-6 space-y-4">
                     {eventAccount.tiers.map((tier, index) => (
                         <TierOption
-                            key={index} tier={tier} isSelected={selectedTierIndex === index}
-                            isSoldOut={tier.ticketsSold >= tier.max_tickets_supply}
+                            key={index} 
+                            tier={tier} 
+                            isSelected={selectedTierIndex === index}
+                            isSoldOut={tier.ticketsSold >= tier.maxTicketsSupply}
                             onSelect={() => handleSelectTier(index)}
                         />
                     ))}
@@ -148,10 +169,13 @@ export const PurchaseCard = ({ metadata, eventAccount, eventAddress, onPurchaseS
                         {isSoldOut ? "Esgotado" : "Pegar Ingresso"}
                     </ActionButton>
 
-                    {!publicKey && selectedTierIndex !== null && eventAccount.tiers[selectedTierIndex].priceLamports.toNumber() > 0 &&
+                    {!wallet.connected && selectedTierIndex !== null && Number(eventAccount.tiers[selectedTierIndex].priceLamports) > 0 &&
                         <div className="mt-4">
-                             <p className="text-center text-sm text-slate-600 mb-2">Para ingressos pagos, conecte sua carteira:</p>
-                             <WalletMultiButton style={{ width: '100%', backgroundColor: '#4f46e5', display: 'flex', justifyContent: 'center', borderRadius: '0.5rem', padding: '0.75rem 1rem' }} />
+                            <p className="text-center text-sm text-slate-600 mb-2">Para ingressos pagos, escolha uma opção:</p>
+                            <div className="flex items-center gap-3">
+                                <Link to="/login" className="flex-1 text-center bg-slate-200 text-slate-800 font-semibold py-3 rounded-lg hover:bg-slate-300 transition-colors">Entrar</Link>
+                                <WalletMultiButton style={{ flex: '1' }} />
+                            </div>
                         </div>
                     }
                 </div>
@@ -172,5 +196,3 @@ export const PurchaseCard = ({ metadata, eventAccount, eventAddress, onPurchaseS
         </>
     );
 };
-
-

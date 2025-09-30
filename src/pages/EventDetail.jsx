@@ -1,21 +1,21 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
-import { useConnection, useAnchorWallet } from '@solana/wallet-adapter-react';
+import { useConnection } from '@solana/wallet-adapter-react';
 import { Program, AnchorProvider, web3 } from '@coral-xyz/anchor';
 
+import { useAppWallet } from '@/hooks/useAppWallet';
 import { PurchaseCard } from '@/components/event/PurchaseCard';
 import { EventHero } from '@/components/event/EventHero';
 import { EventSections, EventDetailsSidebar } from '@/components/event/EventSections';
-import { PageSkeleton } from '@/components/ui/PageSkeleton';
-import { PROGRAM_ID } from '@/lib/constants';
+
+import { PROGRAM_ID, API_URL } from '@/lib/constants';
 import idl from '@/idl/ticketing_system.json';
+import { PageSkeleton } from '@/components/ui/PageSkeleton';
 
-
-// ✅ CORREÇÃO: "export function" em vez de "export default function"
 export function EventDetail() {
     const { eventAddress } = useParams();
     const { connection } = useConnection();
-    const wallet = useAnchorWallet();
+    const wallet = useAppWallet();
 
     const [eventAccount, setEventAccount] = useState(null);
     const [metadata, setMetadata] = useState(null);
@@ -23,36 +23,61 @@ export function EventDetail() {
     const [error, setError] = useState(null);
 
     const program = useMemo(() => {
-        const provider = new AnchorProvider(connection, wallet || {}, AnchorProvider.defaultOptions());
+        const anchorWallet = (wallet.connected && wallet.publicKey) ? {
+            publicKey: wallet.publicKey,
+            signTransaction: wallet.signTransaction,
+            signAllTransactions: wallet.signAllTransactions,
+        } : {};
+        const provider = new AnchorProvider(connection, anchorWallet, AnchorProvider.defaultOptions());
         return new Program(idl, PROGRAM_ID, provider);
     }, [connection, wallet]);
 
-    const fetchEventAndMetadata = useCallback(async () => {
+    // Função para o carregamento INICIAL da página
+    const fetchEventDataFromAPI = useCallback(async () => {
         if (!eventAddress) return;
-        if (!eventAccount) setIsLoading(true);
+
+        setIsLoading(true);
         setError(null);
         try {
-            const eventPubkey = new web3.PublicKey(eventAddress);
-            const account = await program.account.event.fetch(eventPubkey);
-            setEventAccount(account);
+            const response = await fetch(`${API_URL}/event-details/${eventAddress}`);
+            const data = await response.json();
+
+            if (!response.ok || !data.success) {
+                throw new Error(data.error || "Falha ao buscar dados do evento.");
+            }
             
-            const response = await fetch(account.metadataUri);
-            if (!response.ok) throw new Error("Falha ao buscar metadados.");
-            const metadataJson = await response.json();
-            setMetadata(metadataJson);
+            setEventAccount(data.event.account);
+            setMetadata(data.event.metadata);
+
         } catch (err) {
-            console.error("Erro ao carregar os dados do evento:", err);
+            console.error("Erro ao carregar os dados do evento via API:", err);
             setError("Evento não encontrado ou indisponível.");
         } finally {
             setIsLoading(false);
         }
-    }, [eventAddress, program, eventAccount]);
+    }, [eventAddress]);
 
     useEffect(() => {
-        if (!eventAccount) {
-            fetchEventAndMetadata();
+        fetchEventDataFromAPI();
+    }, [fetchEventDataFromAPI]);
+
+    // ✅ NOVA FUNÇÃO: Atualiza os dados em segundo plano SEM mostrar loading
+    const refetchEventDataInBackground = useCallback(async () => {
+        if (!eventAddress) return;
+        try {
+            const response = await fetch(`${API_URL}/event-details/${eventAddress}`);
+            const data = await response.json();
+            if (response.ok && data.success) {
+                setEventAccount(data.event.account);
+                setMetadata(data.event.metadata);
+                console.log("Dados do evento atualizados em segundo plano.");
+            } else {
+                throw new Error(data.error || "Falha ao atualizar dados do evento em segundo plano.");
+            }
+        } catch (err) {
+            console.error("Falha ao atualizar dados em segundo plano:", err);
         }
-    }, [fetchEventAndMetadata, eventAccount]);
+    }, [eventAddress]);
 
 
     if (isLoading) return <PageSkeleton />;
@@ -73,7 +98,8 @@ export function EventDetail() {
                                 metadata={metadata}
                                 eventAccount={eventAccount} 
                                 eventAddress={eventAddress} 
-                                onPurchaseSuccess={fetchEventAndMetadata} 
+                                // ✅ ALTERADO: Passando a nova função "silenciosa"
+                                onPurchaseSuccess={refetchEventDataInBackground} 
                             />
                             <EventDetailsSidebar metadata={metadata} />
                         </div>
