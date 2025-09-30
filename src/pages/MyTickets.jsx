@@ -227,94 +227,87 @@ export function MyTickets() {
 function TicketCard({ ticket, isSubmitting, onSellClick, onCancelClick, onRefundClick }) {
     const { account: ticketData, event: eventDetails, isListed } = ticket;
 
-    // ✅ Função de download 100% corrigida com pré-carregamento de imagens
-    // Dentro do componente `TicketCard` no seu arquivo MyTickets.jsx
+    const handleDownload = async () => {
+        if (!eventDetails) return toast.error("Detalhes do evento não encontrados.");
+        const loadingToast = toast.loading('Gerando PDF do ingresso...');
 
-const handleDownload = async () => {
-    if (!eventDetails) return toast.error("Detalhes do evento não encontrados.");
-    const loadingToast = toast.loading('Gerando PDF do ingresso...');
-
-    try {
-        // Passo A: Gerar a imagem do QR Code como Base64 (Data URL) - Inalterado
-        const qrCodeImage = await QRCode.toDataURL(ticketData.nftMint.toString(), {
-            width: 512,
-            margin: 1,
-        });
-
-        // ✅ PASSO B ATUALIZADO: Baixar a imagem do evento e CONVERTÊ-LA para JPEG
-        let eventImageBase64 = null;
-        if (eventDetails.metadata.image) {
-            const response = await fetch(eventDetails.metadata.image);
-            if (!response.ok) throw new Error('Falha ao buscar a imagem do evento.');
-            const blob = await response.blob();
-
-            // Lógica de conversão usando Canvas
-            eventImageBase64 = await new Promise((resolve, reject) => {
-                const img = new Image();
-                const url = URL.createObjectURL(blob); // Cria uma URL temporária para a imagem
-                
-                img.onload = () => {
-                    const canvas = document.createElement('canvas');
-                    canvas.width = img.naturalWidth;
-                    canvas.height = img.naturalHeight;
-                    const ctx = canvas.getContext('2d');
-                    
-                    // Adiciona um fundo branco. Importante se a imagem original (PNG/WEBP) tiver transparência.
-                    ctx.fillStyle = '#FFFFFF';
-                    ctx.fillRect(0, 0, canvas.width, canvas.height);
-                    
-                    // Desenha a imagem (WEBP, PNG, etc.) no canvas
-                    ctx.drawImage(img, 0, 0);
-                    
-                    // Converte o conteúdo do canvas para JPEG em formato Base64 com 90% de qualidade
-                    const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
-                    
-                    URL.revokeObjectURL(url); // Limpa a URL temporária da memória
-                    resolve(dataUrl); // Retorna a string Base64 do JPEG
-                };
-
-                img.onerror = (error) => {
-                    URL.revokeObjectURL(url);
-                    reject(error);
-                };
-
-                img.src = url; // Inicia o carregamento da imagem
+        try {
+            // Passo A: Gerar a imagem do QR Code como Base64 (Data URL)
+            const qrCodeImage = await QRCode.toDataURL(ticketData.nftMint.toString(), {
+                width: 512,
+                margin: 1,
             });
+
+            // Passo B: Baixar a imagem do evento e CONVERTÊ-LA para JPEG
+            let eventImageBase64 = null;
+            if (eventDetails.metadata.image) {
+                const response = await fetch(eventDetails.metadata.image);
+                if (!response.ok) throw new Error('Falha ao buscar a imagem do evento.');
+                const blob = await response.blob();
+
+                // Lógica de conversão usando Canvas
+                eventImageBase64 = await new Promise((resolve, reject) => {
+                    const img = new Image();
+                    const url = URL.createObjectURL(blob);
+                    
+                    img.onload = () => {
+                        const canvas = document.createElement('canvas');
+                        canvas.width = img.naturalWidth;
+                        canvas.height = img.naturalHeight;
+                        const ctx = canvas.getContext('2d');
+                        
+                        ctx.fillStyle = '#FFFFFF';
+                        ctx.fillRect(0, 0, canvas.width, canvas.height);
+                        ctx.drawImage(img, 0, 0);
+                        
+                        const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+                        
+                        URL.revokeObjectURL(url);
+                        resolve(dataUrl);
+                    };
+
+                    img.onerror = (error) => {
+                        URL.revokeObjectURL(url);
+                        reject(error);
+                    };
+
+                    img.src = url;
+                });
+            }
+
+            // Passo C: Montar os dados para o PDF
+            const pdfData = {
+                eventName: eventDetails.metadata.name,
+                eventDate: eventDetails.metadata.properties.dateTime.start,
+                eventLocation: eventDetails.metadata.properties.location,
+                mintAddress: ticketData.nftMint.toString(),
+                eventImage: eventImageBase64,
+            };
+
+            // Passo D: Gerar o blob do PDF e iniciar o download
+            const blob = await pdf(
+                <TicketPDF 
+                    ticketData={pdfData} 
+                    qrCodeImage={qrCodeImage}
+                    brandLogoImage="https://red-obedient-stingray-854.mypinata.cloud/ipfs/bafkreih7ofsa246z5vnjvrol6xk5tpj4zys42tcaotxq7tp7ptgraalrya"
+                />
+            ).toBlob();
+            
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `Ingresso_${pdfData.eventName.replace(/\s/g, '_')}.pdf`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            
+            toast.success('Ingresso baixado com sucesso!', { id: loadingToast });
+        } catch (error) {
+            console.error('Erro ao gerar PDF:', error);
+            toast.error('Erro ao gerar PDF. Verifique o console.', { id: loadingToast });
         }
-
-        // Passo C: Montar os dados para o PDF
-        const pdfData = {
-            eventName: eventDetails.metadata.name,
-            eventDate: eventDetails.metadata.properties.dateTime.start,
-            eventLocation: eventDetails.metadata.properties.location,
-            mintAddress: ticketData.nftMint.toString(),
-            eventImage: eventImageBase64, // Passando a imagem JÁ CONVERTIDA
-        };
-
-        // Passo D: Gerar o blob do PDF e iniciar o download (Inalterado)
-        const blob = await pdf(
-            <TicketPDF 
-                ticketData={pdfData} 
-                qrCodeImage={qrCodeImage}
-                brandLogoImage="https://red-obedient-stingray-854.mypinata.cloud/ipfs/bafkreih7ofsa246z5vnjvrol6xk5tpj4zys42tcaotxq7tp7ptgraalrya"
-            />
-        ).toBlob();
-        
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `Ingresso_${pdfData.eventName.replace(/\s/g, '_')}.pdf`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        
-        toast.success('Ingresso baixado com sucesso!', { id: loadingToast });
-    } catch (error) {
-        console.error('Erro ao gerar PDF:', error);
-        toast.error('Erro ao gerar PDF. Verifique o console.', { id: loadingToast });
-    }
-};
+    };
     
     if (!eventDetails) {
         return (
