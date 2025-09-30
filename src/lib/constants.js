@@ -6,8 +6,9 @@ export const PROGRAM_ID = new web3.PublicKey(
 );
 
 
-export const API_URL = "https://gasless-api-ke68.onrender.com";
+export const API_URL = "https://gasless-api-997m.onrender.com";
 
 
 export const APP_BASE_URL = "https://ticketfy.app/"
+
 
