@@ -12,10 +12,7 @@ export default defineConfig({
     wasm(),
     topLevelAwait(),
   ],
-  // 1. Adicione a configuração optimizeDeps
   optimizeDeps: {
-    // 2. Exclua o 'argon2-browser' da otimização do Vite
-    // Isso permite que o plugin wasm lide com ele corretamente.
     exclude: ['argon2-browser'],
   },
   resolve: {
@@ -23,5 +20,11 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  // ✅ ADICIONADO: Configuração de Build para resolver o problema de memória
+  build: {
+    // Desativar a geração de source maps para o build de produção.
+    // Esta é a maneira mais eficaz de reduzir o consumo de memória
+    // durante o processo de `vite build` e evitar o erro "heap out of memory".
+    sourcemap: false,
+  },
 });
-
