@@ -6,7 +6,7 @@ import toast from 'react-hot-toast';
 import { ParticipantsList } from '@/components/event/manage/ParticipantsList'; 
 import idl from '@/idl/ticketing_system.json';
 import {
-    BanknotesIcon, CalendarDaysIcon, ChartBarIcon, ClockIcon, ExclamationTriangleIcon, PlusCircleIcon, TicketIcon, UserPlusIcon, XCircleIcon, ShareIcon, ClipboardDocumentIcon
+    BanknotesIcon, CalendarDaysIcon, ChartBarIcon, ClockIcon, ExclamationTriangleIcon, PlusCircleIcon, TicketIcon, UserPlusIcon, XCircleIcon, ShareIcon, ClipboardDocumentIcon
 } from '@heroicons/react/24/outline';
 import { PROGRAM_ID, API_URL } from '@/lib/constants';
 import { AdminCard } from '@/components/ui/AdminCard';
@@ -20,347 +20,348 @@ const WHITELIST_SEED = Buffer.from("whitelist"); // Adicionada a seed da Whiteli
 
 // Helper para formatar datas
 const formatDate = (timestamp) => {
-    const options = {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        timeZone: 'America/Sao_Paulo' 
-    };
-    return new Date(timestamp * 1000).toLocaleString('pt-BR', options);
+    const options = {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        timeZone: 'America/Sao_Paulo' 
+    };
+    return new Date(timestamp * 1000).toLocaleString('pt-BR', options);
 };
 
 // Helper para status de vendas
 const getSaleStatus = (event) => {
-    if (!event) return { text: "Carregando...", color: "bg-gray-200" };
-    if (event.canceled) return { text: "Cancelado", color: "bg-red-200 text-red-900" };
-    const now = Math.floor(Date.now() / 1000);
-    if (now > event.salesEndDate.toNumber()) return { text: "Finalizado", color: "bg-blue-200 text-blue-900" };
-    if (now < event.salesStartDate.toNumber()) return { text: "Vendas em Breve", color: "bg-yellow-200 text-yellow-900" };
-    return { text: "Vendas Abertas", color: "bg-green-200 text-green-900" };
+    if (!event) return { text: "Carregando...", color: "bg-gray-200" };
+    if (event.canceled) return { text: "Cancelado", color: "bg-red-200 text-red-900" };
+    const now = Math.floor(Date.now() / 1000);
+    if (now > event.salesEndDate.toNumber()) return { text: "Finalizado", color: "bg-blue-200 text-blue-900" };
+    if (now < event.salesStartDate.toNumber()) return { text: "Vendas em Breve", color: "bg-yellow-200 text-yellow-900" };
+    return { text: "Vendas Abertas", color: "bg-green-200 text-green-900" };
 };
 
 export function ManageEvent() {
-    const { eventAddress } = useParams();
-    const { connection } = useConnection();
-    const wallet = useAnchorWallet();
+    const { eventAddress } = useParams();
+    const { connection } = useConnection();
+    const wallet = useAnchorWallet();
 
-    const [event, setEvent] = useState(null);
-    const [metadata, setMetadata] = useState(null);
-    const [loading, setLoading] = useState(true);
-    const [actionLoading, setActionLoading] = useState(false);
-    // ✅ Removida a referência a reserveBalance, pois não há mais conta de custódia
-    // const [reserveBalance, setReserveBalance] = useState(0); 
-    const [validatorAddress, setValidatorAddress] = useState('');
-    // ✅ Alterado de 'price' para 'priceBRL'
-    const [newTier, setNewTier] = useState({ name: '', priceBRL: '', maxTicketsSupply: '' }); 
+    const [event, setEvent] = useState(null);
+    const [metadata, setMetadata] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [actionLoading, setActionLoading] = useState(false);
+    // ✅ Removida a referência a reserveBalance, pois não há mais conta de custódia
+    // const [reserveBalance, setReserveBalance] = useState(0); 
+    const [validatorAddress, setValidatorAddress] = useState('');
+    // ✅ Alterado de 'price' para 'priceBRL'
+    const [newTier, setNewTier] = useState({ name: '', priceBRL: '', maxTicketsSupply: '' }); 
 
-    const program = useMemo(() => {
-        if (!wallet) return null;
-        const provider = new AnchorProvider(connection, wallet, AnchorProvider.defaultOptions());
-        return new Program(idl, PROGRAM_ID, provider);
-    }, [connection, wallet]);
+    const program = useMemo(() => {
+        if (!wallet) return null;
+        const provider = new AnchorProvider(connection, wallet, AnchorProvider.defaultOptions());
+        return new Program(idl, PROGRAM_ID, provider);
+    }, [connection, wallet]);
 
-    const fetchEventData = useCallback(async () => {
-        if (!program || !eventAddress) return;
-        try {
-            const eventPubkey = new web3.PublicKey(eventAddress);
-            const eventAccount = await program.account.event.fetch(eventPubkey);
-            setEvent(eventAccount);
+    const fetchEventData = useCallback(async () => {
+        if (!program || !eventAddress) return;
+        try {
+            const eventPubkey = new web3.PublicKey(eventAddress);
+            const eventAccount = await program.account.event.fetch(eventPubkey);
+            setEvent(eventAccount);
 
-            if (eventAccount.metadataUri) {
-                const response = await fetch(eventAccount.metadataUri);
-                if (response.ok) {
-                    const data = await response.json();
-                    setMetadata(data);
-                } else {
-                    setMetadata({ name: "Nome do Evento Indisponível" });
-                }
-            }
+            if (eventAccount.metadataUri) {
+                const response = await fetch(eventAccount.metadataUri);
+                if (response.ok) {
+                    const data = await response.json();
+                    setMetadata(data);
+                } else {
+                    setMetadata({ name: "Nome do Evento Indisponível" });
+                }
+            }
 
-            // ✅ REMOVIDA A LÓGICA DE BUSCA DE SALDO DA CONTA DE CUSTÓDIA
-            // const [refundReservePda] = web3.PublicKey.findProgramAddressSync(
-            //     [REFUND_RESERVE_SEED, eventPubkey.toBuffer()],
-            //     program.programId
-            // );
-            // const balance = await connection.getBalance(refundReservePda);
-            // setReserveBalance(balance);
+            // ✅ REMOVIDA A LÓGICA DE BUSCA DE SALDO DA CONTA DE CUSTÓDIA
+            // const [refundReservePda] = web3.PublicKey.findProgramAddressSync(
+            //     [REFUND_RESERVE_SEED, eventPubkey.toBuffer()],
+            //     program.programId
+            // );
+            // const balance = await connection.getBalance(refundReservePda);
+            // setReserveBalance(balance);
 
-        } catch (error) {
-            console.error("Erro ao buscar dados do evento:", error);
-            toast.error("Não foi possível carregar os dados do evento.");
-        }
-    }, [program, eventAddress, connection]);
+        } catch (error) {
+            console.error("Erro ao buscar dados do evento:", error);
+            toast.error("Não foi possível carregar os dados do evento.");
+        }
+    }, [program, eventAddress, connection]);
 
-    useEffect(() => {
-        setLoading(true);
-        fetchEventData().finally(() => setLoading(false));
-    }, [fetchEventData]);
+    useEffect(() => {
+        setLoading(true);
+        fetchEventData().finally(() => setLoading(false));
+    }, [fetchEventData]);
 
-    const handleTransaction = async (methodBuilder, successMessage) => {
-        setActionLoading(true);
-        const loadingToast = toast.loading("Processando transação...");
-        try {
-            const tx = await methodBuilder.rpc();
-            toast.success(successMessage, { id: loadingToast });
-            await fetchEventData();
-        } catch (error) {
-            console.error("Erro na transação:", error);
-            const errorMessage = error.error?.errorMessage || error.message || 'Falha na transação.';
-            toast.error(`Erro: ${errorMessage}`, { id: loadingToast });
-        } finally {
-            setActionLoading(false);
-        }
-    };
+    const handleTransaction = async (methodBuilder, successMessage) => {
+        setActionLoading(true);
+        const loadingToast = toast.loading("Processando transação...");
+        try {
+            const tx = await methodBuilder.rpc();
+            toast.success(successMessage, { id: loadingToast });
+            await fetchEventData();
+        } catch (error) {
+            console.error("Erro na transação:", error);
+            const errorMessage = error.error?.errorMessage || error.message || 'Falha na transação.';
+            toast.error(`Erro: ${errorMessage}`, { id: loadingToast });
+        } finally {
+            setActionLoading(false);
+        }
+    };
 
-    const handleAddTier = async () => {
-        if (!program || !wallet || !newTier.name || !newTier.priceBRL || !newTier.maxTicketsSupply) {
-            return toast.error("Preencha todos os campos do novo lote.");
-        }
-        
-        // ✅ CORREÇÃO: Pegar o royalty_bps da Whitelist
-        const [whitelistPda] = web3.PublicKey.findProgramAddressSync([WHITELIST_SEED, wallet.publicKey.toBuffer()], program.programId);
-        const whitelistAccount = await program.account.whitelist.fetch(whitelistPda);
-        const userPlatformFee = whitelistAccount.platformFeeBps;
+    const handleAddTier = async () => {
+        if (!program || !wallet || !newTier.name || !newTier.priceBRL || !newTier.maxTicketsSupply) {
+            return toast.error("Preencha todos os campos do novo lote.");
+        }
+        
+        // ✅ CORREÇÃO: Pegar o royalty_bps da Whitelist
+        const [whitelistPda] = web3.PublicKey.findProgramAddressSync([WHITELIST_SEED, wallet.publicKey.toBuffer()], program.programId);
+        const whitelistAccount = await program.account.whitelist.fetch(whitelistPda);
+        const userPlatformFee = whitelistAccount.platformFeeBps;
 
-        // ✅ CORREÇÃO: Passar a taxa do organizador e não do evento
-        const method = program.methods
-            .addTicketTier(
-                newTier.name,
-                new BN(Math.round(parseFloat(newTier.priceBRL) * 100)), // Converte BRL para centavos (u64)
-                parseInt(newTier.maxTicketsSupply, 10)
-            )
-            .accounts({ 
-                event: new web3.PublicKey(eventAddress), 
-                controller: wallet.publicKey,
-                whitelistAccount: whitelistPda // Passa a conta da whitelist
-            });
-        handleTransaction(method, "Novo lote adicionado com sucesso!");
-        setNewTier({ name: '', priceBRL: '', maxTicketsSupply: '' });
-    };
-    
-    const handleAddValidator = () => {
-        if (!program || !wallet || !validatorAddress) return;
-        try {
-            const method = program.methods
-                .addValidator(new web3.PublicKey(validatorAddress))
-                .accounts({ event: new web3.PublicKey(eventAddress), controller: wallet.publicKey });
-            handleTransaction(method, "Validador adicionado com sucesso!");
-            setValidatorAddress('');
-        } catch(e) { toast.error("Endereço de carteira inválido.") }
-    };
-    
-    const handleRemoveValidator = (addressToRemove) => {
-        if (!program || !wallet) return;
-        const method = program.methods
-            .removeValidator(new web3.PublicKey(addressToRemove))
-            .accounts({ event: new web3.PublicKey(eventAddress), controller: wallet.publicKey });
-        handleTransaction(method, "Validador removido com sucesso!");
-    };
+        // ✅ CORREÇÃO: Passar a taxa do organizador e não do evento
+        const method = program.methods
+            .addTicketTier(
+                newTier.name,
+                new BN(Math.round(parseFloat(newTier.priceBRL) * 100)), // Converte BRL para centavos (u64)
+                parseInt(newTier.maxTicketsSupply, 10)
+            )
+            .accounts({ 
+                event: new web3.PublicKey(eventAddress), 
+                controller: wallet.publicKey,
+                whitelistAccount: whitelistPda // Passa a conta da whitelist
+            });
+        handleTransaction(method, "Novo lote adicionado com sucesso!");
+        setNewTier({ name: '', priceBRL: '', maxTicketsSupply: '' });
+    };
+    
+    const handleAddValidator = () => {
+        if (!program || !wallet || !validatorAddress) return;
+        try {
+            const method = program.methods
+                .addValidator(new web3.PublicKey(validatorAddress))
+                .accounts({ event: new web3.PublicKey(eventAddress), controller: wallet.publicKey });
+            handleTransaction(method, "Validador adicionado com sucesso!");
+            setValidatorAddress('');
+        } catch(e) { toast.error("Endereço de carteira inválido.") }
+    };
+    
+    const handleRemoveValidator = (addressToRemove) => {
+        if (!program || !wallet) return;
+        const method = program.methods
+            .removeValidator(new web3.PublicKey(addressToRemove))
+            .accounts({ event: new web3.PublicKey(eventAddress), controller: wallet.publicKey });
+        handleTransaction(method, "Validador removido com sucesso!");
+    };
 
-    const handleCancelEvent = () => {
-        if (!program || !wallet) return;
-        if (!window.confirm("Tem certeza que deseja cancelar este evento? Esta ação é irreversível e habilitará reembolsos.")) return;
-        const method = program.methods
-            .cancelEvent()
-            .accounts({ event: new web3.PublicKey(eventAddress), controller: wallet.publicKey });
-        handleTransaction(method, "Evento cancelado com sucesso!");
-    };
-    
-    // ✅ REMOVIDO: A função handleWithdraw não existe mais, pois não há fundos na blockchain
-    
-    if (loading) return <div className="flex justify-center py-20"><Spinner /></div>;
-    if (!event) return <div className="text-center text-red-500 py-20">Erro: Evento não encontrado.</div>;
+    const handleCancelEvent = () => {
+        if (!program || !wallet) return;
+        if (!window.confirm("Tem certeza que deseja cancelar este evento? Esta ação é irreversível e habilitará reembolsos.")) return;
+        const method = program.methods
+            .cancelEvent()
+            .accounts({ event: new web3.PublicKey(eventAddress), controller: wallet.publicKey });
+        handleTransaction(method, "Evento cancelado com sucesso!");
+    };
+    
+    // ✅ REMOVIDO: A função handleWithdraw não existe mais, pois não há fundos na blockchain
+    
+    if (loading) return <div className="flex justify-center py-20"><Spinner /></div>;
+    if (!event) return <div className="text-center text-red-500 py-20">Erro: Evento não encontrado.</div>;
 
-    const totalTicketsSold = event.totalTicketsSold || 0;
-    const totalSupply = Array.isArray(event.tiers) ? event.tiers.reduce((sum, tier) => sum + tier.maxTicketsSupply, 0) : 0;
-    const now = Math.floor(Date.now() / 1000);
-    // ✅ Removida a lógica de canWithdraw
-    const canAddTiers = !event.canceled && now <= event.salesEndDate.toNumber();
-    const validatorLink = `${window.location.origin}/event/${eventAddress}/validate`;
+    const totalTicketsSold = event.totalTicketsSold || 0;
+    const totalSupply = Array.isArray(event.tiers) ? event.tiers.reduce((sum, tier) => sum + tier.maxTicketsSupply, 0) : 0;
+    const now = Math.floor(Date.now() / 1000);
+    // ✅ Removida a lógica de canWithdraw
+    const canAddTiers = !event.canceled && now <= event.salesEndDate.toNumber();
+    const validatorLink = `${window.location.origin}/event/${eventAddress}/validate`;
 
-    const handleCopyLink = () => {
-        navigator.clipboard.writeText(validatorLink);
-        toast.success("Link para validadores copiado!");
-    };
+    const handleCopyLink = () => {
+        navigator.clipboard.writeText(validatorLink);
+        toast.success("Link para validadores copiado!");
+    };
 
-    return (
-        <div className="container mx-auto px-4 py-12 bg-slate-50 min-h-screen">
-            <header className="mb-8">
-                <Link to="/create-event" className="text-sm text-indigo-600 hover:underline mb-4 block">&larr; Voltar para Meus Eventos</Link>
-                <div className="flex flex-wrap items-center gap-4">
-                    <h1 className="text-4xl font-bold text-slate-900">{metadata?.name || "Carregando nome..."}</h1>
-                    <span className={`px-3 py-1 text-sm font-semibold rounded-full ${getSaleStatus(event).color}`}>{getSaleStatus(event).text}</span>
-                </div>
-            </header>
+    return (
+        <div className="container mx-auto px-4 py-12 bg-slate-50 min-h-screen">
+            <header className="mb-8">
+                <Link to="/create-event" className="text-sm text-indigo-600 hover:underline mb-4 block">&larr; Voltar para Meus Eventos</Link>
+                <div className="flex flex-wrap items-center gap-4">
+                    <h1 className="text-4xl font-bold text-slate-900">{metadata?.name || "Carregando nome..."}</h1>
+                    <span className={`px-3 py-1 text-sm font-semibold rounded-full ${getSaleStatus(event).color}`}>{getSaleStatus(event).text}</span>
+                </div>
+            </header>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-                {/* ✅ Removido o StatCard de Receita em Custódia */}
-                <StatCard 
-                    icon={TicketIcon} 
-                    title="Ingressos Vendidos" 
-                    value={`${totalTicketsSold} / ${totalSupply}`}
-                    color="text-indigo-600"
-                />
-                <StatCard 
-                    icon={ChartBarIcon} 
-                    title="Progresso de Vendas" 
-                    value={`${totalSupply > 0 ? ((totalTicketsSold / totalSupply) * 100).toFixed(1) : 0}%`}
-                    color="text-blue-600"
-                />
-                <StatCard 
-                    icon={ClockIcon} 
-                    title="Fim das Vendas" 
-                    value={formatDate(event.salesEndDate.toNumber())}
-                    color="text-orange-600"
-                />
-                <StatCard 
-                    icon={ShareIcon} 
-                    title="Royalties de Revenda" 
-                    value={`${event.royaltyBps / 100}%`} 
-                    color="text-purple-600" 
-                />
-            </div>
-            
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                <div className="lg:col-span-2 space-y-8">
-                
-                    <AdminCard title="Vendas por Lote">
-                        <div className="space-y-4">
-                            {Array.isArray(event.tiers) && event.tiers.map((tier, index) => (
-                                <TierProgress key={index} tier={tier} />
-                            ))}
-                        </div>
-                    </AdminCard>
-                    
-                    <AdminCard title="Adicionar Novo Lote" icon={PlusCircleIcon}>
-                        {canAddTiers ? (
-                            <div className="space-y-4">
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                    <InputField label="Nome do Lote" placeholder="Ex: Lote 2" value={newTier.name} onChange={e => setNewTier({...newTier, name: e.target.value})} />
-                                    <InputField label="Preço (R$)" type="number" step="0.01" placeholder="150.00" value={newTier.priceBRL} onChange={e => setNewTier({...newTier, priceBRL: e.target.value})} />
-                                    <InputField label="Quantidade" type="number" placeholder="500" value={newTier.maxTicketsSupply} onChange={e => setNewTier({...newTier, maxTicketsSupply: e.target.value})} />
-                                </div>
-                                <ActionButton onClick={handleAddTier} loading={actionLoading}>Adicionar Lote</ActionButton>
-                            </div>
-                        ) : (
-                            <p className="text-sm text-slate-500">Não é possível adicionar novos lotes a um evento que já teve suas vendas encerradas ou foi cancelado.</p>
-                        )}
-                    </AdminCard>
-                    <ParticipantsList 
-                        program={program} 
-                        eventAddress={eventAddress}
-                        eventName={metadata?.name || 'evento'}
-                    />
-                </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                {/* ✅ Removido o StatCard de Receita em Custódia */}
+                <StatCard 
+                    icon={TicketIcon} 
+                    title="Ingressos Vendidos" 
+                    value={`${totalTicketsSold} / ${totalSupply}`}
+                    color="text-indigo-600"
+                />
+                <StatCard 
+                    icon={ChartBarIcon} 
+                    title="Progresso de Vendas" 
+                    value={`${totalSupply > 0 ? ((totalTicketsSold / totalSupply) * 100).toFixed(1) : 0}%`}
+                    color="text-blue-600"
+                />
+                <StatCard 
+                    icon={ClockIcon} 
+                    title="Fim das Vendas" 
+                    value={formatDate(event.salesEndDate.toNumber())}
+                    color="text-orange-600"
+                />
+                <StatCard 
+                    icon={ShareIcon} 
+                    title="Royalties de Revenda" 
+                    value={`${event.royaltyBps / 100}%`} 
+                    color="text-purple-600" 
+                />
+            </div>
+            
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <div className="lg:col-span-2 space-y-8">
+                
+                    <AdminCard title="Vendas por Lote">
+                        <div className="space-y-4">
+                            {Array.isArray(event.tiers) && event.tiers.map((tier, index) => (
+                                <TierProgress key={index} tier={tier} />
+                            ))}
+                        </div>
+                    </AdminCard>
+                    
+                    <AdminCard title="Adicionar Novo Lote" icon={PlusCircleIcon}>
+                        {canAddTiers ? (
+                            <div className="space-y-4">
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    <InputField label="Nome do Lote" placeholder="Ex: Lote 2" value={newTier.name} onChange={e => setNewTier({...newTier, name: e.target.value})} />
+                                    <InputField label="Preço (R$)" type="number" step="0.01" placeholder="150.00" value={newTier.priceBRL} onChange={e => setNewTier({...newTier, priceBRL: e.target.value})} />
+                                    <InputField label="Quantidade" type="number" placeholder="500" value={newTier.maxTicketsSupply} onChange={e => setNewTier({...newTier, maxTicketsSupply: e.target.value})} />
+                                </div>
+                                <ActionButton onClick={handleAddTier} loading={actionLoading}>Adicionar Lote</ActionButton>
+                            </div>
+                        ) : (
+                            <p className="text-sm text-slate-500">Não é possível adicionar novos lotes a um evento que já teve suas vendas encerradas ou foi cancelado.</p>
+                        )}
+                    </AdminCard>
+                    <ParticipantsList 
+                        program={program} 
+                        eventAddress={eventAddress}
+                        eventName={metadata?.name || 'evento'}
+                    />
+                </div>
 
-                <div className="space-y-8">
-                    <AdminCard title="Gerenciar Validadores" icon={UserPlusIcon}>
-                        <div className="space-y-4">
-                            <div className="p-3 bg-indigo-50 border border-indigo-200 rounded-lg">
-                                <label className="text-sm font-semibold text-indigo-800 flex items-center gap-2">
-                                    <ShareIcon className="h-5 w-5" />
-                                    Link para Validadores
-                                </label>
-                                <p className="text-xs text-indigo-700 mt-1 mb-2">Envie este link para a equipe que fará o check-in no dia do evento.</p>
-                                <div className="flex items-center gap-2">
-                                    <input 
-                                        type="text" 
-                                        readOnly 
-                                        value={validatorLink} 
-                                        className="w-full text-xs font-mono bg-white border-slate-300 rounded-md shadow-sm"
-                                    />
-                                    <button onClick={handleCopyLink} className="p-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 flex-shrink-0">
-                                        <ClipboardDocumentIcon className="h-5 w-5" />
-                                    </button>
-                                </div>
-                            </div>
+                <div className="space-y-8">
+                    <AdminCard title="Gerenciar Validadores" icon={UserPlusIcon}>
+                        <div className="space-y-4">
+                            <div className="p-3 bg-indigo-50 border border-indigo-200 rounded-lg">
+                                <label className="text-sm font-semibold text-indigo-800 flex items-center gap-2">
+                                    <ShareIcon className="h-5 w-5" />
+                                    Link para Validadores
+                                </label>
+                                <p className="text-xs text-indigo-700 mt-1 mb-2">Envie este link para a equipe que fará o check-in no dia do evento.</p>
+                                <div className="flex items-center gap-2">
+                                    <input 
+                                        type="text" 
+                                        readOnly 
+                                        value={validatorLink} 
+                                        className="w-full text-xs font-mono bg-white border-slate-300 rounded-md shadow-sm"
+                                    />
+                                    <button onClick={handleCopyLink} className="p-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 flex-shrink-0">
+                                        <ClipboardDocumentIcon className="h-5 w-5" />
+                                    </button>
+                                </div>
+                            </div>
 
-                            <div>
-                                <InputField label="Endereço da Carteira" value={validatorAddress} onChange={e => setValidatorAddress(e.target.value)} placeholder="Cole o endereço da carteira aqui" />
-                                <ActionButton onClick={handleAddValidator} loading={actionLoading} className="mt-2 w-full">Adicionar Validador</ActionButton>
-                            </div>
-                            <div className="space-y-2">
-                                <h4 className="text-sm font-semibold text-slate-600 pt-2 border-t">Validadores Atuais:</h4>
-                                {Array.isArray(event.validators) && event.validators.length > 0 ? (
-                                    event.validators.map(v => (
-                                        <div key={v.toString()} className="flex items-center justify-between bg-slate-100 p-2 rounded">
-                                            <p className="text-xs font-mono break-all pr-2">{v.toString()}</p>
-                                            <button onClick={() => handleRemoveValidator(v.toString())} className="text-red-500 hover:text-red-700 flex-shrink-0" disabled={actionLoading}>
-                                                <XCircleIcon className="h-5 w-5"/>
-                                            </button>
-                                        </div>
-                                    ))
-                                ) : <p className="text-sm text-slate-500">Nenhum validador cadastrado.</p>}
-                            </div>
-                        </div>
-                    </AdminCard>
-                    
-                    <AdminCard title="Zona de Perigo" icon={ExclamationTriangleIcon}>
-                        <p className="text-sm text-slate-600 mb-4">Cancelar o evento é uma ação irreversível.</p>
-                        <ActionButton 
-                            onClick={handleCancelEvent} 
-                            loading={actionLoading} 
-                            disabled={event.canceled} 
-                            className="w-full bg-red-600 hover:bg-red-700 disabled:bg-red-300 flex items-center justify-center"
-                        >
-                            <XCircleIcon className="h-5 w-5 mr-2"/>
-                            {event.canceled ? 'Evento Já Cancelado' : 'Cancelar Evento'}
-                        </ActionButton>
-                    </AdminCard>
-                </div>
-            </div>
-        </div>
-    );
+                            <div>
+                                <InputField label="Endereço da Carteira" value={validatorAddress} onChange={e => setValidatorAddress(e.target.value)} placeholder="Cole o endereço da carteira aqui" />
+                                <ActionButton onClick={handleAddValidator} loading={actionLoading} className="mt-2 w-full">Adicionar Validador</ActionButton>
+                            </div>
+                            <div className="space-y-2">
+                                <h4 className="text-sm font-semibold text-slate-600 pt-2 border-t">Validadores Atuais:</h4>
+                                {Array.isArray(event.validators) && event.validators.length > 0 ? (
+                                    event.validators.map(v => (
+                                        <div key={v.toString()} className="flex items-center justify-between bg-slate-100 p-2 rounded">
+                                            <p className="text-xs font-mono break-all pr-2">{v.toString()}</p>
+                                            <button onClick={() => handleRemoveValidator(v.toString())} className="text-red-500 hover:text-red-700 flex-shrink-0" disabled={actionLoading}>
+                                                <XCircleIcon className="h-5 w-5"/>
+                                            </button>
+                                        </div>
+                                    ))
+                                ) : <p className="text-sm text-slate-500">Nenhum validador cadastrado.</p>}
+                            </div>
+                        </div>
+                    </AdminCard>
+                    
+                    <AdminCard title="Zona de Perigo" icon={ExclamationTriangleIcon}>
+    <p className="text-sm text-slate-600 mb-4">Cancelar o evento é uma ação irreversível.</p>
+   
+    <ActionButton 
+        onClick={handleCancelEvent} 
+        loading={actionLoading} 
+        disabled={event.canceled} 
+        className="w-full bg-red-600 hover:bg-red-700 disabled:bg-red-300 flex items-center justify-center"
+    >
+        <XCircleIcon className="h-5 w-5 mr-2"/>
+        {event.canceled ? 'Evento Já Cancelado' : 'Cancelar Evento'}
+    </ActionButton>
+</AdminCard>
+                </div>
+            </div>
+        </div>
+    );
 }
 
 // Componentes Auxiliares
 const StatCard = ({ icon: Icon, title, value, color }) => (
-    <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-start space-x-4">
-        <div className={`p-3 rounded-lg bg-indigo-100 ${color}`}>
-            <Icon className="h-6 w-6" />
-        </div>
-        <div>
-            <p className="text-sm font-medium text-slate-500">{title}</p>
-            <p className="text-2xl font-bold text-slate-900">{value}</p>
-        </div>
-    </div>
+    <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-start space-x-4">
+        <div className={`p-3 rounded-lg bg-indigo-100 ${color}`}>
+            <Icon className="h-6 w-6" />
+        </div>
+        <div>
+            <p className="text-sm font-medium text-slate-500">{title}</p>
+            <p className="text-2xl font-bold text-slate-900">{value}</p>
+        </div>
+    </div>
 );
 
 const TierProgress = ({ tier }) => {
-    // ✅ CORREÇÃO CRÍTICA: Converte o preço de Hexadecimal para Decimal para exibir
-    const priceInBRLCents = parseInt(tier.priceBrlCents || '0', 16);
-    const priceInBRL = priceInBRLCents / 100;
-    
-    const progress = tier.maxTicketsSupply > 0 ? (tier.ticketsSold / tier.maxTicketsSupply) * 100 : 0;
-    
-    // ✅ CORREÇÃO: A receita agora é em BRL
-    const revenue = (tier.ticketsSold * priceInBRLCents) / 100;
+    // ✅ CORREÇÃO CRÍTICA: Converte o preço de Hexadecimal para Decimal para exibir
+    const priceInBRLCents = parseInt(tier.priceBrlCents || '0', 16);
+    const priceInBRL = priceInBRLCents / 100;
+    
+    const progress = tier.maxTicketsSupply > 0 ? (tier.ticketsSold / tier.maxTicketsSupply) * 100 : 0;
+    
+    // ✅ CORREÇÃO: A receita agora é em BRL
+    const revenue = (tier.ticketsSold * priceInBRLCents) / 100;
 
-    const formatCurrency = (amount) => {
-        return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(amount);
-    };
+    const formatCurrency = (amount) => {
+        return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(amount);
+    };
 
-    return (
-        <div className="p-4 border rounded-lg bg-slate-50">
-            <div className="flex justify-between items-center mb-2">
-                <div>
-                    <p className="font-bold text-slate-800">{tier.name}</p>
-                    {/* ✅ Exibe o preço em BRL */}
-                    <p className="text-xs text-slate-500">
-                        Preço: {formatCurrency(priceInBRL)}
-                    </p>
-                </div>
-                <div className="text-right">
-                    <p className="font-semibold text-indigo-600">{tier.ticketsSold} / {tier.maxTicketsSupply}</p>
-                    {/* ✅ Exibe a receita em BRL */}
-                    <p className="text-xs text-slate-500">Receita: {formatCurrency(revenue)}</p>
-                </div>
-            </div>
-            <div className="w-full bg-slate-200 rounded-full h-2">
-                <div className="bg-indigo-500 h-2 rounded-full" style={{ width: `${progress}%` }}></div>
-            </div>
-        </div>
-    );
+    return (
+        <div className="p-4 border rounded-lg bg-slate-50">
+            <div className="flex justify-between items-center mb-2">
+                <div>
+                    <p className="font-bold text-slate-800">{tier.name}</p>
+                    {/* ✅ Exibe o preço em BRL */}
+                    <p className="text-xs text-slate-500">
+                        Preço: {formatCurrency(priceInBRL)}
+                    </p>
+                </div>
+                <div className="text-right">
+                    <p className="font-semibold text-indigo-600">{tier.ticketsSold} / {tier.maxTicketsSupply}</p>
+                    {/* ✅ Exibe a receita em BRL */}
+                    <p className="text-xs text-slate-500">Receita: {formatCurrency(revenue)}</p>
+                </div>
+            </div>
+            <div className="w-full bg-slate-200 rounded-full h-2">
+                <div className="bg-indigo-500 h-2 rounded-full" style={{ width: `${progress}%` }}></div>
+            </div>
+        </div>
+    );
 };
