@@ -1,7 +1,8 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useConnection } from '@solana/wallet-adapter-react';
 import { Program, AnchorProvider, web3 } from '@coral-xyz/anchor';
 import idl from '@/idl/ticketing_system.json';
+import toast from 'react-hot-toast'; // Adicionado toast
 
 // 1. Importar componentes adicionais para a nova UI
 import { Link } from 'react-router-dom';
@@ -12,7 +13,8 @@ import { useAppWallet } from '@/hooks/useAppWallet';
 import { CreateEventWizard } from '@/components/event/create/CreateEventWizard';
 import { MyEventsList } from '@/components/event/MyEventsList';
 import { InfoBox } from '@/components/ui/InfoBox';
-import { PROGRAM_ID } from '@/lib/constants';
+import { PROGRAM_ID, API_URL } from '@/lib/constants'; // Garante que API_URL está importado
+import { Spinner } from '@/components/ui/Spinner';
 
 const GLOBAL_CONFIG_SEED = Buffer.from("config");
 const WHITELIST_SEED = Buffer.from("whitelist");
@@ -39,7 +41,7 @@ const LoginPrompt = () => (
             </Link>
              {/* O WalletMultiButton já vem estilizado, mas podemos envolvê-lo para consistência */}
             <div className="w-full sm:w-auto">
-                 <WalletMultiButton style={{ width: '100%' }} />
+                <WalletMultiButton style={{ width: '100%' }} />
             </div>
         </div>
         <p className="mt-6 text-xs text-slate-500">Escolha o método de sua preferência para continuar.</p>
@@ -66,48 +68,52 @@ export function CreateEvent() {
     }, [connection, wallet]);
 
     const program = useMemo(() => {
-        if (!provider) {
-             const readOnlyProvider = new AnchorProvider(connection, {}, AnchorProvider.defaultOptions());
-             return new Program(idl, PROGRAM_ID, readOnlyProvider);
-        }
-        return new Program(idl, PROGRAM_ID, provider);
+        // CORRIGIDO: Certifica-se de que o programa é sempre inicializado (read-only ou com wallet)
+        const readOnlyProvider = new AnchorProvider(connection, {}, AnchorProvider.defaultOptions());
+        const effectiveProvider = provider || readOnlyProvider;
+        return new Program(idl, PROGRAM_ID, effectiveProvider);
     }, [provider, connection]);
 
-    useEffect(() => {
-        const checkPermissions = async () => {
-            if (!program || !wallet.publicKey) {
-                setIsLoadingPermissions(false);
+    const checkPermissions = useCallback(async () => {
+        if (!wallet.publicKey) {
+            setIsLoadingPermissions(false);
+            setIsAllowed(false);
+            return;
+        }
+        
+        setIsLoadingPermissions(true);
+        
+        try {
+            // ✅ CORREÇÃO: Chama o novo endpoint da API para verificação centralizada
+            const response = await fetch(`${API_URL}/check-organizer-permission/${wallet.publicKey.toString()}`);
+            const data = await response.json();
+
+            if (!response.ok || !data.success) {
+                 // Em caso de falha da API, assume que não está permitido
                 setIsAllowed(false);
                 return;
             }
+
+            setIsAllowed(data.isAllowed);
             
-            setIsLoadingPermissions(true);
-            // ... (lógica de permissões permanece a mesma) ...
-            try {
-                const [globalConfigPda] = web3.PublicKey.findProgramAddressSync([GLOBAL_CONFIG_SEED], program.programId);
-                const globalConfig = await program.account.globalConfig.fetch(globalConfigPda);
-                if (globalConfig.authority.equals(wallet.publicKey)) {
-                    setIsAllowed(true);
-                    setIsLoadingPermissions(false);
-                    return; 
-                }
-            } catch (e) {
-                console.log("Usuário não é admin, verificando whitelist...");
-            }
+        } catch (error) {
+            console.error("Erro ao verificar permissões via API:", error);
+            // Mensagem de erro foi removida do front-end por ser muito intrusiva.
+            setIsAllowed(false);
+        } finally {
+            setIsLoadingPermissions(false);
+        }
+    }, [wallet.publicKey]); // Removido 'program' das dependências, pois ele é derivado do wallet
 
-            try {
-                const [whitelistPda] = web3.PublicKey.findProgramAddressSync([WHITELIST_SEED, wallet.publicKey.toBuffer()], program.programId);
-                const whitelistAccount = await program.account.whitelist.fetch(whitelistPda);
-                setIsAllowed(whitelistAccount.isWhitelisted);
-            } catch (e) {
-                setIsAllowed(false);
-            } finally {
-                setIsLoadingPermissions(false);
-            }
-        };
-
-        checkPermissions();
-    }, [wallet.publicKey, program]);
+    useEffect(() => {
+        // A API de permissão deve ser chamada apenas quando a carteira estiver conectada
+        if (wallet.connected) {
+            checkPermissions();
+        } else {
+            setIsLoadingPermissions(false);
+            setIsAllowed(false);
+        }
+    }, [wallet.connected, checkPermissions]);
 
     const renderContent = () => {
         // 2. Substituir o InfoBox pelo novo LoginPrompt
@@ -116,7 +122,7 @@ export function CreateEvent() {
         }
         
         if (isLoadingPermissions) {
-            return <div className="text-center text-slate-500">Verificando permissões...</div>;
+            return <div className="flex justify-center py-10"><Spinner /></div>;
         }
 
         if (!isAllowed) {
@@ -155,4 +161,3 @@ const TabButton = ({ name, active, onClick }) => (
         {name}
     </button>
 );
-
