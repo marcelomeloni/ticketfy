@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { ActionButton } from '../ui/ActionButton';
 import { CalendarIcon, MapPinIcon, TicketIcon } from '@heroicons/react/24/outline';
+import { web3, BN } from '@coral-xyz/anchor';
 
 // --- COMPONENTE DE ESQUELETO (LOADING STATE) ---
 const CardSkeleton = () => (
@@ -48,6 +49,16 @@ const StatusBadge = ({ status }) => {
     return <span className={`px-3 py-1 text-xs font-medium rounded-full ${styles[status]}`}>{text[status]}</span>;
 };
 
+// Helper para formatar BRL (Reais)
+const formatBRL = (amount) => {
+    return new Intl.NumberFormat('pt-BR', { 
+        style: 'currency', 
+        currency: 'BRL',
+        minimumFractionDigits: 2
+    }).format(amount);
+};
+
+
 export function EventSummaryCard({ event, publicKey }) {
     // Estado para os metadados (off-chain) e carregamento
     const [metadata, setMetadata] = useState(null);
@@ -67,7 +78,7 @@ export function EventSummaryCard({ event, publicKey }) {
             } catch (error) {
                 console.error("Failed to fetch event summary metadata:", error);
                 // Define um fallback caso o metadado falhe
-                setMetadata({ name: "Erro ao carregar evento", properties: {} }); 
+                setMetadata({ name: "Erro ao carregar evento", properties: {} }); 
             } finally {
                 setIsLoading(false);
             }
@@ -75,25 +86,50 @@ export function EventSummaryCard({ event, publicKey }) {
         fetchMetadata();
     }, [event.metadataUri]);
 
-   
+    
     const status = useMemo(() => {
         const now = Math.floor(Date.now() / 1000);
         if (event.canceled) return 'canceled';
         // A data do evento real está off-chain, então usamos o fim das vendas como referência
-        if (now > event.salesEndDate.toNumber()) return 'finished'; 
+        if (now > event.salesEndDate.toNumber()) return 'finished'; 
         if (now < event.salesStartDate.toNumber()) return 'upcoming';
         return 'active';
     }, [event.canceled, event.salesStartDate, event.salesEndDate]);
 
-    // Lógica para a barra de progresso (on-chain)
-    const totalSupply = useMemo(() => Array.isArray(event.tiers) ? event.tiers.reduce((sum, tier) => sum + tier.maxTicketsSupply, 0) : 0, [event.tiers]);
-    const totalSold = event.totalTicketsSold || 0;
-    const progress = totalSupply > 0 ? (totalSold / totalSupply) * 100 : 0;
+    // ✅ CORRIGIDO: Lógica para preço inicial e barra de progresso (on-chain)
+    const { startingPriceBRL, totalSupply, totalSold, progress } = useMemo(() => {
+        const tiers = event.tiers || [];
+        if (!Array.isArray(tiers) || tiers.length === 0) {
+            return { startingPriceBRL: 0, totalSold: 0, totalSupply: 0, progress: 0 };
+        }
+
+        // 1. Encontra o menor preço em centavos (convertendo de hexadecimal)
+        const allPricesInCents = tiers
+            .map(tier => parseInt(tier.priceBrlCents || '0', 16) || 0)
+            .filter(price => price >= 0); // Filtra por preços válidos
+
+        const startingPriceCents = allPricesInCents.length > 0 ? Math.min(...allPricesInCents) : 0;
+
+        const sold = event.totalTicketsSold || 0;
+        const supply = tiers.reduce((sum, tier) => sum + tier.maxTicketsSupply, 0);
+        const prog = supply > 0 ? (sold / supply) * 100 : 0;
+        
+        return { 
+            startingPriceBRL: startingPriceCents / 100, // Converte centavos para BRL
+            totalSold: sold, 
+            totalSupply: supply, 
+            progress: prog 
+        };
+    }, [event.tiers, event.totalTicketsSold]);
+
     
     // Renderiza o esqueleto enquanto os metadados carregam
     if (isLoading) {
         return <CardSkeleton />;
     }
+    
+    // Calcula o preço a ser exibido
+    const isFree = startingPriceBRL === 0;
 
     return (
         <div className={`bg-white p-6 rounded-xl border transition-all ${status === 'canceled' ? 'opacity-60 bg-slate-50' : 'shadow-sm hover:shadow-md'}`}>
@@ -106,7 +142,7 @@ export function EventSummaryCard({ event, publicKey }) {
                     </div>
                     <div className="flex items-center text-sm text-slate-500 gap-6">
                         <span className="flex items-center gap-2"><MapPinIcon className="h-4 w-4" /> {metadata.properties?.location?.address?.city || 'Online'}</span>
-                        <span className="flex items-center gap-2"><CalendarIcon className="h-4 w-4" /> 
+                        <span className="flex items-center gap-2"><CalendarIcon className="h-4 w-4" /> 
                             {new Date(metadata.properties?.dateTime?.start || Date.now()).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}
                         </span>
                     </div>
@@ -125,8 +161,17 @@ export function EventSummaryCard({ event, publicKey }) {
                     )}
                 </div>
 
-                {/* Coluna de Ação */}
-                <div className="flex-shrink-0 flex items-center">
+                {/* Coluna de Ação (Preço e Botão) */}
+                <div className="flex-shrink-0 flex flex-col justify-center items-end space-y-2">
+                    <div className="text-right">
+                        <p className="text-sm text-slate-500">
+                            {isFree ? 'Status' : 'A partir de'}
+                        </p>
+                        <h4 className="text-xl font-bold text-slate-900">
+                            {isFree ? 'Gratuito' : formatBRL(startingPriceBRL)}
+                        </h4>
+                    </div>
+                    
                     <Link to={`/manage-event/${publicKey.toString()}`}>
                         <ActionButton>
                             <TicketIcon className="h-5 w-5 mr-2"/>
@@ -138,3 +183,9 @@ export function EventSummaryCard({ event, publicKey }) {
         </div>
     );
 }
+
+const TabButton = ({ name, active, onClick }) => (
+    <button onClick={onClick} className={`px-1 py-3 text-sm font-semibold transition-colors ${active ? 'border-indigo-500 text-indigo-600 border-b-2' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
+        {name}
+    </button>
+);
