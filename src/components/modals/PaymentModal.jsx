@@ -1,7 +1,11 @@
-// components/modals/PaymentModal.jsx
+// src/components/modals/PaymentModal.jsx
 import { useState, useEffect } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
-import { CopyIcon, CheckIcon, ClockIcon } from '@heroicons/react/24/outline';
+import { 
+  DocumentDuplicateIcon, 
+  CheckIcon, 
+  ClockIcon 
+} from '@heroicons/react/24/outline';
 
 export const PaymentModal = ({ 
   isOpen, 
@@ -46,11 +50,14 @@ export const PaymentModal = ({
     return () => clearInterval(timer);
   }, [isOpen, paymentStatus]);
 
-  // Simulação de verificação de pagamento
+  // Simulação de verificação de pagamento (em produção seria WebSocket ou polling)
   useEffect(() => {
     if (!isOpen || paymentStatus !== 'pending') return;
 
     const checkPayment = async () => {
+      // Em produção, aqui faria uma requisição para verificar o status
+      // const status = await checkPixPayment(pixData.transactionId);
+      
       // Simulação: 20% de chance de pagamento ser detectado a cada 3 segundos
       if (Math.random() < 0.2 && timeLeft < 14 * 60) {
         setPaymentStatus('paid');
@@ -166,7 +173,7 @@ export const PaymentModal = ({
                   {copied ? (
                     <CheckIcon className="w-4 h-4" />
                   ) : (
-                    <CopyIcon className="w-4 h-4" />
+                    <DocumentDuplicateIcon className="w-4 h-4" />
                   )}
                   {copied ? 'Copiado!' : 'Copiar'}
                 </button>
