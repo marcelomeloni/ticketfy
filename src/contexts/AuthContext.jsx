@@ -1,257 +1,195 @@
 // src/contexts/AuthContext.jsx
-import React, { createContext, useState, useContext, useMemo, useCallback, useEffect } from 'react';
-import { getKeypairFromCredentials, getKeypairFromSeedPhrase, getKeypairFromPrivateKey } from '../lib/authUtils';
-import { checkRole } from '../api/authService';
 
-export const USER_ROLES = {
-  BATCH_OWNER: 'batchOwner',
-  NO_AUTH: 'noAuth',
-  PRODUCER: 'producer',
-  LOGISTICS: 'logistics',
-  WAREHOUSE: 'warehouse',
-  GRADER: 'grader',
-  ROASTER: 'roaster',
-  PACKAGER: 'packager',
-  DISTRIBUTOR: 'distributor',
-  BENEFICIAMENTO: 'beneficiamento',
-  END_CONSUMER: 'end_consumer',
-  SUSTAINABILITY: 'sustainability',
-};
+import React, { createContext, useState, useContext, useMemo, useCallback, useEffect } from 'react';
+import { Keypair } from '@solana/web3.js';
+import * as bip39 from 'bip39';
+import { derivePath } from 'ed25519-hd-key';
+import bs58 from 'bs58';
+import { getKeypairFromCredentials } from '../lib/authUtils';
 
 const AuthContext = createContext(null);
-const LOCAL_STORAGE_KEY = 'coffee-trace-credentials';
+const LOCAL_STORAGE_KEY = 'solana-local-wallet-credentials';
 
 export function AuthProvider({ children }) {
     const [keypair, setKeypair] = useState(null);
-    const [userRole, setUserRole] = useState(null);
-    const [partnerId, setPartnerId] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState(null);
-    const [unregisteredPublicKey, setUnregisteredPublicKey] = useState(null);
-    const [sessionRestored, setSessionRestored] = useState(false);
 
-    // 🆕 Função auxiliar para verificar role após obter keypair
-    const verifyRoleAndCompleteLogin = async (generatedKeypair, loginMethod = 'credentials') => {
-      const publicKeyStr = generatedKeypair.publicKey.toBase58();
-      console.log(`🔐 Verificando role para: ${publicKeyStr} (método: ${loginMethod})`);
-      
-      const roleResponse = await checkRole(publicKeyStr);
-      console.log('📋 Resposta da API:', roleResponse);
+    // Função para derivar keypair de seedphrase
+    const getKeypairFromSeedphrase = useCallback(async (seedWords) => {
+        // Junta as palavras e normaliza
+        const mnemonic = seedWords.join(' ').trim().toLowerCase();
+        
+        // Valida se é uma seedphrase válida
+        if (!bip39.validateMnemonic(mnemonic)) {
+            throw new Error('Seedphrase inválida');
+        }
 
-      if (!roleResponse || !roleResponse.role) {
-        throw new Error('Resposta inválida da API - role não encontrado');
-      }
+        // Deriva a seed da mnemonic
+        const seed = await bip39.mnemonicToSeed(mnemonic);
+        
+        // Deriva o keypair usando o path padrão do Solana
+        const path = "m/44'/501'/0'/0'";
+        const derivedSeed = derivePath(path, seed.toString('hex')).key;
+        
+        return Keypair.fromSeed(derivedSeed.slice(0, 32));
+    }, []);
 
-      const { role, partnerId } = roleResponse;
+    // Função para derivar keypair de private key
+    const getKeypairFromPrivateKey = useCallback(async (privateKey) => {
+        try {
+            // Tenta decodificar como base58 (formato comum do Solana)
+            const secretKey = bs58.decode(privateKey.trim());
+            return Keypair.fromSecretKey(secretKey);
+        } catch (e) {
+            try {
+                // Tenta como hex string
+                const hexString = privateKey.trim();
+                if (hexString.length === 64 || hexString.length === 128) {
+                    const secretKey = Uint8Array.from(Buffer.from(hexString, 'hex'));
+                    return Keypair.fromSecretKey(secretKey);
+                }
+                throw new Error('Formato de private key inválido');
+            } catch (hexError) {
+                throw new Error('Private key inválida. Use base58 ou hex format');
+            }
+        }
+    }, []);
 
-      if (role === USER_ROLES.NO_AUTH) {
-        const authError = "Usuário não autorizado. Sua carteira não está registrada no sistema.";
-        console.warn('❌ Usuário não autorizado:', publicKeyStr);
-        setError(authError);
-        setUnregisteredPublicKey(publicKeyStr);
-        return false;
-      }
+    // Efeito para login automático do localStorage
+    useEffect(() => {
+        const tryRestoreSession = async () => {
+            try {
+                const savedCredentials = localStorage.getItem(LOCAL_STORAGE_KEY);
+                if (savedCredentials) {
+                    const { username, password, loginType, seedPhrase, privateKey } = JSON.parse(savedCredentials);
+                    
+                    if (loginType === 'credentials' && username && password) {
+                        console.log("Restaurando sessão com credenciais...");
+                        const generatedKeypair = await getKeypairFromCredentials(username, password);
+                        setKeypair(generatedKeypair);
+                    }
+                    else if (loginType === 'seedphrase' && seedPhrase) {
+                        console.log("Restaurando sessão com seedphrase...");
+                        const keypair = await getKeypairFromSeedphrase(seedPhrase);
+                        setKeypair(keypair);
+                    }
+                    else if (loginType === 'privateKey' && privateKey) {
+                        console.log("Restaurando sessão com private key...");
+                        const keypair = await getKeypairFromPrivateKey(privateKey);
+                        setKeypair(keypair);
+                    }
+                }
+            } catch (err) {
+                console.error("Falha ao restaurar sessão:", err);
+                localStorage.removeItem(LOCAL_STORAGE_KEY);
+            } finally {
+                setIsLoading(false);
+            }
+        };
 
-      console.log('💾 Configurando dados de autenticação...');
-      setKeypair(generatedKeypair);
-      setUserRole(role);
-      setPartnerId(partnerId);
-      setError(null);
-      setUnregisteredPublicKey(null);
-      
-      // 🆕 Só salva no localStorage se for login por credenciais
-      if (loginMethod === 'credentials') {
-        console.log('💾 Salvando credenciais no localStorage...');
-      }
-      
-      console.log('🎉 Login realizado com sucesso! Role:', role, 'ID:', partnerId);
-      return true;
-    };
+        tryRestoreSession();
+    }, [getKeypairFromSeedphrase, getKeypairFromPrivateKey]);
 
-    // Login tradicional com username/password
+    // Login com username/senha
     const login = useCallback(async (username, password) => {
         setIsLoading(true);
         setError(null);
-        setUnregisteredPublicKey(null);
-
         try {
-            console.log('🔐 Iniciando login com credenciais...');
             const generatedKeypair = await getKeypairFromCredentials(username, password);
-            const success = await verifyRoleAndCompleteLogin(generatedKeypair, 'credentials');
+            setKeypair(generatedKeypair);
             
-            if (success) {
-              localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify({ username, password }));
-            } else {
-              localStorage.removeItem(LOCAL_STORAGE_KEY);
-            }
+            // Salva no localStorage
+            const credentialsToSave = JSON.stringify({ 
+                username, 
+                password,
+                loginType: 'credentials'
+            });
+            localStorage.setItem(LOCAL_STORAGE_KEY, credentialsToSave);
             
-            setIsLoading(false);
-            return success;
-
+            return true;
         } catch (err) {
-            console.error("💥 Falha na autenticação:", err);
-            const errorMessage = err.message || "Credenciais inválidas ou falha de comunicação.";
-            setError(errorMessage);
-            setKeypair(null);
-            setUserRole(null);
-            setPartnerId(null);
-            setUnregisteredPublicKey(null);
-            
+            console.error("Falha no login:", err);
+            setError("Credenciais inválidas ou falha ao gerar a carteira.");
             localStorage.removeItem(LOCAL_STORAGE_KEY);
-            setIsLoading(false);
             return false;
+        } finally {
+            setIsLoading(false);
         }
     }, []);
 
-    // 🆕 NOVO: Login com Seed Phrase
+    // Login com seedphrase
     const loginWithSeedphrase = useCallback(async (seedWords) => {
         setIsLoading(true);
         setError(null);
-        setUnregisteredPublicKey(null);
-
         try {
-            console.log('🔐 Iniciando login com seed phrase...');
-            const seedPhrase = seedWords.join(' ');
-            const generatedKeypair = await getKeypairFromSeedPhrase(seedPhrase);
-            const success = await verifyRoleAndCompleteLogin(generatedKeypair, 'seedphrase');
+            const keypair = await getKeypairFromSeedphrase(seedWords);
+            setKeypair(keypair);
             
-            // 🆕 Não salva seed phrase no localStorage por segurança
-            setIsLoading(false);
-            return success;
-
+            // Salva no localStorage (apenas a seedphrase, não as palavras individuais)
+            const credentialsToSave = JSON.stringify({ 
+                seedPhrase: seedWords,
+                loginType: 'seedphrase'
+            });
+            localStorage.setItem(LOCAL_STORAGE_KEY, credentialsToSave);
+            
+            return true;
         } catch (err) {
-            console.error("💥 Falha no login com seed phrase:", err);
-            const errorMessage = err.message || "Seed phrase inválida ou falha de comunicação.";
-            setError(errorMessage);
-            setKeypair(null);
-            setUserRole(null);
-            setPartnerId(null);
-            setUnregisteredPublicKey(null);
-            
-            setIsLoading(false);
+            console.error("Falha no login com seedphrase:", err);
+            setError(err.message || "Seedphrase inválida. Verifique as palavras.");
+            localStorage.removeItem(LOCAL_STORAGE_KEY);
             return false;
+        } finally {
+            setIsLoading(false);
         }
-    }, []);
+    }, [getKeypairFromSeedphrase]);
 
-    // 🆕 NOVO: Login com Private Key
+    // Login com private key
     const loginWithPrivateKey = useCallback(async (privateKey) => {
         setIsLoading(true);
         setError(null);
-        setUnregisteredPublicKey(null);
-
         try {
-            console.log('🔐 Iniciando login com private key...');
-            const generatedKeypair = await getKeypairFromPrivateKey(privateKey);
-            const success = await verifyRoleAndCompleteLogin(generatedKeypair, 'privatekey');
+            const keypair = await getKeypairFromPrivateKey(privateKey);
+            setKeypair(keypair);
             
-            // 🆕 Não salva private key no localStorage por segurança
-            setIsLoading(false);
-            return success;
-
+            // Salva no localStorage
+            const credentialsToSave = JSON.stringify({ 
+                privateKey: privateKey,
+                loginType: 'privateKey'
+            });
+            localStorage.setItem(LOCAL_STORAGE_KEY, credentialsToSave);
+            
+            return true;
         } catch (err) {
-            console.error("💥 Falha no login com private key:", err);
-            const errorMessage = err.message || "Private key inválida ou falha de comunicação.";
-            setError(errorMessage);
-            setKeypair(null);
-            setUserRole(null);
-            setPartnerId(null);
-            setUnregisteredPublicKey(null);
-            
-            setIsLoading(false);
+            console.error("Falha no login com private key:", err);
+            setError(err.message || "Private key inválida. Verifique o formato.");
+            localStorage.removeItem(LOCAL_STORAGE_KEY);
             return false;
+        } finally {
+            setIsLoading(false);
         }
-    }, []);
+    }, [getKeypairFromPrivateKey]);
 
     const logout = useCallback(() => {
-        console.log('🚪 Realizando logout...');
         setKeypair(null);
-        setUserRole(null);
-        setPartnerId(null);
         setError(null);
-        setUnregisteredPublicKey(null);
         localStorage.removeItem(LOCAL_STORAGE_KEY);
-        console.log('✅ Logout concluído');
+        console.log("Usuário deslogado.");
     }, []);
-
-    useEffect(() => {
-        const restoreSession = async () => {
-            if (sessionRestored) {
-                return;
-            }
-
-            console.log('🔄 Tentando restaurar sessão...');
-            const savedCredentials = localStorage.getItem(LOCAL_STORAGE_KEY);
-
-            if (!savedCredentials) {
-                console.log('🔍 Nenhuma sessão anterior encontrada');
-                setIsLoading(false);
-                setSessionRestored(true);
-                return;
-            }
-
-            try {
-                console.log('📦 Credenciais encontradas no localStorage');
-                const { username, password } = JSON.parse(savedCredentials);
-                
-                const generatedKeypair = await getKeypairFromCredentials(username, password);
-                const publicKeyStr = generatedKeypair.publicKey.toBase58();
-                
-                const roleResponse = await checkRole(publicKeyStr);
-                
-                if (roleResponse.role !== USER_ROLES.NO_AUTH) {
-                    setKeypair(generatedKeypair);
-                    setUserRole(roleResponse.role);
-                    setPartnerId(roleResponse.partnerId);
-                    console.log('✅ Sessão restaurada com sucesso:', roleResponse.role, 'ID:', roleResponse.partnerId);
-                } else {
-                    console.warn('⚠️ Role não autorizado, forçando logout');
-                    logout();
-                }
-            } catch (err) {
-                console.error('❌ Erro ao restaurar sessão:', err);
-                logout();
-            } finally {
-                setIsLoading(false); 
-                setSessionRestored(true);
-            }
-        };
-        
-        restoreSession();
-    }, [sessionRestored, logout]);
 
     const value = useMemo(() => ({
         keypair,
         publicKey: keypair?.publicKey,
-        userRole,
-        partnerId,
+        isAuthenticated: !!keypair,
         isLoading,
         error,
-        unregisteredPublicKey,
-        isAuthenticated: !!keypair && !!userRole && userRole !== USER_ROLES.NO_AUTH,
-        isBatchOwner: userRole === USER_ROLES.BATCH_OWNER,
         login,
-        loginWithSeedphrase, // 🆕 Exportando novo método
-        loginWithPrivateKey, // 🆕 Exportando novo método
-        logout,
-        USER_ROLES,
-    }), [
-        keypair, 
-        userRole, 
-        partnerId,
-        isLoading, 
-        error, 
-        unregisteredPublicKey, 
-        login, 
         loginWithSeedphrase,
         loginWithPrivateKey,
-        logout
-    ]);
+        logout,
+    }), [keypair, isLoading, error, login, loginWithSeedphrase, loginWithPrivateKey, logout]);
 
-    return (
-        <AuthContext.Provider value={value}>
-            {children}
-        </AuthContext.Provider>
-    );
+    return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 export const useAuth = () => {
