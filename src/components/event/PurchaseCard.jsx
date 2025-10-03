@@ -27,10 +27,29 @@ export const PurchaseCard = ({ metadata, eventAccount, eventAddress, onPurchaseS
     const [pendingFormData, setPendingFormData] = useState(null);
 
     const selectedTier = selectedTierIndex !== null ? eventAccount.tiers[selectedTierIndex] : null;
-    const isPaidTier = selectedTier ? Number(selectedTier.priceLamports) > 0 : false;
     
-    // Converter lamports para Reais (1 SOL = R$ 100 como exemplo)
-    const tierPriceInReais = selectedTier ? (Number(selectedTier.priceLamports) * 0.000000001 * 100).toFixed(2) : 0;
+    // ✅ CORREÇÃO CRÍTICA: O Anchor serializa BN como string hexadecimal. Convertemos para decimal.
+    const hexPriceString = selectedTier?.priceBrlCents || '0';
+    const priceInCents = parseInt(hexPriceString, 16) || 0; // Converte HEX para DECIMAL
+    
+    // O ingresso é pago se o preço decimal for maior que zero.
+    const isPaidTier = priceInCents > 0;
+    
+    // ✅ CORRIGIDO: Calcula o preço em Reais (BRL)
+    const tierPriceInReais = (priceInCents / 100).toFixed(2);
+    
+    // ✅ NOVO: Calcula o fornecimento total somando todos os tiers
+    const maxTotalSupply = eventAccount.tiers.reduce((total, tier) => total + Number(tier.maxTicketsSupply), 0);
+    
+    // Log de depuração (melhorado para ser mais claro)
+    console.log("--- DEBUG ---");
+    console.log("TIER NAME:", selectedTier?.name);
+    console.log("TIER PRICE (HEX):", hexPriceString);
+    console.log("TIER PRICE (cents decimal):", priceInCents);
+    console.log("IS PAID TIER:", isPaidTier);
+    console.log("MAX TOTAL SUPPLY:", maxTotalSupply);
+    console.log("--- END DEBUG ---");
+
 
     const handleSelectTier = (index) => {
         setSelectedTierIndex(index);
@@ -39,6 +58,12 @@ export const PurchaseCard = ({ metadata, eventAccount, eventAddress, onPurchaseS
     const handlePurchaseClick = () => {
         if (selectedTierIndex === null) {
             toast.error("Por favor, selecione um tipo de ingresso.");
+            return;
+        }
+
+        // Se o preço for zero, mas o organizador espera que seja pago, é um erro de configuração
+        if (isPaidTier && priceInCents === 0) {
+            toast.error("Erro: Preço inválido (R$ 0,00). Verifique a configuração do evento.");
             return;
         }
 
@@ -87,6 +112,9 @@ export const PurchaseCard = ({ metadata, eventAccount, eventAddress, onPurchaseS
         try {
             let response;
             let data;
+            
+            const priceBRLCents = isPaid ? priceInCents : 0; // Já temos o valor correto em centavos.
+
 
             // CASO 1: Usuário está conectado com carteira externa
             if (wallet.connected && wallet.publicKey) {
@@ -97,6 +125,7 @@ export const PurchaseCard = ({ metadata, eventAccount, eventAddress, onPurchaseS
                         eventAddress,
                         buyerAddress: wallet.publicKey.toString(),
                         tierIndex: selectedTierIndex,
+                        priceBRLCents: priceBRLCents, // Passa o preço BRL para o servidor
                         ...formData,
                     }),
                 });
@@ -106,14 +135,8 @@ export const PurchaseCard = ({ metadata, eventAccount, eventAddress, onPurchaseS
                     throw new Error(data.details || 'Falha ao processar a solicitação.');
                 }
                 
-                // Se for pago e usuário com carteira externa, processa transação
-                if (isPaid && wallet.walletType === 'adapter' && wallet.sendTransaction) {
-                    toast.loading('Aguardando sua aprovação na carteira...', { id: toastId });
-                    const buffer = Buffer.from(data.transaction, 'base64');
-                    const transaction = Transaction.from(buffer);
-                    const signature = await wallet.sendTransaction(transaction, connection);
-                    await connection.confirmTransaction(signature, 'confirmed');
-                }
+                // Transação SOL on-chain removida. Pagamento é validado via PIX/servidor.
+
 
             } 
             // CASO 2: Usuário NÃO está conectado (novo usuário)
@@ -126,6 +149,7 @@ export const PurchaseCard = ({ metadata, eventAccount, eventAddress, onPurchaseS
                         body: JSON.stringify({
                             eventAddress,
                             tierIndex: selectedTierIndex,
+                            priceBRLCents: priceBRLCents, // Passa o preço BRL para o servidor
                             ...formData,
                             paymentMethod: 'pix', // Indicar que foi pago via PIX
                         }),
@@ -178,7 +202,7 @@ export const PurchaseCard = ({ metadata, eventAccount, eventAddress, onPurchaseS
         }
     };
 
-    const isSoldOut = eventAccount.totalTicketsSold >= eventAccount.maxTotalSupply;
+    const isSoldOut = eventAccount.totalTicketsSold >= maxTotalSupply;
     const hasAvailableTickets = selectedTier ? 
         selectedTier.ticketsSold < selectedTier.maxTicketsSupply : true;
 
@@ -188,7 +212,8 @@ export const PurchaseCard = ({ metadata, eventAccount, eventAddress, onPurchaseS
                 <div className="flex items-center justify-between mb-2">
                     <h2 className="text-2xl font-bold text-slate-900">Ingressos</h2>
                     <span className="text-sm text-slate-600 bg-slate-100 px-3 py-1 rounded-full">
-                        {eventAccount.totalTicketsSold} / {eventAccount.maxTotalSupply} vendidos
+                        {/* Usa o maxTotalSupply calculado */}
+                        {eventAccount.totalTicketsSold} / {maxTotalSupply} vendidos
                     </span>
                 </div>
                 
@@ -212,8 +237,8 @@ export const PurchaseCard = ({ metadata, eventAccount, eventAddress, onPurchaseS
                         className="w-full"
                     >
                         {isSoldOut ? "Ingressos Esgotados" : 
-                         !hasAvailableTickets ? "Lote Esgotado" : 
-                         isPaidTier ? "Comprar Ingresso" : "Pegar Ingresso Grátis"}
+                            !hasAvailableTickets ? "Lote Esgotado" : 
+                            isPaidTier ? "Comprar Ingresso" : "Pegar Ingresso Grátis"}
                     </ActionButton>
 
                     {/* Avisos para ingressos pagos */}

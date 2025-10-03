@@ -1,238 +1,226 @@
-// src/components/modals/PaymentModal.jsx
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { QRCodeSVG } from 'qrcode.react';
 import { 
-  DocumentDuplicateIcon, 
-  CheckIcon, 
-  ClockIcon 
+    DocumentDuplicateIcon, 
+    CheckIcon, 
+    ClockIcon,
+    XMarkIcon,
+    CurrencyDollarIcon
 } from '@heroicons/react/24/outline';
+import toast from 'react-hot-toast'; 
 
 export const PaymentModal = ({ 
-  isOpen, 
-  onClose, 
-  onPaymentSuccess,
-  tierPrice,
-  eventName,
-  tierName,
-  onCryptoPayment
+    isOpen, 
+    onClose, 
+    onPaymentSuccess,
+    tierPrice,
+    eventName,
+    tierName,
+    onCryptoPayment
 }) => {
-  const [copied, setCopied] = useState(false);
-  const [timeLeft, setTimeLeft] = useState(15 * 60); // 15 minutos em segundos
-  const [paymentStatus, setPaymentStatus] = useState('pending'); // pending, paid, expired
+    const [copied, setCopied] = useState(false);
+    const [timeLeft, setTimeLeft] = useState(15 * 60);
+    const [paymentStatus, setPaymentStatus] = useState('pending');
+    const [mounted, setMounted] = useState(false);
 
-  // Dados mockados do PIX (em produção viria da API)
-  const pixData = {
-    key: "00020126580014br.gov.bcb.pix0136123e4567-e89b-12d3-a456-4266141740005204000053039865406" + 
-          (tierPrice * 100).toString().padStart(2, '0') + 
-          "5802BR5913Event Ticket6009Sao Paulo62290525mpqr123456789abcdefghijklmn6304A1B2",
-    qrCode: "00020126580014br.gov.bcb.pix0136123e4567-e89b-12d3-a456-4266141740005204000053039865406" + 
-            (tierPrice * 100).toString().padStart(2, '0') + 
+    // Garantir que o componente está montado para usar o portal
+    useEffect(() => {
+        setMounted(true);
+        return () => setMounted(false);
+    }, []);
+
+    // Dados mockados do PIX
+    const pixData = {
+        key: "00020126580014br.gov.bcb.pix0136123e4567-e89b-12d3-a456-4266141740005204000053039865406" + 
+            (tierPrice * 100).toFixed(0).padStart(2, '0') + 
             "5802BR5913Event Ticket6009Sao Paulo62290525mpqr123456789abcdefghijklmn6304A1B2",
-    transactionId: "TX" + Date.now(),
-    amount: tierPrice
-  };
-
-  // Timer de expiração
-  useEffect(() => {
-    if (!isOpen || paymentStatus !== 'pending') return;
-
-    const timer = setInterval(() => {
-      setTimeLeft((prev) => {
-        if (prev <= 1) {
-          setPaymentStatus('expired');
-          clearInterval(timer);
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-
-    return () => clearInterval(timer);
-  }, [isOpen, paymentStatus]);
-
-  // Simulação de verificação de pagamento (em produção seria WebSocket ou polling)
-  useEffect(() => {
-    if (!isOpen || paymentStatus !== 'pending') return;
-
-    const checkPayment = async () => {
-      // Em produção, aqui faria uma requisição para verificar o status
-      // const status = await checkPixPayment(pixData.transactionId);
-      
-      // Simulação: 20% de chance de pagamento ser detectado a cada 3 segundos
-      if (Math.random() < 0.2 && timeLeft < 14 * 60) {
-        setPaymentStatus('paid');
-        setTimeout(() => {
-          onPaymentSuccess();
-        }, 2000);
-      }
+        qrCode: "00020126580014br.gov.bcb.pix0136123e4567-e89b-12d3-a456-4266141740005204000053039865406" + 
+            (tierPrice * 100).toFixed(0).padStart(2, '0') + 
+            "5802BR5913Event Ticket6009Sao Paulo62290525mpqr123456789abcdefghijklmn6304A1B2",
+        transactionId: "TX" + Date.now(),
+        amount: tierPrice
     };
 
-    const interval = setInterval(checkPayment, 3000);
-    return () => clearInterval(interval);
-  }, [isOpen, paymentStatus, timeLeft, onPaymentSuccess]);
+    // Reseta o estado quando o modal é aberto
+    useEffect(() => {
+        if (isOpen) {
+            setTimeLeft(15 * 60);
+            setPaymentStatus('pending');
+            setCopied(false);
+        }
+    }, [isOpen]);
 
-  const handleCopyPixCode = async () => {
-    try {
-      await navigator.clipboard.writeText(pixData.key);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch (err) {
-      console.error('Falha ao copiar código PIX:', err);
-    }
-  };
+    // Simulação de verificação de pagamento - MODIFICADA
+useEffect(() => {
+  if (!isOpen || paymentStatus !== 'pending') return;
 
-  const formatTime = (seconds) => {
-    const minutes = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-  };
+  // Timer de 5 segundos para considerar como pago
+  const paymentTimer = setTimeout(() => {
+      setPaymentStatus('paid');
+      setTimeout(() => {
+          onPaymentSuccess();
+      }, 2000);
+  }, 5000); // 5 segundos
 
-  if (!isOpen) return null;
+  return () => clearTimeout(paymentTimer);
+}, [isOpen, paymentStatus, onPaymentSuccess]);
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50">
-      <div className="bg-white rounded-2xl max-w-md w-full mx-auto overflow-hidden shadow-xl">
-        {/* Header */}
-        <div className="bg-gradient-to-r from-green-600 to-emerald-600 p-6 text-white">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-2xl font-bold">Pagamento via PIX</h2>
-              <p className="text-green-100 mt-1">{eventName}</p>
-            </div>
-            <div className="text-right">
-              <div className="text-2xl font-bold">R$ {tierPrice.toFixed(2)}</div>
-              <div className="text-green-200 text-sm">{tierName}</div>
-            </div>
-          </div>
-        </div>
+  
 
-        {/* Content */}
-        <div className="p-6">
-          {/* Timer */}
-          <div className="flex items-center justify-center gap-2 mb-6 p-3 bg-orange-50 rounded-lg">
-            <ClockIcon className="w-5 h-5 text-orange-600" />
-            <span className="text-orange-800 font-semibold">
-              Tempo restante: {formatTime(timeLeft)}
-            </span>
-          </div>
+    const handleCopyPixCode = async () => {
+        try {
+            await navigator.clipboard.writeText(pixData.key);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+        } catch (err) {
+            console.error('Falha ao copiar código PIX:', err);
+            toast.error("Falha ao copiar. Por favor, selecione e copie manualmente o código PIX.");
+        }
+    };
 
-          {paymentStatus === 'expired' && (
-            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-center">
-              <p className="text-red-800 font-medium">Pagamento expirado</p>
-              <p className="text-red-600 text-sm mt-1">
-                O tempo para pagamento acabou. Por favor, inicie uma nova compra.
-              </p>
-            </div>
-          )}
+    const formatTime = (seconds) => {
+        const minutes = Math.floor(seconds / 60);
+        const secs = seconds % 60;
+        return `${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    };
 
-          {paymentStatus === 'paid' && (
-            <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg text-center">
-              <div className="flex items-center justify-center gap-2">
-                <CheckIcon className="w-5 h-5 text-green-600" />
-                <p className="text-green-800 font-medium">Pagamento confirmado!</p>
-              </div>
-              <p className="text-green-600 text-sm mt-1">
-                Processando seu ingresso...
-              </p>
-            </div>
-          )}
+    if (!isOpen || !mounted) return null;
 
-          {/* QR Code */}
-          {paymentStatus === 'pending' && (
-            <div className="text-center mb-6">
-              <div className="bg-white p-4 rounded-xl border-2 border-gray-200 inline-block">
-                <QRCodeSVG 
-                  value={pixData.qrCode} 
-                  size={200}
-                  level="M"
-                  includeMargin={false}
-                />
-              </div>
-              <p className="text-gray-600 text-sm mt-3">
-                Escaneie o QR Code com seu app bancário
-              </p>
-            </div>
-          )}
-
-          {/* PIX Copyable Code */}
-          {paymentStatus === 'pending' && (
-            <div className="mb-6">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Ou copie o código PIX:
-              </label>
-              <div className="flex gap-2">
-                <div className="flex-1 bg-gray-50 border border-gray-200 rounded-lg p-3">
-                  <p className="text-sm font-mono text-gray-800 break-all">
-                    {pixData.key}
-                  </p>
+    // Conteúdo do modal
+    const modalContent = (
+        <div 
+            className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black bg-opacity-70 backdrop-blur-sm"
+            onClick={onClose} // Fecha ao clicar no backdrop
+        >
+            <div 
+                className="bg-white rounded-2xl w-full max-w-md mx-auto shadow-2xl relative max-h-[90vh] overflow-hidden transform transition-all"
+                onClick={(e) => e.stopPropagation()} // Impede fechamento ao clicar no conteúdo
+            >
+                
+                {/* Header com Preço */}
+                <div className="bg-gradient-to-br from-indigo-700 to-purple-600 p-6 text-white relative">
+                    <button
+                        onClick={onClose}
+                        className="absolute top-4 right-4 text-white hover:text-gray-200 p-1 transition-colors rounded-full bg-white bg-opacity-10 hover:bg-opacity-20"
+                        aria-label="Fechar Pagamento"
+                    >
+                        <XMarkIcon className="w-6 h-6" />
+                    </button>
+                    
+                    <div className="flex justify-between items-start">
+                        <div className="flex-1">
+                            <h2 className="text-xl font-bold">Pagamento PIX</h2>
+                            <p className="text-indigo-200 text-sm mt-1 truncate">{eventName}</p>
+                            <p className="text-indigo-200 text-sm">Ingresso: {tierName}</p>
+                        </div>
+                        
+                        {/* ✅ PREÇO ADICIONADO DE VOLTA */}
+                        <div className="text-right ml-4">
+                            <div className="text-3xl font-bold">R$ {tierPrice.toFixed(2)}</div>
+                            <div className="text-indigo-200 text-sm">Valor total</div>
+                        </div>
+                    </div>
                 </div>
-                <button
-                  onClick={handleCopyPixCode}
-                  className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-500 transition-colors"
-                >
-                  {copied ? (
-                    <CheckIcon className="w-4 h-4" />
-                  ) : (
-                    <DocumentDuplicateIcon className="w-4 h-4" />
-                  )}
-                  {copied ? 'Copiado!' : 'Copiar'}
-                </button>
-              </div>
+
+                {/* Content */}
+                <div className="p-6 overflow-y-auto max-h-[calc(90vh-200px)]">
+                    
+                    {/* Status Box & Timer */}
+                    {paymentStatus === 'pending' && (
+                        <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-xl flex items-center justify-center shadow-sm">
+                            <ClockIcon className="w-5 h-5 text-yellow-700 mr-2" />
+                            <span className="text-yellow-900 font-bold text-sm">
+                                Expira em: {formatTime(timeLeft)}
+                            </span>
+                        </div>
+                    )}
+
+                    {paymentStatus === 'expired' && (
+                        <div className="mb-6 p-4 bg-red-100 border border-red-300 rounded-xl text-center shadow-md">
+                            <p className="text-red-800 font-bold text-lg">Pagamento Expirado</p>
+                            <p className="text-red-600 text-sm mt-1">
+                                Por favor, inicie uma nova transação.
+                            </p>
+                        </div>
+                    )}
+
+                    {paymentStatus === 'paid' && (
+                        <div className="mb-6 p-4 bg-green-100 border border-green-300 rounded-xl text-center shadow-md">
+                            <div className="flex items-center justify-center gap-2">
+                                <CheckIcon className="w-6 h-6 text-green-700" />
+                                <p className="text-green-800 font-bold text-lg">Confirmado!</p>
+                            </div>
+                            <p className="text-green-600 text-sm mt-1">
+                                Processando seu ingresso NFT...
+                            </p>
+                        </div>
+                    )}
+
+                    {/* QR Code & Copy */}
+                    {paymentStatus === 'pending' && (
+                        <div className="text-center mb-6">
+                            <div className="bg-white p-4 rounded-xl border-2 border-slate-200 inline-block shadow-lg mb-4">
+                                <QRCodeSVG 
+                                    value={pixData.qrCode} 
+                                    size={180}
+                                    level="M"
+                                    includeMargin={false}
+                                />
+                            </div>
+                            
+                            <p className="text-gray-600 text-sm mb-4 font-medium">
+                                1. Escaneie o QR Code com seu app bancário
+                            </p>
+                            
+                            <button
+                                onClick={handleCopyPixCode}
+                                className="w-full flex items-center justify-center px-4 py-3 bg-indigo-600 text-white font-semibold rounded-xl hover:bg-indigo-500 transition-colors shadow-md mb-3"
+                            >
+                                <DocumentDuplicateIcon className="w-5 h-5 mr-2" />
+                                {copied ? 'Código Copiado!' : '2. Copiar Código PIX'}
+                            </button>
+                            
+                            <div className="text-xs text-gray-500 bg-slate-100 p-3 rounded-lg break-all">
+                                <span className="font-mono">{pixData.key.substring(0, 60)}...</span>
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                {/* Footer/Action Buttons */}
+                <div className="p-6 border-t border-slate-200 bg-slate-50">
+                    {paymentStatus === 'pending' && (
+                        <div className="flex gap-3">
+                            <button
+                                onClick={onClose}
+                                className="flex-1 py-3 px-4 bg-gray-500 text-white font-bold rounded-xl hover:bg-gray-600 transition-colors shadow-md"
+                            >
+                                Cancelar
+                            </button>
+                            
+                            <button
+                                onClick={onCryptoPayment}
+                                className="flex-1 py-3 px-4 border-2 border-indigo-600 text-indigo-600 font-bold rounded-xl hover:bg-indigo-50 transition-colors shadow-sm flex items-center justify-center gap-2"
+                            >
+                                <CurrencyDollarIcon className="h-5 w-5"/> Cripto
+                            </button>
+                        </div>
+                    )}
+
+                    {(paymentStatus === 'expired' || paymentStatus === 'paid') && (
+                        <button
+                            onClick={onClose}
+                            className="w-full py-3 px-4 bg-gray-500 text-white font-bold rounded-xl hover:bg-gray-600 transition-colors shadow-md"
+                        >
+                            {paymentStatus === 'expired' ? 'Fechar' : 'Continuar'}
+                        </button>
+                    )}
+                </div>
             </div>
-          )}
-
-          {/* Instructions */}
-          {paymentStatus === 'pending' && (
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-              <h4 className="font-semibold text-blue-900 text-sm mb-2">
-                Como pagar:
-              </h4>
-              <ul className="text-blue-800 text-sm space-y-1">
-                <li>1. Abra seu app bancário</li>
-                <li>2. Escaneie o QR Code ou cole o código</li>
-                <li>3. Confirme o pagamento de R$ {tierPrice.toFixed(2)}</li>
-                <li>4. Aguarde a confirmação automática</li>
-              </ul>
-            </div>
-          )}
-
-          {/* Action Buttons */}
-          <div className="flex gap-3">
-            {paymentStatus === 'pending' && (
-              <>
-                <button
-                  onClick={onCryptoPayment}
-                  className="flex-1 py-3 px-4 border-2 border-indigo-600 text-indigo-600 font-semibold rounded-xl hover:bg-indigo-50 transition-colors"
-                >
-                  Pagar com Cripto
-                </button>
-                <button
-                  onClick={onClose}
-                  className="flex-1 py-3 px-4 bg-gray-500 text-white font-semibold rounded-xl hover:bg-gray-600 transition-colors"
-                >
-                  Cancelar
-                </button>
-              </>
-            )}
-
-            {paymentStatus === 'expired' && (
-              <button
-                onClick={onClose}
-                className="flex-1 py-3 px-4 bg-gray-500 text-white font-semibold rounded-xl hover:bg-gray-600 transition-colors"
-              >
-                Fechar
-              </button>
-            )}
-          </div>
-
-          {/* Crypto Payment Notice */}
-          <div className="mt-4 p-3 bg-purple-50 border border-purple-200 rounded-lg">
-            <p className="text-purple-800 text-sm text-center">
-              💡 <strong>Pagar com cripto:</strong> Em breve você poderá pagar diretamente com sua carteira digital
-            </p>
-          </div>
         </div>
-      </div>
-    </div>
-  );
+    );
+
+    // Renderizar via portal para garantir que fique acima de tudo
+    return createPortal(modalContent, document.body);
 };

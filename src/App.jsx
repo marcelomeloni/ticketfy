@@ -15,6 +15,7 @@ import { Navbar } from './components/Navbar';
 import { Footer } from './components/Footer';
 import { Home } from './pages/Home';
 import { Events } from './pages/Events';
+import { Marketplace } from './pages/Marketplace';
 import { EventDetail } from './pages/EventDetail';
 import { MyTickets } from './pages/MyTickets';
 import { CreateEvent } from './pages/CreateEvent';
@@ -53,6 +54,7 @@ function App() {
                     <Route path="/event/:eventAddress" element={<EventDetail />} />
                     {/* 5. Adicionar a rota para a página de login */}
                     <Route path="/login" element={<LoginPage />} />
+                    <Route path="/marketplace" element={<Marketplace />} />
 
                     {/* Rotas que precisam de autenticação (a lógica de proteção será interna) */}
                     <Route path="/my-tickets" element={<MyTickets />} />

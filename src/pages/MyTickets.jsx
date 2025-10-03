@@ -334,30 +334,42 @@ function TicketCard({ ticket, isSubmitting, onSellClick, onCancelClick, onRefund
     const certificateUrl = `${APP_BASE_URL}/certificate/${ticketData.nftMint.toString()}`;
     
     const renderActionArea = () => {
-        if (isFreeTicket) {
-             return (
-                 <div className="flex flex-col gap-2">
-                     <Link to={certificateUrl} className={`w-full text-center px-4 py-2 rounded-lg font-bold transition flex items-center justify-center gap-2 ${ticketData.redeemed ? 'bg-indigo-600 text-white hover:bg-indigo-700' : 'bg-slate-200 text-slate-500 cursor-not-allowed'}`} disabled={!ticketData.redeemed}>
-                          <AcademicCapIcon className="h-5 w-5"/> Ver Certificado
-                     </Link>
-                     <button onClick={handleDownload} className="w-full bg-slate-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-slate-700 transition flex items-center justify-center gap-2">
-                          <ArrowDownTrayIcon className="h-5 w-5"/> Baixar Ingresso
-                     </button>
-                     {!ticketData.redeemed && <p className="text-xs text-center text-slate-500 mt-1">Certificado disponível após check-in.</p>}
-                 </div>
-             );
-        }
+        // ✅ MUDANÇA PRINCIPAL: Removemos a distinção entre ingressos gratuitos e pagos para a venda
+        // Agora todos os ingressos podem ser vendidos, independente de serem gratuitos ou pagos
 
         if (isEventCanceled && isListed) {
-            return ( <> <div className="text-xs text-center text-orange-800 bg-orange-100 p-3 rounded-md mb-4"> Retire o ingresso da venda para solicitar seu reembolso. </div> <button onClick={onCancelClick} disabled={isSubmitting} className="w-full bg-red-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-red-700 transition disabled:bg-slate-400"> {isSubmitting ? 'Retirando...' : 'Retirar da Venda'} </button> </> );
-        }
-        if (isEventCanceled && !isListed) {
-            return ( <button onClick={onRefundClick} disabled={isSubmitting || ticketData.redeemed} className="w-full bg-orange-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-orange-600 transition disabled:bg-slate-400 disabled:cursor-not-allowed"> {ticketData.redeemed ? 'Ingresso já utilizado' : (isSubmitting ? 'Processando...' : 'Solicitar Reembolso')} </button> );
-        }
-        if (isListed) {
-            return ( <button onClick={onCancelClick} disabled={isSubmitting} className="w-full bg-red-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-red-700 transition disabled:bg-slate-400"> {isSubmitting ? 'Cancelando...' : 'Cancelar Venda'} </button> );
+            return ( 
+                <> 
+                    <div className="text-xs text-center text-orange-800 bg-orange-100 p-3 rounded-md mb-4">
+                        Retire o ingresso da venda para solicitar seu reembolso.
+                    </div> 
+                    <button onClick={onCancelClick} disabled={isSubmitting} className="w-full bg-red-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-red-700 transition disabled:bg-slate-400">
+                        {isSubmitting ? 'Retirando...' : 'Retirar da Venda'}
+                    </button> 
+                </> 
+            );
         }
         
+        if (isEventCanceled && !isListed) {
+            // ✅ MUDANÇA: Agora também mostra reembolso para ingressos gratuitos se necessário
+            // (ou mantém a lógica específica se quiser diferenciar)
+            return ( 
+                <button onClick={onRefundClick} disabled={isSubmitting || ticketData.redeemed} className="w-full bg-orange-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-orange-600 transition disabled:bg-slate-400 disabled:cursor-not-allowed">
+                    {ticketData.redeemed ? 'Ingresso já utilizado' : (isSubmitting ? 'Processando...' : 'Solicitar Reembolso')}
+                </button> 
+            );
+        }
+        
+        if (isListed) {
+            return ( 
+                <button onClick={onCancelClick} disabled={isSubmitting} className="w-full bg-red-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-red-700 transition disabled:bg-slate-400">
+                    {isSubmitting ? 'Cancelando...' : 'Cancelar Venda'}
+                </button> 
+            );
+        }
+        
+        // ✅ MUDANÇA CRÍTICA: Botão de VENDER disponível para TODOS os ingressos
+        // (gratuitos e pagos), desde que não estejam utilizados
         return (
             <button onClick={onSellClick} disabled={ticketData.redeemed || isSubmitting} className="w-full bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-indigo-700 transition disabled:bg-slate-400 disabled:cursor-not-allowed flex items-center justify-center gap-2">
                 <TagIcon className="h-5 w-5"/>
@@ -382,8 +394,36 @@ function TicketCard({ ticket, isSubmitting, onSellClick, onCancelClick, onRefund
                     <p className="flex items-center text-sm gap-2"><CalendarIcon className="h-5 w-5 text-slate-400"/> {eventDate}</p>
                     <p className="flex items-center text-sm gap-2"><MapPinIcon className="h-5 w-5 text-slate-400"/> {location}</p>
                 </div>
-                <div className="mt-auto pt-6">
+                <div className="mt-auto pt-6 space-y-3">
                     {renderActionArea()}
+                    
+                    {/* ✅ MUDANÇA: Área de ações secundárias unificada */}
+                    <div className="flex flex-col gap-2">
+                        {/* Botão de Certificado (apenas para gratuitos e quando resgatado) */}
+                        {isFreeTicket && (
+                            <Link 
+                                to={certificateUrl} 
+                                className={`w-full text-center px-4 py-2 rounded-lg font-bold transition flex items-center justify-center gap-2 ${ticketData.redeemed ? 'bg-indigo-600 text-white hover:bg-indigo-700' : 'bg-slate-200 text-slate-500 cursor-not-allowed'}`} 
+                                disabled={!ticketData.redeemed}
+                            >
+                                <AcademicCapIcon className="h-5 w-5"/> 
+                                Ver Certificado
+                            </Link>
+                        )}
+                        
+                        {/* Botão de Download (sempre disponível) */}
+                        <button onClick={handleDownload} className="w-full bg-slate-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-slate-700 transition flex items-center justify-center gap-2">
+                            <ArrowDownTrayIcon className="h-5 w-5"/> 
+                            Baixar Ingresso
+                        </button>
+                        
+                        {/* Aviso sobre certificado */}
+                        {isFreeTicket && !ticketData.redeemed && (
+                            <p className="text-xs text-center text-slate-500 mt-1">
+                                Certificado disponível após check-in.
+                            </p>
+                        )}
+                    </div>
                 </div>
             </div>
         </div>

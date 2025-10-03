@@ -1,10 +1,24 @@
 import { web3 } from '@coral-xyz/anchor';
 import { TicketIcon, XCircleIcon } from '@heroicons/react/24/solid';
 
+// Esta página renderiza as opções de tier/preço de ingresso
 export const TierOption = ({ tier, isSelected, isSoldOut, onSelect }) => {
-    // ✅ CORREÇÃO: `tier.priceLamports` agora é um número/string da API.
-    // Usamos Number() para garantir que é um número antes de comparar.
-    const isFree = Number(tier.priceLamports) === 0;
+    
+    // ✅ CORREÇÃO CRÍTICA: Converte o valor HEX (ex: '0bb8') para Decimal (ex: 3000 em centavos).
+    const hexPriceString = tier?.priceBrlCents || '0';
+    const priceInCents = parseInt(hexPriceString, 16) || 0; 
+    const priceInBRL = priceInCents / 100;
+
+    // O ingresso só é grátis se o valor decimal for exatamente 0.
+    const isFree = priceInCents === 0;
+
+    const formatCurrency = (amount) => {
+        return new Intl.NumberFormat('pt-BR', {
+            style: 'currency',
+            currency: 'BRL',
+            minimumFractionDigits: 2,
+        }).format(amount);
+    };
 
     return (
         <div 
@@ -25,7 +39,9 @@ export const TierOption = ({ tier, isSelected, isSoldOut, onSelect }) => {
                     <div className="flex items-center gap-2 text-slate-600">
                         <TicketIcon className="h-4 w-4" />
                         <span className="text-sm font-medium">
+                            {/* Exibe quantos foram vendidos (tier.ticketsSold) */}
                             {tier.maxTicketsSupply - tier.ticketsSold} ingressos restantes
+                            <span className="text-xs text-slate-400 ml-1">({tier.ticketsSold}/{tier.maxTicketsSupply} vendidos)</span>
                         </span>
                     </div>
                 </div>
@@ -43,10 +59,10 @@ export const TierOption = ({ tier, isSelected, isSoldOut, onSelect }) => {
                     ) : (
                         <div className="text-right">
                             <p className="text-2xl font-bold text-blue-600">
-                                {/* ✅ CORREÇÃO: Usamos Number() aqui também para a conversão. */}
-                                {(Number(tier.priceLamports) / web3.LAMPORTS_PER_SOL).toFixed(2)} SOL
+                                {/* Exibe o preço formatado em BRL */}
+                                {formatCurrency(priceInBRL)}
                             </p>
-                            <p className="text-sm text-slate-500">+ taxas</p>
+                            <p className="text-sm text-slate-500">Valor do Ingresso</p> 
                         </div>
                     )}
                 </div>
@@ -64,4 +80,3 @@ export const TierOption = ({ tier, isSelected, isSoldOut, onSelect }) => {
         </div>
     );
 };
-

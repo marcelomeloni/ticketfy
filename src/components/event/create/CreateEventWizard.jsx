@@ -50,9 +50,10 @@ export function CreateEventWizard({ program, wallet, onEventCreated }) {
     const [onChainData, setOnChainData] = useState({
         salesStartDate: new Date(),
         salesEndDate: new Date(Date.now() + 3600 * 1000 * 24 * 7),
-        royaltyBps: '500',
+        royaltyBps: '500', // Taxa de royalties para a REVANDA (em TFY)
         maxTicketsPerWallet: '10',
-        tiers: [{ name: 'Pista', price: '0.5', maxTicketsSupply: '100' }],
+        // ✅ ATUALIZADO: 'price' agora é em BRL (ex: 50.00)
+        tiers: [{ name: 'Pista', price: '30.00', maxTicketsSupply: '100' }], 
     });
 
     const [metadataUrl, setMetadataUrl] = useState('');
@@ -97,8 +98,9 @@ export function CreateEventWizard({ program, wallet, onEventCreated }) {
         }
         for (const tier of tiers) {
             if (!tier.name.trim()) { toast.error("Todos os lotes devem ter um nome."); return false; }
+            // ✅ VALIDAÇÃO BRL: Garante que o preço BRL é um número válido (pode ter casas decimais)
             if (isNaN(parseFloat(tier.price)) || parseFloat(tier.price) < 0) {
-                toast.error(`O preço do lote "${tier.name}" é inválido.`); return false;
+                toast.error(`O preço em R$ do lote "${tier.name}" é inválido.`); return false;
             }
             if (!/^\d+$/.test(tier.maxTicketsSupply) || parseInt(tier.maxTicketsSupply, 10) <= 0) {
                 toast.error(`O fornecimento máximo do lote "${tier.name}" deve ser um número inteiro maior que zero.`); return false;
@@ -144,14 +146,29 @@ export function CreateEventWizard({ program, wallet, onEventCreated }) {
             const [whitelistPda] = web3.PublicKey.findProgramAddressSync([WHITELIST_SEED, wallet.publicKey.toBuffer()], program.programId);
             const [eventPda] = web3.PublicKey.findProgramAddressSync([EVENT_SEED, eventId.toBuffer('le', 8)], program.programId);
             
-            const tiersInput = onChainData.tiers.map(tier => ({
-                name: tier.name,
-                priceLamports: new BN(parseFloat(tier.price) * web3.LAMPORTS_PER_SOL),
-                maxTicketsSupply: parseInt(tier.maxTicketsSupply, 10),
-            }));
+            // ✅ ATUALIZADO: Converte preço BRL para centavos (u64)
+            const tiersInput = onChainData.tiers.map(tier => {
+                // Converte BRL (ex: 30.00) para centavos (ex: 3000)
+                const priceBRLFloat = parseFloat(tier.price);
+                const priceBRLCents = Math.round(priceBRLFloat * 100);
+
+                return {
+                    name: tier.name,
+                    priceBrlCents: new BN(priceBRLCents), // Novo campo no contrato
+                    maxTicketsSupply: parseInt(tier.maxTicketsSupply, 10),
+                };
+            });
     
             await program.methods
-                .createEvent(eventId, metadataUrl, new BN(Math.floor(onChainData.salesStartDate.getTime() / 1000)), new BN(Math.floor(onChainData.salesEndDate.getTime() / 1000)), parseInt(onChainData.royaltyBps, 10), parseInt(onChainData.maxTicketsPerWallet, 10), tiersInput)
+                .createEvent(
+                    eventId, 
+                    metadataUrl, 
+                    new BN(Math.floor(onChainData.salesStartDate.getTime() / 1000)), 
+                    new BN(Math.floor(onChainData.salesEndDate.getTime() / 1000)), 
+                    parseInt(onChainData.royaltyBps, 10), 
+                    parseInt(onChainData.maxTicketsPerWallet, 10), 
+                    tiersInput
+                )
                 .accounts({
                     whitelistAccount: whitelistPda,
                     eventAccount: eventPda,

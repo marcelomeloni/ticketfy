@@ -99,7 +99,7 @@ export function Navbar() {
         closeMobileMenu();
     }, [location]);
 
-    // ✅ ALTERAÇÃO: Define os itens de navegação com base no estado de conexão
+   
     const navItems = [
         { to: "/events", label: "Eventos" },
     ];
@@ -107,7 +107,7 @@ export function Navbar() {
     if (connected) {
         navItems.push({ to: "/my-tickets", label: "Meus Ingressos" });
     }
-    
+    navItems.push({ to: "/marketplace", label: "Marketplace" });
     navItems.push({ to: "/create-event", label: "Criar Evento" });
 
     return (

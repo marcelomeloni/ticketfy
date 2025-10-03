@@ -21,9 +21,9 @@ export function Admin() {
     const [loading, setLoading] = useState(false);
     
     // Formulários
-    const [treasury, setTreasury] = useState('');
-    const [fee, setFee] = useState('250');
+    const [tfyTokenMint, setTfyTokenMint] = useState('');
     const [whitelistAddress, setWhitelistAddress] = useState('');
+    const [platformFeeBps, setPlatformFeeBps] = useState('500'); // Novo campo para a taxa de plataforma (5%)
 
     // Estados de UI
     const [isAdmin, setIsAdmin] = useState(false);
@@ -49,7 +49,11 @@ export function Admin() {
             const allWhitelistAccounts = await program.account.whitelist.all();
             const activeWallets = allWhitelistAccounts
                 .filter(acc => acc.account.isWhitelisted)
-                .map(acc => acc.account.wallet.toString());
+                .map(acc => ({
+                    wallet: acc.account.wallet.toString(),
+                    platformFeeBps: acc.account.platformFeeBps,
+                    pda: acc.publicKey.toString()
+                }));
             setWhitelistedWallets(activeWallets);
         } catch (error) {
             console.error("Erro ao buscar a whitelist:", error);
@@ -86,7 +90,7 @@ export function Admin() {
             } else {
                 console.error("Erro ao verificar permissões:", error);
                 setIsAdmin(false);
-                setIsInitialized(true); // Assume que está inicializado mas falhou ao buscar
+                setIsInitialized(true); 
             }
         } finally {
             setIsLoadingPermissions(false);
@@ -103,7 +107,7 @@ export function Admin() {
         try {
             const tx = await methodBuilder.rpc();
             toast.success(successMessage, { id: loadingToast });
-            await checkPermissions(); // Re-verifica tudo para atualizar a UI
+            await checkPermissions();
         } catch (error) {
             console.error("Erro na transação:", error);
             toast.error(`Erro: ${error.message || 'Falha na transação.'}`, { id: loadingToast });
@@ -114,32 +118,29 @@ export function Admin() {
 
     const handleInitialize = async (event) => {
         event.preventDefault();
-        if (!program || !wallet || !treasury) return toast.error("Preencha o endereço da tesouraria.");
+        if (!program || !wallet || !tfyTokenMint) return toast.error("Preencha o endereço do token.");
         setLoading(true);
         const loadingToast = toast.loading("Inicializando protocolo...");
         try {
-            const treasuryPubkey = new web3.PublicKey(treasury);
+            const tfyTokenMintPubkey = new web3.PublicKey(tfyTokenMint);
             const [globalConfigPda] = web3.PublicKey.findProgramAddressSync([GLOBAL_CONFIG_SEED], program.programId);
             
-            // Transação 1: Inicializar o global config
             await program.methods
-                .initialize(wallet.publicKey, treasuryPubkey, new BN(parseInt(fee)))
+                .initialize(wallet.publicKey, tfyTokenMintPubkey)
                 .accounts({
                     authority: wallet.publicKey,
-                    treasury: treasuryPubkey,
                     globalConfig: globalConfigPda,
                     systemProgram: web3.SystemProgram.programId,
                 })
                 .rpc();
     
-            // Transação 2: Adicionar administrador à whitelist
             const [whitelistPda] = web3.PublicKey.findProgramAddressSync(
                 [WHITELIST_SEED, wallet.publicKey.toBuffer()],
                 program.programId
             );
             
             await program.methods
-                .manageWhitelist(wallet.publicKey, true)
+                .manageWhitelist(wallet.publicKey, true, new BN(parseInt(platformFeeBps))) 
                 .accounts({
                     globalConfig: globalConfigPda,
                     authority: wallet.publicKey,
@@ -165,27 +166,57 @@ export function Admin() {
         const method = program.methods.togglePause(pausedState).accounts({ globalConfig: globalConfigPda, authority: wallet.publicKey });
         handleTransaction(method, `Protocolo ${pausedState ? 'Pausado' : 'Reativado'} com sucesso.`);
     };
-    
-    const handleManageWhitelist = (isWhitelisted) => {
+
+    const handleManageWhitelist = () => {
         if (!program || !wallet || !whitelistAddress) return toast.error("Preencha o endereço da carteira.");
         try {
             const walletToWhitelist = new web3.PublicKey(whitelistAddress);
             const [globalConfigPda] = web3.PublicKey.findProgramAddressSync([GLOBAL_CONFIG_SEED], program.programId);
             const [whitelistPda] = web3.PublicKey.findProgramAddressSync([WHITELIST_SEED, walletToWhitelist.toBuffer()], program.programId);
+            const isWhitelisted = whitelistedWallets.some(w => w.wallet === walletToWhitelist.toString());
 
-            const method = program.methods.manageWhitelist(walletToWhitelist, isWhitelisted).accounts({
-                globalConfig: globalConfigPda,
-                authority: wallet.publicKey,
-                whitelist: whitelistPda,
-                wallet: walletToWhitelist,
-                systemProgram: web3.SystemProgram.programId,
-            });
-            handleTransaction(method, `Carteira ${isWhitelisted ? 'adicionada à' : 'removida da'} whitelist.`);
+            const method = program.methods
+                .manageWhitelist(walletToWhitelist, !isWhitelisted, new BN(parseInt(platformFeeBps)))
+                .accounts({
+                    globalConfig: globalConfigPda,
+                    authority: wallet.publicKey,
+                    whitelist: whitelistPda,
+                    wallet: walletToWhitelist,
+                    systemProgram: web3.SystemProgram.programId,
+                });
+            handleTransaction(method, `Carteira ${!isWhitelisted ? 'adicionada à' : 'removida da'} whitelist.`);
             setWhitelistAddress('');
         } catch (e) {
             toast.error("Endereço da carteira inválido.");
         }
     };
+
+    const handleUpdateFee = async (walletToUpdate, newFee) => {
+        if (!program || !wallet) return;
+        const loadingToast = toast.loading("Atualizando taxa de plataforma...");
+        try {
+            const walletPubkey = new web3.PublicKey(walletToUpdate);
+            const [globalConfigPda] = web3.PublicKey.findProgramAddressSync([GLOBAL_CONFIG_SEED], program.programId);
+            const [whitelistPda] = web3.PublicKey.findProgramAddressSync([WHITELIST_SEED, walletPubkey.toBuffer()], program.programId);
+            
+            await program.methods
+                .updateRoyalty(walletPubkey, new BN(parseInt(newFee)))
+                .accounts({
+                    globalConfig: globalConfigPda,
+                    authority: wallet.publicKey,
+                    whitelist: whitelistPda,
+                    wallet: walletPubkey,
+                })
+                .rpc();
+
+            toast.success("Taxa de plataforma atualizada com sucesso.", { id: loadingToast });
+            await fetchWhitelistedWallets();
+        } catch (error) {
+            console.error("Erro ao atualizar taxa:", error);
+            toast.error(`Erro: ${error.message || 'Falha na transação.'}`, { id: loadingToast });
+        }
+    };
+
 
     const renderContent = () => {
         if (isLoadingPermissions) return <div className="flex justify-center py-20"><Spinner /></div>;
@@ -202,8 +233,9 @@ export function Admin() {
                     <div className="max-w-md mx-auto mt-8">
                         <AdminCard title="Inicialização do Protocolo" subtitle="(Executar apenas uma vez)">
                             <form onSubmit={handleInitialize} className="space-y-4">
-                                <InputField label="Endereço da Tesouraria" value={treasury} onChange={(e) => setTreasury(e.target.value)} required placeholder={wallet.publicKey.toString()}/>
-                                <InputField label="Taxa do Marketplace (BPS)" type="number" value={fee} onChange={(e) => setFee(e.target.value)} required />
+                                <InputField label="Endereço do Token TFY" value={tfyTokenMint} onChange={(e) => setTfyTokenMint(e.target.value)} required placeholder="Endereço do seu token SPL..." />
+                                <InputField label="Taxa Padrão (BPS)" type="number" value={platformFeeBps} onChange={(e) => setPlatformFeeBps(e.target.value)} required />
+                                <p className="text-sm text-slate-500">Esta será a taxa padrão para o primeiro organizador.</p>
                                 <ActionButton type="submit" loading={loading} className="w-full">Tornar-se Admin e Inicializar</ActionButton>
                             </form>
                         </AdminCard>
@@ -231,28 +263,41 @@ export function Admin() {
                                 <ActionButton onClick={() => handleTogglePause(false)} loading={loading} className="w-full bg-emerald-500 hover:bg-emerald-600">Reativar</ActionButton>
                             </div>
                         </AdminCard>
-                        <AdminCard title="Gerenciamento de Whitelist">
+                        <AdminCard title="Gerenciamento de Organizadores">
                             <div className="space-y-4">
                                 <InputField label="Endereço da Carteira" value={whitelistAddress} onChange={(e) => setWhitelistAddress(e.target.value)} placeholder="Endereço da carteira..." />
+                                <InputField label="Taxa de Plataforma (BPS)" type="number" value={platformFeeBps} onChange={(e) => setPlatformFeeBps(e.target.value)} required />
                                 <div className="flex space-x-4">
-                                    <ActionButton onClick={() => handleManageWhitelist(true)} loading={loading || !whitelistAddress} className="w-full">Adicionar</ActionButton>
-                                    <ActionButton onClick={() => handleManageWhitelist(false)} loading={loading || !whitelistAddress} className="w-full bg-red-600 hover:bg-red-700">Remover</ActionButton>
+                                    <ActionButton onClick={handleManageWhitelist} loading={loading || !whitelistAddress || !platformFeeBps} className="w-full">Adicionar/Remover Organizador</ActionButton>
                                 </div>
+                                <p className="text-sm text-slate-500 mt-2">100 BPS = 1%. Exemplo: 500 para 5%</p>
                             </div>
                         </AdminCard>
                     </div>
 
                     <div className="lg:col-span-2">
-                        <AdminCard title="Carteiras na Whitelist">
+                        <AdminCard title="Organizadores Registrados">
                             <div className="space-y-3 max-h-96 overflow-y-auto pr-2">
                                 {isFetchingWhitelist ? <p className="text-slate-500">Carregando...</p> :
                                     whitelistedWallets.length > 0 ? (
-                                        whitelistedWallets.map(addr => (
-                                            <div key={addr} className="bg-slate-100 p-2 rounded-md font-mono text-xs text-slate-700 truncate" title={addr}>
-                                                {addr}
+                                        whitelistedWallets.map(organizer => (
+                                            <div key={organizer.wallet} className="bg-slate-100 p-2 rounded-md font-mono text-xs text-slate-700 truncate relative group">
+                                                <span className="font-bold">Taxa: {organizer.platformFeeBps / 100}%</span> - {organizer.wallet}
+                                                <div className="absolute top-0 right-0 p-1 flex items-center justify-center space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                    <button onClick={() => {
+                                                        const newFee = prompt(`Atualizar taxa de plataforma para ${organizer.wallet}:`, organizer.platformFeeBps);
+                                                        if (newFee !== null && !isNaN(parseInt(newFee))) {
+                                                            handleUpdateFee(organizer.wallet, newFee);
+                                                        }
+                                                    }} className="text-slate-500 hover:text-blue-500 transition-colors">
+                                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                                        </svg>
+                                                    </button>
+                                                </div>
                                             </div>
                                         ))
-                                    ) : <p className="text-slate-500">Nenhuma carteira na whitelist.</p>
+                                    ) : <p className="text-slate-500">Nenhum organizador registrado.</p>
                                 }
                             </div>
                             <ActionButton onClick={fetchWhitelistedWallets} loading={isFetchingWhitelist} className="w-full mt-6 bg-slate-600 hover:bg-slate-700">

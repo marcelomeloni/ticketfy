@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 import { useMemo, useState, useEffect } from 'react';
 import { ClockIcon, MapPinIcon, TicketIcon } from '@heroicons/react/24/outline';
-import { web3 } from '@coral-xyz/anchor';
+import { web3 } from '@coral-xyz/anchor'; // Mantido para referência, mas não será usado na divisão
 
 // --- COMPONENTE DE STATUS ---
 const StatusBadge = ({ status }) => {
@@ -44,6 +44,15 @@ export function EventCard({ event }) {
     const { tiers, metadataUri, canceled } = event.account;
     const eventAddress = event.publicKey.toString();
 
+    // Função auxiliar para formatar BRL
+    const formatBRL = (amount) => {
+        return new Intl.NumberFormat('pt-BR', { 
+            style: 'currency', 
+            currency: 'BRL',
+            minimumFractionDigits: 2
+        }).format(amount);
+    };
+
     useEffect(() => {
         const fetchMetadata = async () => {
             try {
@@ -76,26 +85,25 @@ export function EventCard({ event }) {
         return 'upcoming';
     }, [metadata, canceled]);
     
-    // Lógica para preço inicial e barra de progresso - CORRIGIDA
-    const { startingPriceLamports, totalSold, totalSupply, progress } = useMemo(() => {
+    // ✅ CORRIGIDO: Lógica para preço inicial e barra de progresso
+    const { startingPriceBRLCents, totalSold, totalSupply, progress } = useMemo(() => {
         if (!Array.isArray(tiers) || tiers.length === 0) {
-            return { startingPriceLamports: 0, totalSold: 0, totalSupply: 0, progress: 0 };
+            return { startingPriceBRLCents: 0, totalSold: 0, totalSupply: 0, progress: 0 };
         }
 
-        // ⭐ CORREÇÃO: priceLamports já é um número, não precisa de toNumber()
-        const startingPrice = Math.min(...tiers.map(tier => {
-            // Se for um objeto BN, usa toNumber(), se for número, usa diretamente
-            return typeof tier.priceLamports === 'object' && tier.priceLamports.toNumber 
-                ? tier.priceLamports.toNumber() 
-                : tier.priceLamports;
-        }));
+        // 1. Encontra o menor preço em centavos (convertendo de hexadecimal)
+        const allPricesInCents = tiers
+            .map(tier => parseInt(tier.priceBrlCents || '0', 16) || 0)
+            .filter(price => price >= 0); // Filtra por preços válidos
+
+        const startingPrice = allPricesInCents.length > 0 ? Math.min(...allPricesInCents) : 0;
 
         const sold = event.account.totalTicketsSold || 0;
         const supply = tiers.reduce((sum, tier) => sum + tier.maxTicketsSupply, 0);
         const prog = supply > 0 ? (sold / supply) * 100 : 0;
         
         return { 
-            startingPriceLamports: startingPrice, 
+            startingPriceBRLCents: startingPrice, 
             totalSold: sold, 
             totalSupply: supply, 
             progress: prog 
@@ -113,6 +121,10 @@ export function EventCard({ event }) {
             year: 'numeric' 
         })
         : 'Data a definir';
+
+    // 2. Calcula o preço final em R$
+    const startingPriceInBRL = startingPriceBRLCents / 100;
+    const isFree = startingPriceInBRL === 0;
 
     return (
         <Link to={`/event/${eventAddress}`} className="group block">
@@ -166,15 +178,15 @@ export function EventCard({ event }) {
                             </div>
                         )}
                         
-                        {startingPriceLamports > 0 ? (
+                        {isFree ? (
+                            <p className="text-lg text-right font-bold text-green-600">Gratuito</p>
+                        ) : (
                             <div className="text-right">
                                 <p className="text-xs text-slate-500">A partir de</p>
                                 <p className="text-lg font-bold text-indigo-600">
-                                    {(startingPriceLamports / web3.LAMPORTS_PER_SOL).toFixed(2)} SOL
+                                    {formatBRL(startingPriceInBRL)}
                                 </p>
                             </div>
-                        ) : (
-                            <p className="text-lg text-right font-bold text-green-600">Gratuito</p>
                         )}
                     </div>
                 </div>

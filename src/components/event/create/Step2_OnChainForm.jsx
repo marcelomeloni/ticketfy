@@ -10,11 +10,12 @@ import { useMemo } from 'react';
 export function Step2_OnChainForm({ isActive, data, setData, onGenerateJson }) {
     // ✅ 1. Lógica para determinar se o passo foi completado
     const isComplete = useMemo(() => {
-        return data.tiers.every(t => t.name && t.price && t.maxTicketsSupply);
+        // Validação básica para garantir que todos os campos de tier essenciais estejam preenchidos
+        return data.tiers.every(t => t.name && t.price && t.maxTicketsSupply && parseFloat(t.price) >= 0);
     }, [data]);
 
     if (!isActive) {
-         return <Step title="Passo 2: Configurações On-Chain" disabled={true} isComplete={isComplete} />;
+        return <Step title="Passo 2: Configurações On-Chain" disabled={true} isComplete={isComplete} />;
     }
 
     const handleDataChange = (field, value) => {
@@ -43,8 +44,18 @@ export function Step2_OnChainForm({ isActive, data, setData, onGenerateJson }) {
             </div>
 
             <div className="space-y-4">
+                {/* ✅ IMPORTANTE: Se o seu TierInputRow tem uma lógica específica para o preço, ela deve ser mantida.
+                   A mudança de lógica de SOL para BRL foi feita no CreateEventWizard.js, mas a label deve ser clara aqui. 
+                   Assumindo que TierInputRow já está adaptado para BRL: */}
                 {data.tiers.map((tier, index) => (
-                    <TierInputRow key={index} index={index} tier={tier} onChange={handleTierChange} onRemove={removeTier} showRemoveButton={data.tiers.length > 1} />
+                    <TierInputRow 
+                        key={index} 
+                        index={index} 
+                        tier={tier} 
+                        onChange={handleTierChange} 
+                        onRemove={removeTier} 
+                        showRemoveButton={data.tiers.length > 1}
+                    />
                 ))}
                 <button type="button" onClick={addTier} className="flex items-center space-x-2 text-sm text-indigo-600 hover:text-indigo-800 font-medium">
                     <PlusCircleIcon className="h-5 w-5" /><span>Adicionar Lote</span>
@@ -53,8 +64,22 @@ export function Step2_OnChainForm({ isActive, data, setData, onGenerateJson }) {
             
             <h4 className="font-semibold text-md pt-6">Configurações Adicionais</h4>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                 <InputField label="Royalties (BPS, ex: 500 = 5%)" type="number" value={data.royaltyBps} onChange={(e) => handleDataChange('royaltyBps', e.target.value)} required />
-                 <InputField label="Max Ingressos por Carteira" type="number" placeholder="0 para ilimitado" value={data.maxTicketsPerWallet} onChange={(e) => handleDataChange('maxTicketsPerWallet', e.target.value)} required />
+                {/* Nota: Este Royalty BPS é a taxa que o ORGANIZADOR GANHA na REVANDA (marketplace) */}
+                <InputField 
+                    label="Royalties de Revenda (BPS, ex: 500 = 5%)" 
+                    type="number" 
+                    value={data.royaltyBps} 
+                    onChange={(e) => handleDataChange('royaltyBps', e.target.value)} 
+                    required 
+                />
+                <InputField 
+                    label="Max Ingressos por Carteira" 
+                    type="number" 
+                    placeholder="0 para ilimitado" 
+                    value={data.maxTicketsPerWallet} 
+                    onChange={(e) => handleDataChange('maxTicketsPerWallet', e.target.value)} 
+                    required 
+                />
             </div>
 
             {/* ✅ 2. O botão agora chama a função que contém a validação */}
