@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { 
     DocumentDuplicateIcon, 
@@ -8,6 +8,7 @@ import {
 } from '@heroicons/react/24/outline';
 import toast from 'react-hot-toast';
 import { API_URL } from '@/lib/constants';
+import QRCode from 'qrcode';
 
 export const PaymentModal = ({ 
     isOpen, 
@@ -29,6 +30,10 @@ export const PaymentModal = ({
     const [externalReference, setExternalReference] = useState(null);
     const [pollIntervalId, setPollIntervalId] = useState(null);
     const [retryCount, setRetryCount] = useState(0);
+    const [generatedQrCode, setGeneratedQrCode] = useState(null);
+    const [isGeneratingQr, setIsGeneratingQr] = useState(false);
+    
+    const canvasRef = useRef(null);
 
     useEffect(() => {
         setMounted(true);
@@ -47,6 +52,7 @@ export const PaymentModal = ({
                 setPaymentStatus('pending');
                 setTimeLeft(15 * 60);
                 setRetryCount(0);
+                setGeneratedQrCode(null);
                 if (pollIntervalId) {
                     clearInterval(pollIntervalId);
                     setPollIntervalId(null);
@@ -54,6 +60,47 @@ export const PaymentModal = ({
             }
         };
     }, [isOpen]);
+
+    // ✅ FUNÇÃO PARA GERAR QR CODE DA URL NO FRONTEND
+    const generateFrontendQRCode = async (url) => {
+        if (!url) return null;
+        
+        setIsGeneratingQr(true);
+        try {
+            console.log('🎨 Gerando QR Code frontend para URL:', url.substring(0, 100) + '...');
+            
+            // Opção 1: Gerar como Data URL (base64)
+            const qrCodeDataUrl = await QRCode.toDataURL(url, {
+                width: 256,
+                margin: 2,
+                color: {
+                    dark: '#000000',
+                    light: '#FFFFFF'
+                }
+            });
+            
+            // Opção 2: Gerar como canvas (mais controle)
+            if (canvasRef.current) {
+                await QRCode.toCanvas(canvasRef.current, url, {
+                    width: 200,
+                    margin: 1,
+                    color: {
+                        dark: '#1f2937',
+                        light: '#ffffff'
+                    }
+                });
+            }
+            
+            console.log('✅ QR Code gerado com sucesso no frontend');
+            return qrCodeDataUrl;
+            
+        } catch (error) {
+            console.error('❌ Erro ao gerar QR Code frontend:', error);
+            return null;
+        } finally {
+            setIsGeneratingQr(false);
+        }
+    };
 
     const generateQRCode = async () => {
         if (retryCount >= 2) {
@@ -97,10 +144,23 @@ export const PaymentModal = ({
                     externalReference: data.externalReference
                 });
 
-                setQrCodeData(data);
+                // ✅ SE NÃO VEIO QR CODE DO BACKEND, GERAR NO FRONTEND
+                let frontendQrCode = null;
+                if (!data.qrCodeBase64 && data.ticketUrl) {
+                    console.log('🔄 Nenhum QR Code do backend, gerando no frontend...');
+                    frontendQrCode = await generateFrontendQRCode(data.ticketUrl);
+                }
+
+                setQrCodeData({
+                    ...data,
+                    // ✅ SOBRESCREVER COM QR CODE GERADO NO FRONTEND SE NECESSÁRIO
+                    qrCodeBase64: data.qrCodeBase64 || frontendQrCode?.replace('data:image/png;base64,', ''),
+                    frontendQrCode: frontendQrCode
+                });
+                
                 setExternalReference(data.externalReference);
                 startPaymentPolling(data.externalReference);
-                setRetryCount(0); // Reset retry count on success
+                setRetryCount(0);
             } else {
                 throw new Error(data.error || 'Falha ao gerar o QR Code');
             }
@@ -112,7 +172,6 @@ export const PaymentModal = ({
                 setRetryCount(newRetryCount);
                 toast.error(`Tentativa ${newRetryCount}/3: ${error.message}`);
                 
-                // Auto-retry after 2 seconds
                 setTimeout(() => {
                     generateQRCode();
                 }, 2000);
@@ -126,7 +185,6 @@ export const PaymentModal = ({
     };
 
     const startPaymentPolling = (externalRef) => {
-        // Clear any existing interval
         if (pollIntervalId) {
             clearInterval(pollIntervalId);
         }
@@ -134,9 +192,13 @@ export const PaymentModal = ({
         const intervalId = setInterval(async () => {
             try {
                 console.log('🔍 Verificando status do pagamento:', externalRef);
-                const response = await fetch(`${API_URL}/api/payment-status/${externalRef}`);
+                const response = await fetch(`${API_URL}/api/payments/payment-status/${externalRef}`);
                 
                 if (!response.ok) {
+                    if (response.status === 404) {
+                        console.log('⏳ Endpoint de status não encontrado, continuando polling...');
+                        return; // Continua tentando mesmo com 404
+                    }
                     throw new Error(`Erro ao verificar status: ${response.status}`);
                 }
 
@@ -148,9 +210,8 @@ export const PaymentModal = ({
                     setPaymentStatus('paid');
                     toast.success('Pagamento confirmado! Processando seu ingresso...');
                     
-                    // Process the paid ticket
                     await processPaidTicket(externalRef);
-                } else if (data.status === 'cancelled' || data.status === 'expired') {
+                } else if (data.status === 'cancelled' || data.status === 'expired' || data.status === 'rejected') {
                     console.log('❌ Pagamento expirado/cancelado:', data.status);
                     clearInterval(intervalId);
                     setPaymentStatus('expired');
@@ -160,12 +221,12 @@ export const PaymentModal = ({
                 }
             } catch (error) {
                 console.error('Erro ao verificar status do pagamento:', error);
+                // Não para o polling em caso de erro
             }
         }, 5000);
 
         setPollIntervalId(intervalId);
         
-        // Cleanup interval on unmount
         return () => clearInterval(intervalId);
     };
 
@@ -194,26 +255,28 @@ export const PaymentModal = ({
     };
 
     const handleCopyPixCode = async () => {
-        if (!qrCodeData?.qrCode) {
-            toast.error('Código PIX não disponível.');
+        // Se tiver URL de pagamento, copiar ela
+        const textToCopy = qrCodeData?.ticketUrl || qrCodeData?.qrCode;
+        
+        if (!textToCopy) {
+            toast.error('Nenhum código disponível para copiar.');
             return;
         }
         
         try {
-            await navigator.clipboard.writeText(qrCodeData.qrCode);
+            await navigator.clipboard.writeText(textToCopy);
             setCopied(true);
             setTimeout(() => setCopied(false), 2000);
-            toast.success('Código PIX copiado!');
+            toast.success('Link de pagamento copiado! Cole no seu app bancário.');
         } catch (err) {
-            console.error('Falha ao copiar código PIX:', err);
-            // Fallback: create a temporary textarea
+            console.error('Falha ao copiar:', err);
             const textArea = document.createElement('textarea');
-            textArea.value = qrCodeData.qrCode;
+            textArea.value = textToCopy;
             document.body.appendChild(textArea);
             textArea.select();
             document.execCommand('copy');
             document.body.removeChild(textArea);
-            toast.success('Código PIX copiado!');
+            toast.success('Link de pagamento copiado!');
         }
     };
 
@@ -221,6 +284,7 @@ export const PaymentModal = ({
         setQrCodeData(null);
         setPaymentStatus('pending');
         setTimeLeft(15 * 60);
+        setGeneratedQrCode(null);
         generateQRCode();
     };
 
@@ -252,171 +316,48 @@ export const PaymentModal = ({
         return () => clearInterval(timer);
     }, [isOpen, paymentStatus, qrCodeData, pollIntervalId]);
 
-    if (!isOpen || !mounted) return null;
+    // ✅ RENDERIZAÇÃO DO QR CODE
+    const renderQRCode = () => {
+        if (!qrCodeData) return null;
 
-    const renderPaymentContent = () => {
-        if (paymentStatus === 'paid') {
+        // ✅ CASO 1: QR Code Base64 do Backend
+        if (qrCodeData.qrCodeBase64) {
             return (
-                <div className="mb-6 p-6 bg-green-50 border border-green-200 rounded-xl text-center shadow-md">
-                    <div className="flex items-center justify-center gap-3 mb-3">
-                        <CheckIcon className="w-8 h-8 text-green-600" />
-                        <p className="text-green-800 font-bold text-lg">Pagamento Confirmado!</p>
-                    </div>
-                    <p className="text-green-600 text-sm">
-                        Seu ingresso está sendo processado...
-                    </p>
-                    <div className="mt-4 animate-pulse">
-                        <div className="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-green-600"></div>
-                    </div>
+                <div className="bg-white p-4 rounded-xl border-2 border-slate-200 inline-block shadow-lg mb-4">
+                    <img 
+                        src={`data:image/png;base64,${qrCodeData.qrCodeBase64}`} 
+                        alt="QR Code PIX" 
+                        className="w-48 h-48" 
+                    />
                 </div>
             );
         }
 
-        if (paymentStatus === 'expired') {
+        // ✅ CASO 2: QR Code Gerado no Frontend
+        if (qrCodeData.frontendQrCode) {
             return (
-                <div className="mb-6 p-6 bg-red-50 border border-red-200 rounded-xl text-center shadow-md">
-                    <p className="text-red-800 font-bold text-lg mb-2">Pagamento Expirado</p>
-                    <p className="text-red-600 text-sm mb-4">
-                        O tempo para pagamento acabou. Gere um novo QR Code para tentar novamente.
-                    </p>
-                    <button 
-                        onClick={handleRetry}
-                        className="w-full py-3 px-4 bg-red-600 text-white font-bold rounded-xl hover:bg-red-700 transition-colors shadow-md"
-                    >
-                        Tentar Novamente
-                    </button>
+                <div className="bg-white p-4 rounded-xl border-2 border-slate-200 inline-block shadow-lg mb-4">
+                    <img 
+                        src={qrCodeData.frontendQrCode} 
+                        alt="QR Code PIX" 
+                        className="w-48 h-48" 
+                    />
                 </div>
             );
         }
 
-        // Payment pending state
+        // ✅ CASO 3: Canvas Fallback
         return (
-            <div className="text-center mb-6">
-                {isLoading ? (
-                    <div className="flex flex-col justify-center items-center h-48">
-                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mb-3"></div>
-                        <p className="text-gray-600">Gerando QR Code PIX...</p>
-                        {retryCount > 0 && (
-                            <p className="text-sm text-gray-500 mt-1">Tentativa {retryCount + 1}/3</p>
-                        )}
-                    </div>
-                ) : qrCodeData ? (
-                    <>
-                        {/* ✅ CASO 1: QR Code Base64 (Melhor opção) */}
-                        {qrCodeData.qrCodeBase64 ? (
-                            <>
-                                <div className="bg-white p-4 rounded-xl border-2 border-slate-200 inline-block shadow-lg mb-4">
-                                    <img 
-                                        src={`data:image/png;base64,${qrCodeData.qrCodeBase64}`} 
-                                        alt="QR Code PIX" 
-                                        className="w-48 h-48" 
-                                    />
-                                </div>
-                                <p className="text-gray-600 text-sm mb-4 font-medium">
-                                    Escaneie o QR Code com seu app bancário
-                                </p>
-                                
-                                {qrCodeData.qrCode && (
-                                    <button 
-                                        onClick={handleCopyPixCode} 
-                                        className="w-full flex items-center justify-center px-4 py-3 bg-indigo-600 text-white font-semibold rounded-xl hover:bg-indigo-500 transition-colors shadow-md mb-3"
-                                    >
-                                        <DocumentDuplicateIcon className="w-5 h-5 mr-2" />
-                                        {copied ? 'Código Copiado!' : 'Copiar Código PIX'}
-                                    </button>
-                                )}
-                            </>
-                        ) : 
-                        
-                        /* ✅ CASO 2: QR Code como texto (copia e cola) */
-                        qrCodeData.qrCode ? (
-                            <>
-                                <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-4">
-                                    <p className="text-blue-800 text-sm mb-3">
-                                        📱 Use o código PIX abaixo no seu app bancário
-                                    </p>
-                                </div>
-                                
-                                <div className="bg-gray-100 p-4 rounded-xl border-2 border-slate-200 mb-4">
-                                    <p className="text-gray-500 text-xs mb-2 font-medium">Código PIX:</p>
-                                    <p className="text-sm font-mono break-all bg-white p-3 rounded border text-gray-800">
-                                        {qrCodeData.qrCode}
-                                    </p>
-                                </div>
-                                
-                                <button 
-                                    onClick={handleCopyPixCode} 
-                                    className="w-full flex items-center justify-center px-4 py-3 bg-indigo-600 text-white font-semibold rounded-xl hover:bg-indigo-500 transition-colors shadow-md mb-3"
-                                >
-                                    <DocumentDuplicateIcon className="w-5 h-5 mr-2" />
-                                    {copied ? 'Código Copiado!' : 'Copiar Código PIX'}
-                                </button>
-                            </>
-                        ) : 
-                        
-                        /* ✅ CASO 3: URL de pagamento (fallback) */
-                        qrCodeData.ticketUrl ? (
-                            <div className="space-y-4">
-                                <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 mb-4">
-                                    <p className="text-yellow-800 text-sm">
-                                        🔗 Clique abaixo para ir para a página de pagamento PIX
-                                    </p>
-                                </div>
-                                <a 
-                                    href={qrCodeData.ticketUrl}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="w-full flex items-center justify-center px-4 py-3 bg-green-600 text-white font-semibold rounded-xl hover:bg-green-500 transition-colors shadow-md"
-                                >
-                                    💰 Abrir Pagamento PIX
-                                </a>
-                                <p className="text-gray-500 text-xs">
-                                    Você será redirecionado para finalizar o pagamento via PIX
-                                </p>
-                            </div>
-                        ) : 
-                        
-                        /* ❌ CASO 4: Nenhum método disponível */
-                        (
-                            <div className="bg-red-50 border border-red-200 rounded-xl p-6">
-                                <p className="text-red-800 font-bold text-lg mb-2">
-                                    ❌ Método de Pagamento Indisponível
-                                </p>
-                                <p className="text-red-600 text-sm mb-4">
-                                    Não foi possível gerar o QR Code PIX.
-                                </p>
-                                <button 
-                                    onClick={handleRetry}
-                                    className="w-full py-3 px-4 bg-red-600 text-white font-bold rounded-xl hover:bg-red-700 transition-colors shadow-md"
-                                >
-                                    Tentar Novamente
-                                </button>
-                            </div>
-                        )}
-                        
-                        {/* Timer para todos os casos pendentes */}
-                        <div className="mt-4 p-3 bg-orange-50 border border-orange-200 rounded-lg">
-                            <div className="flex items-center justify-center gap-2 text-orange-800">
-                                <ClockIcon className="w-4 h-4" />
-                                <span className="text-sm font-medium">Tempo restante:</span>
-                                <span className="font-mono font-bold">{formatTime(timeLeft)}</span>
-                            </div>
-                        </div>
-                    </>
-                ) : (
-                    <div className="text-center text-gray-500 h-48 flex flex-col items-center justify-center">
-                        <p>Falha ao carregar dados de pagamento</p>
-                        <button 
-                            onClick={handleRetry}
-                            className="mt-3 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 text-sm"
-                        >
-                            Tentar Novamente
-                        </button>
-                    </div>
-                )}
+            <div className="bg-white p-4 rounded-xl border-2 border-slate-200 inline-block shadow-lg mb-4">
+                <canvas 
+                    ref={canvasRef}
+                    className="w-48 h-48"
+                />
             </div>
         );
     };
+
+    if (!isOpen || !mounted) return null;
 
     const modalContent = (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black bg-opacity-70 backdrop-blur-sm">
@@ -445,7 +386,96 @@ export const PaymentModal = ({
 
                 {/* Content */}
                 <div className="p-6">
-                    {renderPaymentContent()}
+                    {paymentStatus === 'paid' && (
+                        <div className="mb-6 p-6 bg-green-50 border border-green-200 rounded-xl text-center shadow-md">
+                            <div className="flex items-center justify-center gap-3 mb-3">
+                                <CheckIcon className="w-8 h-8 text-green-600" />
+                                <p className="text-green-800 font-bold text-lg">Pagamento Confirmado!</p>
+                            </div>
+                            <p className="text-green-600 text-sm">
+                                Seu ingresso está sendo processado...
+                            </p>
+                        </div>
+                    )}
+
+                    {paymentStatus === 'expired' && (
+                        <div className="mb-6 p-6 bg-red-50 border border-red-200 rounded-xl text-center shadow-md">
+                            <p className="text-red-800 font-bold text-lg mb-2">Pagamento Expirado</p>
+                            <button 
+                                onClick={handleRetry}
+                                className="w-full py-3 px-4 bg-red-600 text-white font-bold rounded-xl hover:bg-red-700 transition-colors shadow-md"
+                            >
+                                Tentar Novamente
+                            </button>
+                        </div>
+                    )}
+
+                    {paymentStatus === 'pending' && (
+                        <div className="text-center mb-6">
+                            {isLoading || isGeneratingQr ? (
+                                <div className="flex flex-col justify-center items-center h-48">
+                                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mb-3"></div>
+                                    <p className="text-gray-600">
+                                        {isGeneratingQr ? 'Gerando QR Code...' : 'Gerando pagamento...'}
+                                    </p>
+                                </div>
+                            ) : qrCodeData ? (
+                                <>
+                                    {/* ✅ QR CODE - AGORA SEMPRE DISPONÍVEL */}
+                                    {renderQRCode()}
+                                    
+                                    <p className="text-gray-600 text-sm mb-4 font-medium">
+                                        1. Escaneie o QR Code com seu app bancário
+                                    </p>
+
+                                    {/* BOTÃO COPIAR CÓDIGO */}
+                                    <button 
+                                        onClick={handleCopyPixCode} 
+                                        className="w-full flex items-center justify-center px-4 py-3 bg-indigo-600 text-white font-semibold rounded-xl hover:bg-indigo-500 transition-colors shadow-md mb-3"
+                                    >
+                                        <DocumentDuplicateIcon className="w-5 h-5 mr-2" />
+                                        {copied ? 'Link Copiado!' : '2. Copiar Link PIX'}
+                                    </button>
+
+                                    {/* LINK ALTERNATIVO */}
+                                    {qrCodeData.ticketUrl && (
+                                        <div className="mt-4">
+                                            <a 
+                                                href={qrCodeData.ticketUrl}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="block w-full text-center px-4 py-2 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-500 transition-colors text-sm"
+                                            >
+                                                🔗 Abrir Página de Pagamento
+                                            </a>
+                                            <p className="text-gray-500 text-xs mt-2">
+                                                Se preferir, abra a página completa do Mercado Pago
+                                            </p>
+                                        </div>
+                                    )}
+
+                                    {/* TIMER */}
+                                    <div className="mt-4 p-3 bg-orange-50 border border-orange-200 rounded-lg">
+                                        <div className="flex items-center justify-center gap-2 text-orange-800">
+                                            <ClockIcon className="w-4 h-4" />
+                                            <span className="text-sm font-medium">Tempo restante:</span>
+                                            <span className="font-mono font-bold">{formatTime(timeLeft)}</span>
+                                        </div>
+                                    </div>
+                                </>
+                            ) : (
+                                <div className="text-center text-gray-500 h-48 flex flex-col items-center justify-center">
+                                    <p>Falha ao carregar dados de pagamento</p>
+                                    <button 
+                                        onClick={handleRetry}
+                                        className="mt-3 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 text-sm"
+                                    >
+                                        Tentar Novamente
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    )}
                 </div>
 
                 {/* Footer */}
