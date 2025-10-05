@@ -1,9 +1,7 @@
+// src/components/event/CreateEvent.jsx
 import { useState, useMemo, useEffect } from 'react';
 import { useConnection } from '@solana/wallet-adapter-react';
-import { Program, AnchorProvider, web3 } from '@coral-xyz/anchor';
-import idl from '@/idl/ticketing_system.json';
-
-// 1. Importar componentes adicionais para a nova UI
+import { Program, AnchorProvider } from '@coral-xyz/anchor';
 import { Link } from 'react-router-dom';
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
 import { ArrowRightIcon } from '@heroicons/react/24/outline';
@@ -12,14 +10,9 @@ import { useAppWallet } from '@/hooks/useAppWallet';
 import { CreateEventWizard } from '@/components/event/create/CreateEventWizard';
 import { MyEventsList } from '@/components/event/MyEventsList';
 import { InfoBox } from '@/components/ui/InfoBox';
-import { PROGRAM_ID, API_URL } from '@/lib/constants'; // 🔄 Adicionei API_URL
+import { PROGRAM_ID, API_URL } from '@/lib/constants';
+import idl from '@/idl/ticketing_system.json';
 
-const GLOBAL_CONFIG_SEED = Buffer.from("config");
-const WHITELIST_SEED = Buffer.from("whitelist");
-
-/**
- * Novo componente de UI para usuários deslogados, com ações claras.
- */
 const LoginPrompt = () => (
     <div className="max-w-2xl mx-auto bg-white p-8 rounded-2xl shadow-lg border border-slate-200 text-center">
         <div className="w-16 h-16 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-6">
@@ -34,15 +27,22 @@ const LoginPrompt = () => (
                 to="/login"
                 className="flex items-center justify-center gap-2 w-full sm:w-auto px-6 py-3 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700 transition-colors duration-200"
             >
-                Fazer Login com Usuário
+                Fazer Login
                 <ArrowRightIcon className="h-5 w-5" />
             </Link>
-             {/* O WalletMultiButton já vem estilizado, mas podemos envolvê-lo para consistência */}
             <div className="w-full sm:w-auto">
-                 <WalletMultiButton style={{ width: '100%' }} />
+                <WalletMultiButton style={{ width: '100%' }} />
             </div>
         </div>
-        <p className="mt-6 text-xs text-slate-500">Escolha o método de sua preferência para continuar.</p>
+        <div className="mt-6 text-sm text-slate-600">
+            <p>Métodos de login suportados:</p>
+            <div className="flex flex-wrap justify-center gap-4 mt-2">
+                <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-xs">Extensão (Phantom)</span>
+                <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-xs">Username/Senha</span>
+                <span className="px-3 py-1 bg-purple-100 text-purple-800 rounded-full text-xs">Seed Phrase</span>
+                <span className="px-3 py-1 bg-orange-100 text-orange-800 rounded-full text-xs">Private Key</span>
+            </div>
+        </div>
     </div>
 );
 
@@ -72,6 +72,7 @@ export function CreateEvent() {
         return new Program(idl, PROGRAM_ID, provider);
     }, [provider, connection]);
 
+    // Verificar permissões para todos os tipos de login
     useEffect(() => {
         const checkPermissions = async () => {
             if (!wallet.publicKey) {
@@ -83,7 +84,8 @@ export function CreateEvent() {
             setIsLoadingPermissions(true);
             
             try {
-                // 🔄 ATUALIZADO: Usando a nova API modularizada
+                console.log("Verificando permissões para:", wallet.publicKey.toString(), "Tipo:", wallet.walletType);
+                
                 const response = await fetch(`${API_URL}/api/tickets/check-organizer-permission/${wallet.publicKey.toString()}`);
                 
                 if (!response.ok) {
@@ -94,8 +96,10 @@ export function CreateEvent() {
                 
                 if (result.success) {
                     setIsAllowed(result.isAllowed);
+                    console.log("Permissão concedida:", result.isAllowed);
                 } else {
                     setIsAllowed(false);
+                    console.log("Permissão negada");
                 }
             } catch (error) {
                 console.error("Erro ao verificar permissões:", error);
@@ -106,24 +110,34 @@ export function CreateEvent() {
         };
 
         checkPermissions();
-    }, [wallet.publicKey, program]);
+    }, [wallet.publicKey, wallet.walletType]);
 
     const renderContent = () => {
-        // 2. Substituir o InfoBox pelo novo LoginPrompt
         if (!wallet.connected) {
             return <LoginPrompt />;
         }
         
         if (isLoadingPermissions) {
-            return <div className="text-center text-slate-500">Verificando permissões...</div>;
+            return (
+                <div className="text-center">
+                    <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+                    <p className="mt-2 text-slate-500">Verificando permissões...</p>
+                    <p className="text-sm text-slate-400">
+                        Conectado como: {wallet.publicKey?.toString().slice(0, 8)}... 
+                        ({wallet.walletType})
+                    </p>
+                </div>
+            );
         }
 
         if (!isAllowed) {
-            return <InfoBox 
-                title="Acesso Negado" 
-                message="Você precisa ser um administrador ou estar na lista de permissões (whitelist) para criar eventos." 
-                status="error" 
-            />;
+            return (
+                <InfoBox 
+                    title="Acesso Negado" 
+                    message="Você precisa ser um administrador ou estar na lista de permissões (whitelist) para criar eventos." 
+                    status="error" 
+                />
+            );
         }
         
         return (
@@ -146,7 +160,10 @@ export function CreateEvent() {
         <div className="container mx-auto px-4 py-12">
             <header className="text-center mb-12">
                 <h1 className="text-4xl font-bold text-slate-900">Gerenciador de Eventos</h1>
-                <p className="mt-2 text-slate-600">Crie e administre seus eventos com facilidade.</p>
+                <p className="mt-2 text-slate-600">
+                    Conectado com: {wallet.walletType === 'adapter' ? 'Carteira Externa' : 
+                                  wallet.walletType === 'local' ? 'Login Local' : 'Nenhum'}
+                </p>
             </header>
             {renderContent()}
         </div>
