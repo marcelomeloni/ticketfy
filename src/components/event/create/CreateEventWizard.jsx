@@ -133,59 +133,119 @@ export function CreateEventWizard({ program, onEventCreated }) {
         toast.success("Dados prontos para envio!");
     };
 
-    // ✅ NOVA FUNÇÃO: Criar evento com assinatura da extensão
-    const createEventWithWalletSignature = async () => {
-        if (!wallet.publicKey || !wallet.signTransaction) {
-            throw new Error("Carteira não conectada ou não suporta assinatura");
-        }
+   const createEventWithWalletSignature = async () => {
+    if (!wallet.publicKey || !wallet.signTransaction) {
+        throw new Error("Carteira não conectada ou não suporta assinatura");
+    }
 
-        console.log('🦊 Criando evento com assinatura da extensão...');
+    console.log('🦊 Criando evento com assinatura da extensão...');
 
-        const finalFormData = new FormData();
-        
-        // Upload de arquivos
-        const isImageValid = offChainData.image && (offChainData.image instanceof File || offChainData.image instanceof Blob);
-        if (isImageValid) {
-            finalFormData.append('image', offChainData.image);
-        } else {
-            throw new Error("A imagem principal do evento é obrigatória.");
-        }
-        
-        if (offChainData.organizer.organizerLogo && (offChainData.organizer.organizerLogo instanceof File || offChainData.organizer.organizerLogo instanceof Blob)) {
-            finalFormData.append('organizerLogo', offChainData.organizer.organizerLogo);
-        }
+    const finalFormData = new FormData();
+    
+    // Upload de arquivos
+    const isImageValid = offChainData.image && (offChainData.image instanceof File || offChainData.image instanceof Blob);
+    if (isImageValid) {
+        finalFormData.append('image', offChainData.image);
+    } else {
+        throw new Error("A imagem principal do evento é obrigatória.");
+    }
+    
+    if (offChainData.organizer.organizerLogo && (offChainData.organizer.organizerLogo instanceof File || offChainData.organizer.organizerLogo instanceof Blob)) {
+        finalFormData.append('organizerLogo', offChainData.organizer.organizerLogo);
+    }
 
-        // Preparar dados para JSON
-        const offChainDataForJson = JSON.parse(JSON.stringify(offChainData));
-        if (isImageValid) offChainDataForJson.image = '[FILE_UPLOADED]';
-        if (offChainData.organizer.organizerLogo) offChainDataForJson.organizer.organizerLogo = '[FILE_UPLOADED]';
+    // Preparar dados para JSON
+    const offChainDataForJson = JSON.parse(JSON.stringify(offChainData));
+    if (isImageValid) offChainDataForJson.image = '[FILE_UPLOADED]';
+    if (offChainData.organizer.organizerLogo) offChainDataForJson.organizer.organizerLogo = '[FILE_UPLOADED]';
 
-        // Adicionar dados ao FormData
-        finalFormData.append('offChainData', JSON.stringify(offChainDataForJson));
-        finalFormData.append('onChainData', JSON.stringify(onChainData));
-        finalFormData.append('controller', wallet.publicKey.toString());
-        finalFormData.append('walletType', 'adapter');
+    // Adicionar dados ao FormData
+    finalFormData.append('offChainData', JSON.stringify(offChainDataForJson));
+    finalFormData.append('onChainData', JSON.stringify(onChainData));
+    finalFormData.append('controller', wallet.publicKey.toString());
+    finalFormData.append('walletType', 'adapter');
 
-        // ✅ PARA EXTENSÃO: Não enviar userLoginData, apenas indicar que é adapter
-        finalFormData.append('userLoginData', JSON.stringify({
-            loginType: 'adapter',
-            publicKey: wallet.publicKey.toString(),
-            walletType: 'adapter'
-        }));
+    // ✅ PARA EXTENSÃO: Não enviar userLoginData, apenas indicar que é adapter
+    finalFormData.append('userLoginData', JSON.stringify({
+        loginType: 'adapter',
+        publicKey: wallet.publicKey.toString(),
+        walletType: 'adapter'
+    }));
 
-        const response = await fetch(`${API_URL}/api/events/create-full-event`, {
-            method: 'POST',
-            body: finalFormData,
+    console.log('📤 Enviando dados para o backend...');
+    const response = await fetch(`${API_URL}/api/events/create-full-event`, {
+        method: 'POST',
+        body: finalFormData,
+    });
+
+    const result = await response.json();
+    
+    if (!response.ok || !result.success) {
+        throw new Error(result.error || "Falha ao criar o evento no servidor.");
+    }
+
+    console.log('📥 Resposta do backend:', result);
+
+    // ✅ VERIFICAR SE O BACKEND RETORNOU UMA TRANSAÇÃO PARA ASSINAR
+    if (result.transaction) {
+        console.log('🦊 Backend retornou transação para assinatura no frontend...');
+        console.log('📦 Dados do evento preparados:', {
+            eventPda: result.eventPda,
+            eventId: result.eventId,
+            metadataUrl: result.metadataUrl
         });
 
-        const result = await response.json();
-        
-        if (!response.ok || !result.success) {
-            throw new Error(result.error || "Falha ao criar o evento no servidor.");
-        }
+        try {
+            // Desserializar a transação
+            console.log('🔧 Desserializando transação...');
+            const transaction = Transaction.from(Buffer.from(result.transaction, 'base64'));
+            
+            console.log('✍️ Solicitando assinatura da carteira...');
+            // Assinar com a carteira
+            const signedTransaction = await wallet.signTransaction(transaction);
+            console.log('✅ Transação assinada pela carteira!');
+            
+            // Enviar transação assinada para o backend
+            console.log('📤 Enviando transação assinada para o backend...');
+            const sendResponse = await fetch(`${API_URL}/api/events/send-signed-transaction`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    signedTransaction: Buffer.from(signedTransaction.serialize()).toString('base64')
+                }),
+            });
 
+            const sendResult = await sendResponse.json();
+            console.log('📥 Resposta do envio da transação:', sendResult);
+            
+            if (!sendResponse.ok || !sendResult.success) {
+                throw new Error(sendResult.error || "Falha ao enviar transação assinada.");
+            }
+
+            console.log('🎉 Transação confirmada na blockchain!');
+            console.log('📝 Assinatura:', sendResult.signature);
+
+            // Combinar os resultados
+            return {
+                ...result,
+                signature: sendResult.signature,
+                eventAddress: result.eventPda,
+                authority: wallet.publicKey.toString(),
+                message: "Evento criado com assinatura da carteira!"
+            };
+
+        } catch (signError) {
+            console.error('❌ Erro ao assinar transação:', signError);
+            throw new Error(`Falha ao assinar transação: ${signError.message}`);
+        }
+    } else {
+        // Se não há transação para assinar, retornar o resultado normal
+        console.log('✅ Evento criado sem necessidade de assinatura adicional');
         return result;
-    };
+    }
+};
 
     // ✅ NOVA FUNÇÃO: Criar evento com backend signing (para login local)
     const createEventWithBackendSigning = async () => {
@@ -238,56 +298,62 @@ export function CreateEventWizard({ program, onEventCreated }) {
         return result;
     };
 
-    const handleSubmit = async (event) => {
-        event.preventDefault();
-        if (!validateStep1() || !validateStep2()) return;
-        
-        if (!wallet.connected || !wallet.publicKey) {
-            return toast.error("Faça login para criar o evento.");
-        }
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    if (!validateStep1() || !validateStep2()) return;
     
-        console.log('--- Iniciando submit ---');
-        console.log('Public Key:', wallet.publicKey.toString());
-        console.log('Tipo de carteira:', wallet.walletType);
-    
-        const loadingToast = toast.loading("Iniciando criação do evento...");
-        setLoading(true);
-    
-        try {
-            let result;
+    if (!wallet.connected || !wallet.publicKey) {
+        return toast.error("Faça login para criar o evento.");
+    }
 
-            // ✅ DECISÃO: Se for adapter, usa um fluxo; se for local, usa outro
-            if (wallet.walletType === 'adapter') {
-                console.log('🎯 Usando fluxo para carteira externa...');
-                toast.loading("Assinando com sua carteira...", { id: loadingToast });
-                result = await createEventWithWalletSignature();
-            } else {
-                console.log('🎯 Usando fluxo para login local...');
-                toast.loading("Processando no servidor...", { id: loadingToast });
-                result = await createEventWithBackendSigning();
+    console.log('--- Iniciando submit ---');
+    console.log('Public Key:', wallet.publicKey.toString());
+    console.log('Tipo de carteira:', wallet.walletType);
+
+    const loadingToast = toast.loading("Iniciando criação do evento...");
+    setLoading(true);
+
+    try {
+        let result;
+
+        // ✅ DECISÃO: Se for adapter, usa um fluxo; se for local, usa outro
+        if (wallet.walletType === 'adapter') {
+            console.log('🎯 Usando fluxo para carteira externa...');
+            toast.loading("Preparando transação...", { id: loadingToast });
+            result = await createEventWithWalletSignature();
+            
+            // Atualizar o toast durante o processo
+            if (result.signature) {
+                toast.loading("Confirmando transação na blockchain...", { id: loadingToast });
             }
-
-            toast.success("Evento criado com sucesso!", { 
-                id: loadingToast, 
-                duration: 5000 
-            });
-            
-            console.log('✅ Evento criado! Authority:', result.authority);
-            console.log('✅ Endereço do evento:', result.eventAddress);
-            console.log('✅ Transação:', result.signature);
-            
-            if (onEventCreated) onEventCreated();
-    
-        } catch (error) {
-            console.error("❌ Erro no processo de criação do evento:", error);
-            toast.error(`Erro: ${error.message}`, { 
-                id: loadingToast,
-                duration: 7000 
-            });
-        } finally {
-            setLoading(false);
+        } else {
+            console.log('🎯 Usando fluxo para login local...');
+            toast.loading("Processando no servidor...", { id: loadingToast });
+            result = await createEventWithBackendSigning();
         }
-    };
+
+        toast.success("Evento criado com sucesso!", { 
+            id: loadingToast, 
+            duration: 5000 
+        });
+        
+        console.log('✅ Evento criado!');
+        console.log('✅ Authority:', result.authority || wallet.publicKey.toString());
+        console.log('✅ Endereço do evento:', result.eventAddress);
+        console.log('✅ Transação:', result.signature);
+        
+        if (onEventCreated) onEventCreated();
+
+    } catch (error) {
+        console.error("❌ Erro no processo de criação do evento:", error);
+        toast.error(`Erro: ${error.message}`, { 
+            id: loadingToast,
+            duration: 7000 
+        });
+    } finally {
+        setLoading(false);
+    }
+};
 
     const getWalletStatusBadge = () => {
         const baseClasses = "px-3 py-1 rounded-full text-xs font-medium";
@@ -365,3 +431,4 @@ export function CreateEventWizard({ program, onEventCreated }) {
         </AdminCard>
     );
 }
+
