@@ -17,7 +17,7 @@ import { AcademicCapIcon, ArrowDownTrayIcon, CalendarIcon, MapPinIcon, TagIcon }
 const LISTING_SEED = Buffer.from("listing");
 const ESCROW_SEED = Buffer.from("escrow");
 const REFUND_RESERVE_SEED = Buffer.from("refund_reserve");
-const APP_BASE_URL = "https://ticketfy.onrender.com";
+const APP_BASE_URL = "https://ticketfy.app";
 
 export function MyTickets() {
     const { connection } = useConnection();

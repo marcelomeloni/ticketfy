@@ -51,6 +51,16 @@ export function ManageEvent() {
     const { publicKey: authPublicKey, keypair, isAuthenticated: authAuthenticated, isLoading: authLoading } = useAuth();
     const { publicKey: walletPublicKey, connected: walletConnected, wallet: solanaWallet, signTransaction: walletSignTransaction, signAllTransactions: walletSignAllTransactions } = useSolanaWallet();
 
+    // ✅ ESTADOS - DEFINIR TODOS OS ESTADOS NO TOPO
+    const [event, setEvent] = useState(null);
+    const [metadata, setMetadata] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [actionLoading, setActionLoading] = useState(false); // ✅ DEFINIDO AQUI
+    const [reserveBalance, setReserveBalance] = useState(0);
+    const [validatorAddress, setValidatorAddress] = useState('');
+    const [newTier, setNewTier] = useState({ name: '', price: '', maxTicketsSupply: '' });
+    const [apiError, setApiError] = useState(null);
+
     // ✅ DETERMINAR QUAL AUTENTICAÇÃO USAR (prioridade para wallet externa)
     const activeAuth = useMemo(() => {
         if (walletConnected && walletPublicKey) {
@@ -78,15 +88,6 @@ export function ManageEvent() {
             };
         }
     }, [walletConnected, walletPublicKey, authAuthenticated, authPublicKey, keypair, solanaWallet]);
-
-    const [event, setEvent] = useState(null);
-    const [metadata, setMetadata] = useState(null);
-    const [loading, setLoading] = useState(true);
-    const [actionLoading, setActionLoading] = useState(false);
-    const [reserveBalance, setReserveBalance] = useState(0);
-    const [validatorAddress, setValidatorAddress] = useState('');
-    const [newTier, setNewTier] = useState({ name: '', price: '', maxTicketsSupply: '' });
-    const [apiError, setApiError] = useState(null);
 
     // ✅ WALLET COMPATÍVEL COM ANCHOR (para ambas as fontes)
     const wallet = useMemo(() => {
@@ -118,6 +119,152 @@ export function ManageEvent() {
         
         return null;
     }, [activeAuth, walletSignTransaction, walletSignAllTransactions]);
+
+    // ✅ FUNÇÕES GASLESS PARA USUÁRIOS SEM WALLET
+    const handleAddValidatorGasless = async () => {
+        if (!validatorAddress) {
+            return toast.error("Digite um endereço de carteira válido.");
+        }
+    
+        setActionLoading(true);
+        const loadingToast = toast.loading("Adicionando validador via API...");
+    
+        try {
+            // ✅ CORRIGIR: Usar a chave correta do localStorage
+            const userLoginData = localStorage.getItem('solana-local-wallet-credentials');
+            
+            if (!userLoginData) {
+                toast.error("Dados de login não encontrados. Faça login novamente.", { id: loadingToast });
+                setActionLoading(false);
+                return;
+            }
+    
+            console.log('📤 Enviando dados para API - Add Validator:', {
+                eventAddress,
+                userLoginData: JSON.parse(userLoginData) // Apenas para debug
+            });
+    
+            const response = await fetch(`${API_URL}/api/events/${eventAddress}/validators/add`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    eventAddress,
+                    validatorAddress,
+                    userLoginData: userLoginData // ✅ CORRIGIDO: usar a string diretamente
+                })
+            });
+    
+            const result = await response.json();
+    
+            if (result.success) {
+                toast.success("Validador adicionado com sucesso via API!", { id: loadingToast });
+                await fetchEventData();
+                setValidatorAddress('');
+            } else {
+                toast.error(`Erro: ${result.error}`, { id: loadingToast });
+            }
+        } catch (error) {
+            toast.error(`Erro de rede: ${error.message}`, { id: loadingToast });
+        } finally {
+            setActionLoading(false);
+        }
+    };
+    
+    const handleRemoveValidatorGasless = async (addressToRemove) => {
+        setActionLoading(true);
+        const loadingToast = toast.loading("Removendo validador via API...");
+    
+        try {
+            // ✅ CORRIGIR: Usar a chave correta do localStorage
+            const userLoginData = localStorage.getItem('solana-local-wallet-credentials');
+            
+            if (!userLoginData) {
+                toast.error("Dados de login não encontrados. Faça login novamente.", { id: loadingToast });
+                setActionLoading(false);
+                return;
+            }
+    
+            const response = await fetch(`${API_URL}/api/events/${eventAddress}/validators/remove`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    eventAddress,
+                    validatorAddress: addressToRemove,
+                    userLoginData: userLoginData // ✅ CORRIGIDO
+                })
+            });
+    
+            const result = await response.json();
+    
+            if (result.success) {
+                toast.success("Validador removido com sucesso via API!", { id: loadingToast });
+                await fetchEventData();
+            } else {
+                toast.error(`Erro: ${result.error}`, { id: loadingToast });
+            }
+        } catch (error) {
+            toast.error(`Erro de rede: ${error.message}`, { id: loadingToast });
+        } finally {
+            setActionLoading(false);
+        }
+    };
+    
+    const handleCancelEventGasless = async () => {
+        if (!window.confirm("Tem certeza que deseja cancelar este evento? Esta ação é irreversível e habilitará reembolsos.")) {
+            return;
+        }
+    
+        setActionLoading(true);
+        const loadingToast = toast.loading("Cancelando evento via API...");
+    
+        try {
+            // ✅ CORRIGIR: Usar a chave correta do localStorage
+            const userLoginData = localStorage.getItem('solana-local-wallet-credentials');
+            
+            if (!userLoginData) {
+                toast.error("Dados de login não encontrados. Faça login novamente.", { id: loadingToast });
+                setActionLoading(false);
+                return;
+            }
+    
+            console.log('📤 Enviando dados para API - Cancel Event:', {
+                eventAddress,
+                userLoginData: JSON.parse(userLoginData) // Apenas para debug
+            });
+    
+            const response = await fetch(`${API_URL}/api/events/${eventAddress}/cancel`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    eventAddress: eventAddress,
+                    userLoginData: userLoginData // ✅ CORRIGIDO
+                })
+            });
+    
+            console.log('📨 Resposta da API:', response.status);
+    
+            const result = await response.json();
+            console.log('📊 Resultado da API:', result);
+    
+            if (result.success) {
+                toast.success("Evento cancelado com sucesso via API!", { id: loadingToast });
+                await fetchEventData();
+            } else {
+                toast.error(`Erro: ${result.error}`, { id: loadingToast });
+            }
+        } catch (error) {
+            console.error('💥 Erro completo:', error);
+            toast.error(`Erro de rede: ${error.message}`, { id: loadingToast });
+        } finally {
+            setActionLoading(false);
+        }
+    };
 
     const fetchEventData = useCallback(async () => {
         console.log('🔐 [ManageEvent] Estado da autenticação:', {
@@ -266,57 +413,76 @@ export function ManageEvent() {
         setNewTier({ name: '', price: '', maxTicketsSupply: '' });
     };
     
+    // ✅ FUNÇÕES UNIFICADAS QUE DETECTAM O TIPO DE AUTENTICAÇÃO
     const handleAddValidator = () => {
-        if (!program || !activeAuth.publicKey || !validatorAddress) {
-            return toast.error("Digite um endereço de carteira válido.");
-        }
-        
-        try {
-            const validatorPubkey = new web3.PublicKey(validatorAddress);
-            const method = program.methods
-                .addValidator(validatorPubkey)
-                .accounts({ 
-                    event: new web3.PublicKey(eventAddress), 
-                    controller: activeAuth.publicKey 
-                });
-            handleTransaction(method, "Validador adicionado com sucesso!");
-            setValidatorAddress('');
-        } catch(e) { 
-            toast.error("Endereço de carteira inválido.") 
+        if (activeAuth.type === 'wallet') {
+            // Usuário com wallet externa - usa transação normal
+            if (!program || !activeAuth.publicKey || !validatorAddress) {
+                return toast.error("Digite um endereço de carteira válido.");
+            }
+            
+            try {
+                const validatorPubkey = new web3.PublicKey(validatorAddress);
+                const method = program.methods
+                    .addValidator(validatorPubkey)
+                    .accounts({ 
+                        event: new web3.PublicKey(eventAddress), 
+                        controller: activeAuth.publicKey 
+                    });
+                handleTransaction(method, "Validador adicionado com sucesso!");
+                setValidatorAddress('');
+            } catch(e) { 
+                toast.error("Endereço de carteira inválido.") 
+            }
+        } else {
+            // Usuário sem wallet - usa API gasless
+            handleAddValidatorGasless();
         }
     };
     
     const handleRemoveValidator = (addressToRemove) => {
-        if (!program || !activeAuth.publicKey) return;
-        
-        try {
-            const validatorPubkey = new web3.PublicKey(addressToRemove);
-            const method = program.methods
-                .removeValidator(validatorPubkey)
-                .accounts({ 
-                    event: new web3.PublicKey(eventAddress), 
-                    controller: activeAuth.publicKey 
-                });
-            handleTransaction(method, "Validador removido com sucesso!");
-        } catch(e) {
-            toast.error("Erro ao remover validador.");
+        if (activeAuth.type === 'wallet') {
+            // Usuário com wallet externa - usa transação normal
+            if (!program || !activeAuth.publicKey) return;
+            
+            try {
+                const validatorPubkey = new web3.PublicKey(addressToRemove);
+                const method = program.methods
+                    .removeValidator(validatorPubkey)
+                    .accounts({ 
+                        event: new web3.PublicKey(eventAddress), 
+                        controller: activeAuth.publicKey 
+                    });
+                handleTransaction(method, "Validador removido com sucesso!");
+            } catch(e) {
+                toast.error("Erro ao remover validador.");
+            }
+        } else {
+            // Usuário sem wallet - usa API gasless
+            handleRemoveValidatorGasless(addressToRemove);
         }
     };
 
     const handleCancelEvent = () => {
-        if (!program || !activeAuth.publicKey) return;
-        
-        if (!window.confirm("Tem certeza que deseja cancelar este evento? Esta ação é irreversível e habilitará reembolsos.")) {
-            return;
+        if (activeAuth.type === 'wallet') {
+            // Usuário com wallet externa - usa transação normal
+            if (!program || !activeAuth.publicKey) return;
+            
+            if (!window.confirm("Tem certeza que deseja cancelar este evento? Esta ação é irreversível e habilitará reembolsos.")) {
+                return;
+            }
+            
+            const method = program.methods
+                .cancelEvent()
+                .accounts({ 
+                    event: new web3.PublicKey(eventAddress), 
+                    controller: activeAuth.publicKey 
+                });
+            handleTransaction(method, "Evento cancelado com sucesso!");
+        } else {
+            // Usuário sem wallet - usa API gasless
+            handleCancelEventGasless();
         }
-        
-        const method = program.methods
-            .cancelEvent()
-            .accounts({ 
-                event: new web3.PublicKey(eventAddress), 
-                controller: activeAuth.publicKey 
-            });
-        handleTransaction(method, "Evento cancelado com sucesso!");
     };
 
     const totalRevenueBrl = useMemo(() => {
