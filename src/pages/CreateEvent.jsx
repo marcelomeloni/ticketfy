@@ -1,8 +1,7 @@
-import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useConnection } from '@solana/wallet-adapter-react';
 import { Program, AnchorProvider, web3 } from '@coral-xyz/anchor';
 import idl from '@/idl/ticketing_system.json';
-import toast from 'react-hot-toast'; // Adicionado toast
 
 // 1. Importar componentes adicionais para a nova UI
 import { Link } from 'react-router-dom';
@@ -13,8 +12,7 @@ import { useAppWallet } from '@/hooks/useAppWallet';
 import { CreateEventWizard } from '@/components/event/create/CreateEventWizard';
 import { MyEventsList } from '@/components/event/MyEventsList';
 import { InfoBox } from '@/components/ui/InfoBox';
-import { PROGRAM_ID, API_URL } from '@/lib/constants'; // Garante que API_URL está importado
-import { Spinner } from '@/components/ui/Spinner';
+import { PROGRAM_ID, API_URL } from '@/lib/constants'; // 🔄 Adicionei API_URL
 
 const GLOBAL_CONFIG_SEED = Buffer.from("config");
 const WHITELIST_SEED = Buffer.from("whitelist");
@@ -41,13 +39,12 @@ const LoginPrompt = () => (
             </Link>
              {/* O WalletMultiButton já vem estilizado, mas podemos envolvê-lo para consistência */}
             <div className="w-full sm:w-auto">
-                <WalletMultiButton style={{ width: '100%' }} />
+                 <WalletMultiButton style={{ width: '100%' }} />
             </div>
         </div>
         <p className="mt-6 text-xs text-slate-500">Escolha o método de sua preferência para continuar.</p>
     </div>
 );
-
 
 export function CreateEvent() {
     const { connection } = useConnection();
@@ -68,52 +65,48 @@ export function CreateEvent() {
     }, [connection, wallet]);
 
     const program = useMemo(() => {
-        // CORRIGIDO: Certifica-se de que o programa é sempre inicializado (read-only ou com wallet)
-        const readOnlyProvider = new AnchorProvider(connection, {}, AnchorProvider.defaultOptions());
-        const effectiveProvider = provider || readOnlyProvider;
-        return new Program(idl, PROGRAM_ID, effectiveProvider);
+        if (!provider) {
+             const readOnlyProvider = new AnchorProvider(connection, {}, AnchorProvider.defaultOptions());
+             return new Program(idl, PROGRAM_ID, readOnlyProvider);
+        }
+        return new Program(idl, PROGRAM_ID, provider);
     }, [provider, connection]);
 
-    const checkPermissions = useCallback(async () => {
-        if (!wallet.publicKey) {
-            setIsLoadingPermissions(false);
-            setIsAllowed(false);
-            return;
-        }
-        
-        setIsLoadingPermissions(true);
-        
-        try {
-            // ✅ CORREÇÃO: Chama o novo endpoint da API para verificação centralizada
-            const response = await fetch(`${API_URL}/check-organizer-permission/${wallet.publicKey.toString()}`);
-            const data = await response.json();
-
-            if (!response.ok || !data.success) {
-                 // Em caso de falha da API, assume que não está permitido
+    useEffect(() => {
+        const checkPermissions = async () => {
+            if (!wallet.publicKey) {
+                setIsLoadingPermissions(false);
                 setIsAllowed(false);
                 return;
             }
-
-            setIsAllowed(data.isAllowed);
             
-        } catch (error) {
-            console.error("Erro ao verificar permissões via API:", error);
-            // Mensagem de erro foi removida do front-end por ser muito intrusiva.
-            setIsAllowed(false);
-        } finally {
-            setIsLoadingPermissions(false);
-        }
-    }, [wallet.publicKey]); // Removido 'program' das dependências, pois ele é derivado do wallet
+            setIsLoadingPermissions(true);
+            
+            try {
+                // 🔄 ATUALIZADO: Usando a nova API modularizada
+                const response = await fetch(`${API_URL}/api/tickets/check-organizer-permission/${wallet.publicKey.toString()}`);
+                
+                if (!response.ok) {
+                    throw new Error('Falha ao verificar permissões');
+                }
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    setIsAllowed(result.isAllowed);
+                } else {
+                    setIsAllowed(false);
+                }
+            } catch (error) {
+                console.error("Erro ao verificar permissões:", error);
+                setIsAllowed(false);
+            } finally {
+                setIsLoadingPermissions(false);
+            }
+        };
 
-    useEffect(() => {
-        // A API de permissão deve ser chamada apenas quando a carteira estiver conectada
-        if (wallet.connected) {
-            checkPermissions();
-        } else {
-            setIsLoadingPermissions(false);
-            setIsAllowed(false);
-        }
-    }, [wallet.connected, checkPermissions]);
+        checkPermissions();
+    }, [wallet.publicKey, program]);
 
     const renderContent = () => {
         // 2. Substituir o InfoBox pelo novo LoginPrompt
@@ -122,11 +115,15 @@ export function CreateEvent() {
         }
         
         if (isLoadingPermissions) {
-            return <div className="flex justify-center py-10"><Spinner /></div>;
+            return <div className="text-center text-slate-500">Verificando permissões...</div>;
         }
 
         if (!isAllowed) {
-            return <InfoBox title="Acesso Negado" message="Você precisa ser um administrador ou estar na lista de permissões (whitelist) para criar eventos." status="error" />;
+            return <InfoBox 
+                title="Acesso Negado" 
+                message="Você precisa ser um administrador ou estar na lista de permissões (whitelist) para criar eventos." 
+                status="error" 
+            />;
         }
         
         return (

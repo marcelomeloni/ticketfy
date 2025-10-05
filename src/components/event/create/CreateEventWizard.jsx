@@ -1,36 +1,30 @@
+// src/components/admin/CreateEventWizard.jsx
+
 import { useState } from 'react';
-import { web3, BN } from '@coral-xyz/anchor';
+
 import toast from 'react-hot-toast';
 
 import { Step1_MetadataForm } from './Step1_MetadataForm';
 import { Step2_OnChainForm } from './Step2_OnChainForm';
 import { Step3_UploadAndSubmit } from './Step3_UploadAndSubmit';
 import { AdminCard } from '@/components/ui/AdminCard';
+import { API_URL } from '@/lib/constants';
+import { useAuth } from '@/contexts/AuthContext';
 
-const WHITELIST_SEED = Buffer.from("whitelist");
-const EVENT_SEED = Buffer.from("event");
-
-export function CreateEventWizard({ program, wallet, onEventCreated }) {
+export function CreateEventWizard({ program, onEventCreated }) {
+    const { publicKey } = useAuth();
     const [loading, setLoading] = useState(false);
     const [step, setStep] = useState(1);
+    const [generatedJson, setGeneratedJson] = useState(null);
 
     const [offChainData, setOffChainData] = useState({
         name: '',
         description: '',
-        image: '',
+        image: null, // Começa como null
         category: 'Música',
         tags: [],
-        organizer: { 
-            name: '', 
-            website: '',
-            contactEmail: '',
-            organizerLogo: '',
-        },
-        additionalInfo: { 
-            ageRestriction: 'Livre', 
-            accessibility: '',
-            complementaryHours: 0, 
-        },
+        organizer: { name: '', website: '', contactEmail: '', organizerLogo: null },
+        additionalInfo: { ageRestriction: 'Livre', accessibility: '', complementaryHours: 0 },
         properties: {
             location: {
                 type: 'Physical',
@@ -41,7 +35,7 @@ export function CreateEventWizard({ program, wallet, onEventCreated }) {
             },
             dateTime: {
                 start: new Date(Date.now() + 3600 * 1000 * 24 * 14),
-                end: new Date(Date.now() + 3600 * 1000 * 24 * 14 + 7200000),
+                end: new Date(Date.now() + 3600 * 1000 * 24 * 14 + 7200000), // Adiciona 2 horas ao início
                 timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
             }
         }
@@ -49,33 +43,26 @@ export function CreateEventWizard({ program, wallet, onEventCreated }) {
 
     const [onChainData, setOnChainData] = useState({
         salesStartDate: new Date(),
-        salesEndDate: new Date(Date.now() + 3600 * 1000 * 24 * 7),
-        royaltyBps: '500', // Taxa de royalties para a REVANDA (em TFY)
+        salesEndDate: new Date(Date.now() + 3600 * 1000 * 24 * 7), // 7 dias a partir de agora
+        royaltyBps: '500',
         maxTicketsPerWallet: '10',
-        // ✅ ATUALIZADO: 'price' agora é em BRL (ex: 50.00)
-        tiers: [{ name: 'Pista', price: '30.00', maxTicketsSupply: '100' }], 
+        tiers: [{ name: 'Pista', price: '30.00', maxTicketsSupply: '100' }],
     });
 
-    const [metadataUrl, setMetadataUrl] = useState('');
-    const [generatedJson, setGeneratedJson] = useState(null);
-
-    // --- ✅ 1. FUNÇÕES DE VALIDAÇÃO ---
     const validateStep1 = () => {
         const { name, description, image, properties } = offChainData;
         if (!name.trim()) { toast.error("O nome do evento é obrigatório."); return false; }
         if (!description.trim()) { toast.error("A descrição do evento é obrigatória."); return false; }
-        try { new URL(image); } catch (_) { toast.error("A URL da imagem principal é inválida."); return false; }
-
+        if (!image) { toast.error("A imagem principal do evento é obrigatória."); return false; }
         if (properties.location.type === 'Physical') {
             const { venueName, address } = properties.location;
             if (!venueName.trim() || !address.street.trim() || !address.city.trim() || !address.state.trim()) {
-                toast.error("Para eventos presenciais, preencha o nome do local e o endereço.");
+                toast.error("Para eventos presenciais, preencha o nome do local e o endereço completo.");
                 return false;
             }
         }
-        if (properties.location.type === 'Online') {
-            try { new URL(properties.location.onlineUrl); } 
-            catch (_) { toast.error("A URL do evento online é inválida."); return false; }
+        if (properties.location.type === 'Online' && !properties.location.onlineUrl.trim()) {
+            toast.error("A URL do evento online é obrigatória."); return false;
         }
         if (new Date(properties.dateTime.start) >= new Date(properties.dateTime.end)) {
             toast.error("A data de término do evento deve ser posterior à data de início.");
@@ -90,97 +77,112 @@ export function CreateEventWizard({ program, wallet, onEventCreated }) {
             toast.error("A data de fim das vendas deve ser posterior à data de início.");
             return false;
         }
-        if (isNaN(parseInt(royaltyBps, 10)) || royaltyBps < 0) {
-            toast.error("O valor dos royalties é inválido."); return false;
+        if (parseInt(royaltyBps, 10) < 0 || parseInt(royaltyBps, 10) > 10000) {
+            toast.error("Os royalties devem ser entre 0 e 10000."); return false;
         }
-        if (isNaN(parseInt(maxTicketsPerWallet, 10)) || maxTicketsPerWallet < 0) {
-            toast.error("O valor de ingressos máximos por carteira é inválido."); return false;
+        if (parseInt(maxTicketsPerWallet, 10) < 1) {
+            toast.error("O máximo de ingressos por carteira deve ser pelo menos 1."); return false;
         }
         for (const tier of tiers) {
             if (!tier.name.trim()) { toast.error("Todos os lotes devem ter um nome."); return false; }
-            // ✅ VALIDAÇÃO BRL: Garante que o preço BRL é um número válido (pode ter casas decimais)
-            if (isNaN(parseFloat(tier.price)) || parseFloat(tier.price) < 0) {
+            if (parseFloat(tier.price) < 0) {
                 toast.error(`O preço em R$ do lote "${tier.name}" é inválido.`); return false;
             }
-            if (!/^\d+$/.test(tier.maxTicketsSupply) || parseInt(tier.maxTicketsSupply, 10) <= 0) {
-                toast.error(`O fornecimento máximo do lote "${tier.name}" deve ser um número inteiro maior que zero.`); return false;
+            if (parseInt(tier.maxTicketsSupply, 10) <= 0) {
+                toast.error(`O fornecimento do lote "${tier.name}" deve ser maior que zero.`); return false;
             }
         }
         return true;
     };
 
-    // --- ✅ 2. FUNÇÕES DE TRANSIÇÃO COM VALIDAÇÃO ---
-    const handleGoToStep2 = () => {
-        if (validateStep1()) {
-            setStep(2);
-        }
-    };
-    
-    const handleGenerateJson = () => {
-        // Valida ambos os passos antes de gerar o JSON
-        if (!validateStep1()) return;
-        if (!validateStep2()) return;
+    const handleGoToStep2 = () => { if (validateStep1()) setStep(2); };
 
-        const jsonContent = { ...offChainData, properties: { ...offChainData.properties,
-            dateTime: {
-                ...offChainData.properties.dateTime,
-                start: new Date(offChainData.properties.dateTime.start).toISOString(),
-                end: new Date(offChainData.properties.dateTime.end).toISOString(),
+    const handleGoToStep3 = () => {
+        if (!validateStep2()) return;
+        const previewData = { ...offChainData,
+            image: offChainData.image instanceof File ? `[Arquivo: ${offChainData.image.name}]` : offChainData.image,
+            organizer: {
+                ...offChainData.organizer,
+                organizerLogo: offChainData.organizer.organizerLogo instanceof File ? `[Arquivo: ${offChainData.organizer.organizerLogo.name}]` : offChainData.organizer.organizerLogo
             }
-        }};
-        setGeneratedJson(JSON.stringify(jsonContent, null, 2));
+        };
+        setGeneratedJson(JSON.stringify({ offChain: previewData, onChain: onChainData }, null, 2));
         setStep(3);
-        toast.success("Arquivo JSON gerado! Pronto para baixar.");
+        toast.success("Dados prontos para envio!");
     };
 
     const handleSubmit = async (event) => {
         event.preventDefault();
-        if (!program || !wallet) return toast.error("Conecte sua carteira.");
-        if (!metadataUrl.startsWith('https://')) return toast.error("Por favor, insira uma URL de metadados válida.");
-
-        const loadingToast = toast.loading("Criando evento na blockchain...");
+        if (!validateStep1() || !validateStep2()) return;
+        
+        if (!publicKey) {
+            return toast.error("Faça login para criar o evento.");
+        }
+    
+        console.log('--- Iniciando submit ---');
+        console.log('Public Key do usuário:', publicKey.toString());
+    
+        const loadingToast = toast.loading("Iniciando criação do evento...");
         setLoading(true);
+    
         try {
-            const eventId = new BN(Date.now()); 
+            // Recuperar as credenciais do localStorage para enviar ao backend
+            const savedCredentials = localStorage.getItem('solana-local-wallet-credentials');
+            if (!savedCredentials) {
+                throw new Error("Credenciais de login não encontradas. Faça login novamente.");
+            }
+    
+            const finalFormData = new FormData();
             
-            const [whitelistPda] = web3.PublicKey.findProgramAddressSync([WHITELIST_SEED, wallet.publicKey.toBuffer()], program.programId);
-            const [eventPda] = web3.PublicKey.findProgramAddressSync([EVENT_SEED, eventId.toBuffer('le', 8)], program.programId);
+            // Upload de arquivos
+            const isImageValid = offChainData.image && (offChainData.image instanceof File || offChainData.image instanceof Blob);
+            if (isImageValid) {
+                finalFormData.append('image', offChainData.image);
+            } else {
+                console.error('Imagem inválida no momento do submit:', offChainData.image);
+                throw new Error("A imagem principal do evento é inválida. Por favor, selecione-a novamente.");
+            }
             
-            // ✅ ATUALIZADO: Converte preço BRL para centavos (u64)
-            const tiersInput = onChainData.tiers.map(tier => {
-                // Converte BRL (ex: 30.00) para centavos (ex: 3000)
-                const priceBRLFloat = parseFloat(tier.price);
-                const priceBRLCents = Math.round(priceBRLFloat * 100);
-
-                return {
-                    name: tier.name,
-                    priceBrlCents: new BN(priceBRLCents), // Novo campo no contrato
-                    maxTicketsSupply: parseInt(tier.maxTicketsSupply, 10),
-                };
+            if (offChainData.organizer.organizerLogo && (offChainData.organizer.organizerLogo instanceof File || offChainData.organizer.organizerLogo instanceof Blob)) {
+                finalFormData.append('organizerLogo', offChainData.organizer.organizerLogo);
+            }
+    
+            // Preparar dados para JSON
+            const offChainDataForJson = JSON.parse(JSON.stringify(offChainData));
+            if (isImageValid) offChainDataForJson.image = '[FILE_UPLOADED]';
+            if (offChainData.organizer.organizerLogo) offChainDataForJson.organizer.organizerLogo = '[FILE_UPLOADED]';
+    
+            // Adicionar dados ao FormData
+            finalFormData.append('offChainData', JSON.stringify(offChainDataForJson));
+            finalFormData.append('onChainData', JSON.stringify(onChainData));
+            finalFormData.append('controller', publicKey.toString());
+            
+            // ✅ ENVIAR CREDENCIAIS PARA O BACKEND DERIVAR A KEYPAIR
+            finalFormData.append('userLoginData', savedCredentials);
+    
+            toast.loading("Enviando para o servidor e blockchain...", { id: loadingToast });
+            
+            const response = await fetch(`${API_URL}/api/events/create-full-event`, {
+                method: 'POST',
+                body: finalFormData,
             });
     
-            await program.methods
-                .createEvent(
-                    eventId, 
-                    metadataUrl, 
-                    new BN(Math.floor(onChainData.salesStartDate.getTime() / 1000)), 
-                    new BN(Math.floor(onChainData.salesEndDate.getTime() / 1000)), 
-                    parseInt(onChainData.royaltyBps, 10), 
-                    parseInt(onChainData.maxTicketsPerWallet, 10), 
-                    tiersInput
-                )
-                .accounts({
-                    whitelistAccount: whitelistPda,
-                    eventAccount: eventPda,
-                    controller: wallet.publicKey,
-                    systemProgram: web3.SystemProgram.programId,
-                }).rpc();
+            const result = await response.json();
+            
+            if (!response.ok || !result.success) {
+                throw new Error(result.error || "Falha ao criar o evento no servidor.");
+            }
     
-            toast.success("Evento criado com sucesso!", { id: loadingToast });
+            toast.success("Evento criado com sucesso!", { id: loadingToast, duration: 5000 });
+            
+            console.log('✅ Evento criado! Authority:', result.authority);
+            console.log('✅ Endereço do evento:', result.eventAddress);
+            
             if (onEventCreated) onEventCreated();
+    
         } catch (error) {
-            console.error("Erro ao criar evento:", error);
-            toast.error(`Erro ao criar evento: ${error.message}`, { id: loadingToast });
+            console.error("❌ Erro no processo de criação do evento:", error);
+            toast.error(`Erro: ${error.message}`, { id: loadingToast });
         } finally {
             setLoading(false);
         }
@@ -193,21 +195,18 @@ export function CreateEventWizard({ program, wallet, onEventCreated }) {
                     isActive={step === 1}
                     data={offChainData}
                     setData={setOffChainData}
-                    onNextStep={handleGoToStep2} // ✅ USA A FUNÇÃO COM VALIDAÇÃO
+                    onNextStep={handleGoToStep2}
                 />
                 <Step2_OnChainForm
                     isActive={step === 2}
                     data={onChainData}
                     setData={setOnChainData}
-                    onGenerateJson={handleGenerateJson} // ✅ USA A FUNÇÃO COM VALIDAÇÃO
+                    onGenerateJson={handleGoToStep3}
                 />
                 <Step3_UploadAndSubmit
                     isActive={step === 3}
                     generatedJson={generatedJson}
-                    metadataUrl={metadataUrl}
-                    setMetadataUrl={setMetadataUrl}
                     loading={loading}
-                    wallet={wallet}
                 />
             </form>
         </AdminCard>

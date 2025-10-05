@@ -176,7 +176,40 @@ export function AuthProvider({ children }) {
         localStorage.removeItem(LOCAL_STORAGE_KEY);
         console.log("Usuário deslogado.");
     }, []);
-
+    const signTransaction = useCallback(async (transaction) => {
+        if (!keypair) {
+            throw new Error("Usuário não autenticado");
+        }
+        
+        // Assina a transação com o keypair do usuário
+        transaction.partialSign(keypair);
+        return transaction;
+    }, [keypair]);
+    
+    // Função para assinar e enviar transações automaticamente
+    const signAndSendTransaction = useCallback(async (transaction, connection) => {
+        if (!keypair) {
+            throw new Error("Usuário não autenticado");
+        }
+    
+        try {
+            // Assina a transação
+            const signedTransaction = await signTransaction(transaction);
+            
+            // Envia a transação
+            const signature = await connection.sendRawTransaction(
+                signedTransaction.serialize()
+            );
+            
+            // Confirma a transação
+            const confirmation = await connection.confirmTransaction(signature);
+            
+            return { signature, confirmation };
+        } catch (error) {
+            console.error("Erro ao assinar e enviar transação:", error);
+            throw error;
+        }
+    }, [keypair, signTransaction]);
     const value = useMemo(() => ({
         keypair,
         publicKey: keypair?.publicKey,
@@ -187,7 +220,16 @@ export function AuthProvider({ children }) {
         loginWithSeedphrase,
         loginWithPrivateKey,
         logout,
-    }), [keypair, isLoading, error, login, loginWithSeedphrase, loginWithPrivateKey, logout]);
+        signTransaction, // ✅ Nova função
+        signAndSendTransaction, // ✅ Nova função
+        // Para compatibilidade com wallets externas
+        signAllTransactions: async (transactions) => {
+            return transactions.map(tx => {
+                tx.partialSign(keypair);
+                return tx;
+            });
+        }
+    }), [keypair, isLoading, error, login, loginWithSeedphrase, loginWithPrivateKey, logout, signTransaction, signAndSendTransaction]);
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

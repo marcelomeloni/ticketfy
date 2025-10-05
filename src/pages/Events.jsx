@@ -25,7 +25,7 @@ export function Events() {
             setIsLoading(true);
             try {
                 // Fazemos uma ÚNICA chamada para o nosso backend.
-                const response = await fetch(`${API_URL}/events/active`);
+                const response = await fetch(`${API_URL}/api/events/active`);
                 if (!response.ok) {
                     throw new Error(`Erro na API: ${response.statusText}`);
                 }

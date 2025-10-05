@@ -20,20 +20,21 @@ export function ManageEventCard({ program, eventAccount, eventPublicKey }) {
         const loadingToast = toast.loading("Adicionando novo lote...");
         setLoading(true);
         try {
-            const priceLamports = new BN(parseFloat(newTierPrice) * 10**9);
+          
+            const priceBrlCents = new BN(parseFloat(newTierPrice) * 100);
             const maxTicketsSupply = parseInt(newTierSupply, 10);
-
+    
+            // 2. Enviar o valor correto (em centavos) para o programa
             await program.methods
-                .addTicketTier(newTierName, priceLamports, maxTicketsSupply)
+                .addTicketTier(newTierName, priceBrlCents, maxTicketsSupply)
                 .accounts({
                     event: eventPublicKey,
                     controller: program.provider.wallet.publicKey,
                 })
                 .rpc();
-
-            toast.success("Lote adicionado com sucesso! Atualize a página para ver as mudanças.", { id: loadingToast, duration: 5000 });
-            setShowAddTier(false); // Esconde o formulário
-            // Idealmente, você atualizaria o estado do evento aqui para refletir a mudança sem refresh
+    
+            toast.success("Lote adicionado com sucesso!", { id: loadingToast });
+            setShowAddTier(false);
         } catch (error) {
             console.error("Erro ao adicionar lote:", error);
             toast.error(`Erro: ${error.message}`, { id: loadingToast });
@@ -62,8 +63,20 @@ export function ManageEventCard({ program, eventAccount, eventPublicKey }) {
                 {showAddTier && (
                     <form onSubmit={handleAddTier} className="space-y-4 p-4 border rounded-md mt-4 bg-slate-50">
                         <h4 className="font-semibold">Novo Lote</h4>
-                        <InputField label="Nome do Lote" value={newTierName} onChange={e => setNewTierName(e.target.value)} required />
-                        <InputField label="Preço (SOL)" type="number" value={newTierPrice} onChange={e => setNewTierPrice(e.target.value)} required />
+                        <InputField 
+                    label="Preço (BRL)" 
+                    type="number" 
+                    value={newTierPrice} 
+                    onChange={e => setNewTierPrice(e.target.value)} 
+                    required 
+                />
+                <InputField 
+                    label="Quantidade" 
+                    type="number" 
+                    value={newTierSupply} 
+                    onChange={e => setNewTierSupply(e.target.value)} 
+                    required 
+                />
                         <InputField label="Quantidade" type="number" value={newTierSupply} onChange={e => setNewTierSupply(e.target.value)} required />
                         <div className="flex space-x-2">
                              <ActionButton type="submit" loading={loading}>Confirmar</ActionButton>

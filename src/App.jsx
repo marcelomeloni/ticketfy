@@ -14,6 +14,7 @@ import { AuthProvider } from './contexts/AuthContext';
 import { Navbar } from './components/Navbar';
 import { Footer } from './components/Footer';
 import { Home } from './pages/Home';
+import PaymentSuccess from './pages/PaymentSuccess';
 import { Events } from './pages/Events';
 import { Marketplace } from './pages/Marketplace';
 import { EventDetail } from './pages/EventDetail';
@@ -55,7 +56,7 @@ function App() {
                     {/* 5. Adicionar a rota para a página de login */}
                     <Route path="/login" element={<LoginPage />} />
                     <Route path="/marketplace" element={<Marketplace />} />
-
+                    <Route path="/payment/success" element={<PaymentSuccess />} />
                     {/* Rotas que precisam de autenticação (a lógica de proteção será interna) */}
                     <Route path="/my-tickets" element={<MyTickets />} />
                     <Route path="/create-event" element={<CreateEvent />} />

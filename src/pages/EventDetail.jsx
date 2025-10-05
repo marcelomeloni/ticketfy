@@ -39,7 +39,7 @@ export function EventDetail() {
         setIsLoading(true);
         setError(null);
         try {
-            const response = await fetch(`${API_URL}/event-details/${eventAddress}`);
+            const response = await fetch(`${API_URL}/api/events/${eventAddress}`);
             const data = await response.json();
 
             if (!response.ok || !data.success) {
@@ -65,7 +65,7 @@ export function EventDetail() {
     const refetchEventDataInBackground = useCallback(async () => {
         if (!eventAddress) return;
         try {
-            const response = await fetch(`${API_URL}/event-details/${eventAddress}`);
+            const response = await fetch(`${API_URL}/api/events/${eventAddress}`);
             const data = await response.json();
             if (response.ok && data.success) {
                 setEventAccount(data.event.account);

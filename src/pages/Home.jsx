@@ -23,7 +23,7 @@ export function Home() {
             setIsLoading(true);
             try {
                 // Busca eventos ativos
-                const eventsResponse = await fetch(`${API_URL}/events/active`);
+                const eventsResponse = await fetch(`${API_URL}/api/events/active`);
                 if (!eventsResponse.ok) throw new Error('Falha ao buscar eventos');
                 const eventsData = await eventsResponse.json();
                 

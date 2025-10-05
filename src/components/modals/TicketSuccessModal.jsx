@@ -41,13 +41,16 @@ export const TicketSuccessModal = ({ isOpen, onClose, ticketData }) => {
 
     useEffect(() => {
         if (isOpen) {
+            // ✨ MODO DETETIVE ✨: Esta linha é a mais importante.
+            // Ela vai mostrar no console do navegador exatamente o que está chegando na prop 'ticketData'.
+            console.log('[DEBUG] Dados recebidos no TicketSuccessModal:', ticketData);
             setActiveTab('ticket');
         } else {
             setQrCodeImage(null);
             setEventImageBase64(null);
             setIsLoadingPdfAssets(true);
         }
-    }, [isOpen]);
+    }, [isOpen, ticketData]);
 
     useEffect(() => {
         if (activeTab === 'ticket' && ticketData && qrCodeContainerRef.current) {
@@ -71,48 +74,36 @@ export const TicketSuccessModal = ({ isOpen, onClose, ticketData }) => {
         }
     }, [ticketData, activeTab, isOpen]);
 
-    // ✅ useEffect ATUALIZADO com a conversão de WEBP para JPEG
     useEffect(() => {
         if (isOpen && ticketData?.eventImage) {
             setIsLoadingPdfAssets(true);
-            
             const fetchAndConvertImage = async () => {
                 try {
                     const response = await fetch(ticketData.eventImage);
                     if (!response.ok) throw new Error('Falha ao baixar imagem do evento');
                     const blob = await response.blob();
-
-                    // Lógica de conversão usando Canvas
                     const convertedImage = await new Promise((resolve, reject) => {
                         const img = new Image();
                         const url = URL.createObjectURL(blob);
-                        
                         img.onload = () => {
                             const canvas = document.createElement('canvas');
                             canvas.width = img.naturalWidth;
                             canvas.height = img.naturalHeight;
                             const ctx = canvas.getContext('2d');
-                            
                             ctx.fillStyle = '#FFFFFF';
                             ctx.fillRect(0, 0, canvas.width, canvas.height);
                             ctx.drawImage(img, 0, 0);
-                            
                             const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
-                            
                             URL.revokeObjectURL(url);
                             resolve(dataUrl);
                         };
-
                         img.onerror = (error) => {
                             URL.revokeObjectURL(url);
                             reject(error);
                         };
-
                         img.src = url;
                     });
-                    
                     setEventImageBase64(convertedImage);
-
                 } catch (error) {
                     console.error("Erro no processamento da imagem do evento:", error);
                     setEventImageBase64(null);
@@ -120,7 +111,6 @@ export const TicketSuccessModal = ({ isOpen, onClose, ticketData }) => {
                     setIsLoadingPdfAssets(false);
                 }
             };
-            
             fetchAndConvertImage();
         } else if (isOpen) {
             setIsLoadingPdfAssets(false);
@@ -131,7 +121,7 @@ export const TicketSuccessModal = ({ isOpen, onClose, ticketData }) => {
         return null;
     }
     
-    const { mintAddress, seedPhrase } = ticketData;
+    const { mintAddress, seedPhrase, registrationId } = ticketData;
     const words = seedPhrase ? seedPhrase.split(' ') : [];
 
     const handleCopy = (textToCopy, successMessage) => {
@@ -166,7 +156,8 @@ export const TicketSuccessModal = ({ isOpen, onClose, ticketData }) => {
                 <div className="bg-white p-6 rounded-b-lg border border-t-0 border-slate-200">
                     {activeTab === 'ticket' && (
                         <TicketTabContent 
-                            ticketData={ticketData} 
+                            ticketData={ticketData}
+                            registrationId={registrationId}
                             qrCodeContainerRef={qrCodeContainerRef} 
                             qrCodeImage={qrCodeImage}
                             eventImageBase64={eventImageBase64}
@@ -189,10 +180,8 @@ export const TicketSuccessModal = ({ isOpen, onClose, ticketData }) => {
     );
 };
 
-// --- Sub-componentes para cada Aba ---
-
-const TicketTabContent = ({ ticketData, qrCodeContainerRef, qrCodeImage, eventImageBase64, isLoadingPdfAssets }) => {
-    const { mintAddress, eventLocation } = ticketData;
+const TicketTabContent = ({ ticketData, registrationId, qrCodeContainerRef, qrCodeImage, eventImageBase64, isLoadingPdfAssets }) => {
+    const { eventLocation, eventName, mintAddress } = ticketData;
 
     const formatFullAddress = (location) => {
         if (!location || location.type !== 'Physical' || !location.address) { return location?.onlineUrl ? "Evento Online" : "Local a definir"; }
@@ -206,7 +195,7 @@ const TicketTabContent = ({ ticketData, qrCodeContainerRef, qrCodeImage, eventIm
             <p className="text-sm text-slate-500 mt-1">Apresente este QR Code na entrada do evento.</p>
             {eventLocation?.type === 'Physical' && (
                 <div className="mt-4 text-sm text-slate-600 bg-slate-50 p-3 rounded-lg flex items-start text-left">
-                    <MapPinIcon className="h-5 w-5 text-slate-400 mr-3 mt-0.5 flex-shrink-0" />
+                    <MapPinIcon className="h-5 w-5 text-slate-400 mr-3 mt-0-5 flex-shrink-0" />
                     <div>
                         <div className="font-semibold text-slate-800">{eventLocation.venueName}</div>
                         <div>{formatFullAddress(eventLocation)}</div>
@@ -214,9 +203,9 @@ const TicketTabContent = ({ ticketData, qrCodeContainerRef, qrCodeImage, eventIm
                 </div>
             )}
             <div ref={qrCodeContainerRef} className="mt-4 p-4 bg-white inline-block rounded-lg border">
-                <QRCode value={mintAddress} size={180} />
+                <QRCode value={registrationId || 'ID inválido'} size={180} />
             </div>
-            <p className="text-xs text-slate-400 mt-2 font-mono break-all">{mintAddress}</p>
+            <p className="text-xs text-slate-400 mt-2 font-mono break-all" title={registrationId}>{registrationId || 'ID de registro não encontrado'}</p>
             
             <div className="mt-6">
                 {(isLoadingPdfAssets || !qrCodeImage) ? (
@@ -226,11 +215,11 @@ const TicketTabContent = ({ ticketData, qrCodeContainerRef, qrCodeImage, eventIm
                 ) : (
                     <PDFDownloadLink
                         document={<TicketPDF 
-                            ticketData={{ ...ticketData, eventImage: eventImageBase64 }} 
+                            ticketData={{ ...ticketData, eventImage: eventImageBase64, registrationId }}
                             qrCodeImage={qrCodeImage} 
                             brandLogoImage="https://red-obedient-stingray-854.mypinata.cloud/ipfs/bafkreih7ofsa246z5vnjvrol6xk5tpj4zys42tcaotxq7tp7ptgraalrya"
                          />}
-                        fileName={`Ingresso_${ticketData.eventName.replace(/\s/g, '_')}.pdf`}
+                        fileName={`Ingresso_${eventName.replace(/\s/g, '_')}.pdf`}
                         className="w-full flex items-center justify-center gap-2 px-4 py-3 border border-transparent rounded-md shadow-sm text-base font-medium text-white bg-indigo-600 hover:bg-indigo-700"
                     >
                         {({ loading }) => loading ? 'Gerando PDF...' : (

@@ -19,7 +19,6 @@ const ESCROW_SEED = Buffer.from("escrow");
 const REFUND_RESERVE_SEED = Buffer.from("refund_reserve");
 const APP_BASE_URL = "https://ticketfy.onrender.com";
 
-
 export function MyTickets() {
     const { connection } = useConnection();
     const wallet = useAppWallet();
@@ -39,6 +38,7 @@ export function MyTickets() {
         return new Program(idl, PROGRAM_ID, provider);
     }, [connection, wallet]);
 
+    // 🔄 ATUALIZADO: Nova URL da API modularizada
     const fetchAllData = async () => {
         if (!wallet.publicKey) {
             setTickets([]);
@@ -47,7 +47,7 @@ export function MyTickets() {
         }
         setIsLoading(true);
         try {
-            const response = await fetch(`${API_URL}/user-tickets/${wallet.publicKey.toString()}`);
+            const response = await fetch(`${API_URL}/api/tickets/user-tickets/${wallet.publicKey.toString()}`);
             if (!response.ok) {
                 throw new Error('Falha ao buscar ingressos na API.');
             }

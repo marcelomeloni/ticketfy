@@ -1,70 +1,94 @@
+// Em: src/components/admin/forms/Step1_MetadataForm.jsx
+
 import { useMemo } from 'react';
-import { InputField } from '@/components/ui/InputField';
-import { ActionButton } from '@/components/ui/ActionButton';
 import { Step } from './common/Step';
-import { DatePickerField } from './common/DatePickerField';
+import { InputField } from '@/components/ui/InputField';
+import { ImageUploader } from '@/components/ui/ImageUploader';
+import { DatePickerField } from '@/components/event/create/common/DatePickerField';
+import { ActionButton } from '@/components/ui/ActionButton';
 
 export function Step1_MetadataForm({ isActive, data, setData, onNextStep }) {
-    // ✅ CORREÇÃO: Todos os Hooks agora estão no topo, antes de qualquer retorno.
-    
-    // Hook 1: isComplete
     const isComplete = useMemo(() => {
         return data.name && data.description && data.image;
     }, [data]);
 
-    // Hook 2: googleMapsLink
     const googleMapsLink = useMemo(() => {
         const { street, number, neighborhood, city, state } = data.properties.location.address;
         const addressString = [street, number, neighborhood, city, state].filter(Boolean).join(', ');
-        if (!addressString) return "#"; // Retorna um link seguro se não houver endereço
-        // ✨ BÔNUS: Corrigi a URL para gerar um link de busca funcional no Google Maps
+        if (!addressString) return "#";
+        // Corrigido o link do Google Maps
         return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addressString)}`;
     }, [data.properties.location.address]);
 
-
-    // Agora que todos os Hooks foram chamados, este retorno condicional é seguro.
     if (!isActive) {
         return <Step title="Passo 1: Informações do Evento" isComplete={isComplete} />;
     }
 
+    // Função genérica para lidar com inputs de texto e outros valores simples.
     const handleChange = (path, value) => {
         setData(prev => {
             const keys = path.split('.');
-            const newData = JSON.parse(JSON.stringify(prev)); // Deep copy
-            let current = newData;
+            const newState = { ...prev }; // Começa com uma cópia rasa
+
+            let currentLevel = newState;
             for (let i = 0; i < keys.length - 1; i++) {
-                current = current[keys[i]];
+                const key = keys[i];
+                // Cria uma cópia do próximo nível para não mutar o estado original
+                currentLevel[key] = { ...currentLevel[key] };
+                currentLevel = currentLevel[key];
             }
-            current[keys[keys.length - 1]] = value;
-            return newData;
+
+            currentLevel[keys[keys.length - 1]] = value;
+            return newState;
         });
+    };
+
+    // Função específica e segura apenas para atualizar os arquivos.
+    const handleFileChange = (fieldPath, file) => {
+        if (fieldPath === 'image') {
+            setData(prev => ({ ...prev, image: file }));
+        } else if (fieldPath === 'organizer.organizerLogo') {
+            setData(prev => ({
+                ...prev,
+                organizer: {
+                    ...prev.organizer,
+                    organizerLogo: file,
+                },
+            }));
+        }
     };
 
     return (
         <Step title="Passo 1: Informações do Evento (para os Metadados)" isActive={true}>
-            <p className="text-sm text-slate-500 mb-6">Estes dados serão públicos e usados para exibir os detalhes do seu evento. Eles serão salvos em um arquivo JSON.</p>
+            <p className="text-sm text-slate-500 mb-6">Estes dados serão públicos e usados para exibir os detalhes do seu evento.</p>
             
             <div className="space-y-6">
-                {/* --- SEÇÃO: INFORMAÇÕES BÁSICAS --- */}
+                {/* --- BASIC INFORMATION SECTION --- */}
                 <Section title="Informações Básicas">
                     <InputField label="Nome do Evento" value={data.name} onChange={e => handleChange('name', e.target.value)} required />
                     <InputField as="textarea" label="Descrição" value={data.description} onChange={e => handleChange('description', e.target.value)} required />
-                    <InputField label="URL da Imagem Principal" placeholder="https://..." value={data.image} onChange={e => handleChange('image', e.target.value)} required 
-                        helperText="Faça o upload da imagem em um serviço como Pinata ou IPFS e cole o link aqui." />
+                    
+                    <ImageUploader 
+                        label="Imagem Principal do Evento"
+                        onFileSelect={(file) => handleFileChange('image', file)}
+                        existingImageUrl={typeof data.image === 'string' ? data.image : null}
+                        helperText="A imagem será enviada no passo final."
+                        required
+                    />
+
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <InputField label="Categoria" value={data.category} onChange={e => handleChange('category', e.target.value)} />
-                        <InputField label="Tags (separadas por vírgula)" placeholder="rock, indie, festival" onChange={e => handleChange('tags', e.target.value.split(',').map(t => t.trim()))} />
+                        <InputField label="Tags (separadas por vírgula)" placeholder="rock, indie, festival" value={Array.isArray(data.tags) ? data.tags.join(', ') : ''} onChange={e => handleChange('tags', e.target.value.split(',').map(t => t.trim()))} />
                     </div>
                 </Section>
                 
-                {/* --- SEÇÃO: LOCALIZAÇÃO --- */}
+                {/* --- LOCATION SECTION --- */}
                 <Section title="Localização">
                     <div className="flex items-center space-x-4 mb-4">
                         <label className="text-sm font-medium text-slate-700">Tipo de Evento:</label>
                         <RadioOption name="locationType" value="Physical" checked={data.properties.location.type === 'Physical'} onChange={e => handleChange('properties.location.type', e.target.value)} label="Presencial" />
                         <RadioOption name="locationType" value="Online" checked={data.properties.location.type === 'Online'} onChange={e => handleChange('properties.location.type', e.target.value)} label="Online" />
                     </div>
-
                     {data.properties.location.type === 'Physical' && (
                         <div className="space-y-4 p-4 border rounded-md bg-slate-50">
                             <InputField label="Nome do Local (Ex: Estádio Beira-Rio)" value={data.properties.location.venueName} onChange={e => handleChange('properties.location.venueName', e.target.value)} required/>
@@ -80,7 +104,6 @@ export function Step1_MetadataForm({ isActive, data, setData, onNextStep }) {
                                 <InputField label="Cidade" value={data.properties.location.address.city} onChange={e => handleChange('properties.location.address.city', e.target.value)} required/>
                                 <InputField label="Estado (UF)" value={data.properties.location.address.state} onChange={e => handleChange('properties.location.address.state', e.target.value)} required/>
                             </div>
-
                             <div className="pt-2">
                                 <h5 className="text-sm font-semibold text-slate-600 mb-2">Coordenadas (Opcional)</h5>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -93,13 +116,12 @@ export function Step1_MetadataForm({ isActive, data, setData, onNextStep }) {
                             </div>
                         </div>
                     )}
-                    
                     {data.properties.location.type === 'Online' && (
                          <InputField label="URL do Evento Online" placeholder="https://zoom.us/j/..." value={data.properties.location.onlineUrl} onChange={e => handleChange('properties.location.onlineUrl', e.target.value)} required/>
                     )}
                 </Section>
                 
-                {/* --- SEÇÃO: DATAS --- */}
+                {/* --- DATES SECTION --- */}
                 <Section title="Data do Evento">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <DatePickerField label="Início do Evento" selected={data.properties.dateTime.start} onChange={date => handleChange('properties.dateTime.start', date)} />
@@ -107,23 +129,23 @@ export function Step1_MetadataForm({ isActive, data, setData, onNextStep }) {
                     </div>
                 </Section>
 
-                {/* --- SEÇÃO: ORGANIZADOR --- */}
+                {/* --- ORGANIZER SECTION --- */}
                 <Section title="Organizador (Opcional)">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <InputField label="Nome do Organizador" value={data.organizer.name} onChange={e => handleChange('organizer.name', e.target.value)} />
                         <InputField label="Website do Organizador" placeholder="https://..." value={data.organizer.website} onChange={e => handleChange('organizer.website', e.target.value)} />
                     </div>
-                    <InputField 
-                        label="URL do Logo do Organizador" 
-                        placeholder="https://.../logo.png" 
-                        value={data.organizer.organizerLogo} 
-                        onChange={e => handleChange('organizer.organizerLogo', e.target.value)} 
-                        helperText="Faça o upload do logo e cole o link aqui. Será exibido na página do evento."
+                    
+                    <ImageUploader 
+                        label="Logo do Organizador"
+                        onFileSelect={(file) => handleFileChange('organizer.organizerLogo', file)}
+                        existingImageUrl={typeof data.organizer.organizerLogo === 'string' ? data.organizer.organizerLogo : null}
                     />
+
                     <InputField type="email" label="E-mail de Contato" placeholder="contato@empresa.com" value={data.organizer.contactEmail} onChange={e => handleChange('organizer.contactEmail', e.target.value)} />
                 </Section>
 
-                {/* --- SEÇÃO: INFORMAÇÕES ADICIONAIS --- */}
+                {/* --- ADDITIONAL INFORMATION SECTION --- */}
                 <Section title="Informações Adicionais (Opcional)">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <InputField label="Restrição de Idade" placeholder="Livre, 16+, 18+" value={data.additionalInfo.ageRestriction} onChange={e => handleChange('additionalInfo.ageRestriction', e.target.value)} />
@@ -145,7 +167,7 @@ export function Step1_MetadataForm({ isActive, data, setData, onNextStep }) {
     );
 }
 
-// Componentes auxiliares (sem alterações)
+// Helper Components
 const Section = ({ title, children }) => (
     <div>
         <h4 className="font-semibold text-lg text-slate-800 pb-2 mb-4 border-b border-slate-200">{title}</h4>

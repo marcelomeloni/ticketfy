@@ -1,10 +1,9 @@
-// src/components/pdf/TicketDownloader.jsx
-
 import { useState } from 'react';
 import toast from 'react-hot-toast';
 import { pdf } from '@react-pdf/renderer';
 import QRCode from 'qrcode';
 import { TicketPDF } from './TicketPDF';
+import { supabase } from '@/lib/supabaseClient'; // 1. Importe o cliente Supabase
 
 export const TicketDownloader = ({ ticket, eventDetails, children, className }) => {
     const [isLoading, setIsLoading] = useState(false);
@@ -17,62 +16,70 @@ export const TicketDownloader = ({ ticket, eventDetails, children, className }) 
 
         try {
             const { account: ticketData } = ticket;
+            const mintAddress = ticketData.nftMint.toString();
 
-            // Passo 1: Gerar a imagem do QR Code como Base64 (Data URL)
-            const qrCodeImage = await QRCode.toDataURL(ticketData.nftMint.toString(), {
+            // ✨ PASSO ADICIONAL: Buscar o registrationId no Supabase ✨
+            console.log(`Buscando registrationId para o mint: ${mintAddress}`);
+            const { data: registration, error: dbError } = await supabase
+                .from('registrations')
+                .select('id')
+                .eq('mint_address', mintAddress)
+                .single();
+
+            if (dbError || !registration) {
+                throw new Error("Não foi possível encontrar o registro do ingresso.");
+            }
+            
+            const registrationId = registration.id;
+            console.log(`RegistrationId encontrado: ${registrationId}`);
+
+            // Passo 1: Gerar a imagem do QR Code com o registrationId
+            const qrCodeImage = await QRCode.toDataURL(registrationId, { // <-- CORREÇÃO AQUI
                 width: 512,
                 margin: 1,
             });
 
-            // Passo 2: Baixar a imagem do evento e convertê-la para JPEG (formato compatível)
+            // Passo 2: Baixar e converter a imagem do evento (lógica inalterada)
             let eventImageBase64 = null;
             if (eventDetails.metadata.image) {
-                const response = await fetch(eventDetails.metadata.image);
+                const response = await fetch(eventDetails.metadata.image, {
+                    headers: { 'Cache-Control': 'no-cache' } // Ajuda a evitar problemas de cache com CORS
+                });
                 if (!response.ok) throw new Error('Falha ao buscar a imagem do evento.');
                 const blob = await response.blob();
 
-                // Lógica de conversão usando Canvas para garantir compatibilidade (ex: WEBP -> JPEG)
                 eventImageBase64 = await new Promise((resolve, reject) => {
                     const img = new Image();
+                    img.crossOrigin = "anonymous"; // Essencial para carregar imagens de outros domínios no canvas
                     const url = URL.createObjectURL(blob);
-                    
                     img.onload = () => {
                         const canvas = document.createElement('canvas');
                         canvas.width = img.naturalWidth;
                         canvas.height = img.naturalHeight;
                         const ctx = canvas.getContext('2d');
-                        
-                        // Adiciona um fundo branco para evitar fundos pretos em imagens com transparência
                         ctx.fillStyle = '#FFFFFF';
                         ctx.fillRect(0, 0, canvas.width, canvas.height);
-                        
                         ctx.drawImage(img, 0, 0);
-                        
-                        const dataUrl = canvas.toDataURL('image/jpeg', 0.9); // Converte para JPEG
-                        
+                        const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
                         URL.revokeObjectURL(url);
                         resolve(dataUrl);
                     };
-
-                    img.onerror = (error) => {
-                        URL.revokeObjectURL(url);
-                        reject(error);
-                    };
-
+                    img.onerror = (error) => { URL.revokeObjectURL(url); reject(error); };
                     img.src = url;
                 });
             }
 
-            // Passo 3: Montar os dados finais para o componente PDF
+            // Passo 3: Montar os dados finais, incluindo o registrationId
             const pdfData = {
                 eventName: eventDetails.metadata.name,
                 eventDate: eventDetails.metadata.properties.dateTime.start,
                 eventLocation: eventDetails.metadata.properties.location,
-                mintAddress: ticketData.nftMint.toString(),
+                mintAddress: mintAddress,
                 eventImage: eventImageBase64,
+                registrationId: registrationId, // <-- CORREÇÃO AQUI
             };
 
-            // Passo 4: Gerar o PDF como um 'blob' e iniciar o download
+            // Passo 4: Gerar o PDF e iniciar o download (lógica inalterada)
             const blob = await pdf(
                 <TicketPDF 
                     ticketData={pdfData} 
@@ -93,7 +100,7 @@ export const TicketDownloader = ({ ticket, eventDetails, children, className }) 
             toast.success('Ingresso baixado com sucesso!', { id: loadingToast });
         } catch (error) {
             console.error('Erro ao gerar PDF:', error);
-            toast.error('Erro ao gerar PDF. Verifique o console.', { id: loadingToast });
+            toast.error(error.message || 'Erro ao gerar PDF.', { id: loadingToast });
         } finally {
             setIsLoading(false);
         }

@@ -224,7 +224,7 @@ export const CertificatePage = () => {
 
         const fetchCertificateData = async () => {
             try {
-                const response = await fetch(`${API_URL}/ticket-data/${mintAddress}`);
+                const response = await fetch(`${API_URL}/api/tickets/ticket-data/${mintAddress}`);
                 if (!response.ok) {
                     const errorData = await response.json();
                     throw new Error(errorData.error || "Ingresso não encontrado.");

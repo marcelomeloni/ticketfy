@@ -1,8 +1,6 @@
 import { useState } from 'react';
 import { useConnection } from '@solana/wallet-adapter-react';
-import { Transaction } from '@solana/web3.js';
 import toast from 'react-hot-toast';
-import { Buffer } from 'buffer';
 import { Link } from 'react-router-dom';
 
 import { useAppWallet } from '@/hooks/useAppWallet';
@@ -28,28 +26,18 @@ export const PurchaseCard = ({ metadata, eventAccount, eventAddress, onPurchaseS
 
     const selectedTier = selectedTierIndex !== null ? eventAccount.tiers[selectedTierIndex] : null;
     
-    // ✅ CORREÇÃO CRÍTICA: O Anchor serializa BN como string hexadecimal. Convertemos para decimal.
+    // O Anchor serializa BN como string hexadecimal. Convertemos para decimal.
     const hexPriceString = selectedTier?.priceBrlCents || '0';
-    const priceInCents = parseInt(hexPriceString, 16) || 0; // Converte HEX para DECIMAL
+    const priceInCents = parseInt(hexPriceString, 16) || 0;
     
     // O ingresso é pago se o preço decimal for maior que zero.
     const isPaidTier = priceInCents > 0;
     
-    // ✅ CORRIGIDO: Calcula o preço em Reais (BRL)
+    // Calcula o preço em Reais (BRL)
     const tierPriceInReais = (priceInCents / 100).toFixed(2);
     
-    // ✅ NOVO: Calcula o fornecimento total somando todos os tiers
+    // Calcula o fornecimento total somando todos os tiers
     const maxTotalSupply = eventAccount.tiers.reduce((total, tier) => total + Number(tier.maxTicketsSupply), 0);
-    
-    // Log de depuração (melhorado para ser mais claro)
-    console.log("--- DEBUG ---");
-    console.log("TIER NAME:", selectedTier?.name);
-    console.log("TIER PRICE (HEX):", hexPriceString);
-    console.log("TIER PRICE (cents decimal):", priceInCents);
-    console.log("IS PAID TIER:", isPaidTier);
-    console.log("MAX TOTAL SUPPLY:", maxTotalSupply);
-    console.log("--- END DEBUG ---");
-
 
     const handleSelectTier = (index) => {
         setSelectedTierIndex(index);
@@ -66,19 +54,8 @@ export const PurchaseCard = ({ metadata, eventAccount, eventAddress, onPurchaseS
             toast.error("Erro: Preço inválido (R$ 0,00). Verifique a configuração do evento.");
             return;
         }
-
-        // Verifica se precisa de carteira externa para ingressos pagos
-        if (isPaidTier && !wallet.connected) {
-            toast.error("Para ingressos pagos, conecte sua carteira primeiro.");
-            return;
-        }
-
-        // Verifica se usuário com carteira local está tentando comprar ingresso pago
-        if (isPaidTier && wallet.connected && wallet.walletType === 'local') {
-            toast.error("Ingressos pagos requerem carteira externa (Phantom, etc.).");
-            return;
-        }
-
+        
+        // Abre o modal de registro para todos os usuários, independentemente do tipo de carteira.
         setRegistrationModalOpen(true);
     };
 
@@ -87,91 +64,65 @@ export const PurchaseCard = ({ metadata, eventAccount, eventAddress, onPurchaseS
         setRegistrationModalOpen(false);
 
         if (isPaidTier) {
-            // Para ingressos pagos, abre modal de pagamento
+            // Para ingressos pagos, abre o modal de pagamento PIX.
             setPaymentModalOpen(true);
         } else {
-            // Para ingressos gratuitos, processa diretamente
+            // Para ingressos gratuitos, processa diretamente.
             await processTicketPurchase(formData);
         }
     };
 
     const handlePaymentSuccess = async () => {
         setPaymentModalOpen(false);
+        // Após o sucesso do PIX, processa a compra com os dados do formulário salvos.
         await processTicketPurchase(pendingFormData, true);
-    };
-
-    const handleCryptoPayment = () => {
-        toast.success('Pagamento com criptomoedas estará disponível em breve!');
-        // Aqui você pode implementar a lógica para pagamento com cripto no futuro
     };
 
     const processTicketPurchase = async (formData, isPaid = false) => {
         setIsLoading(true);
-        const toastId = toast.loading(isPaid ? 'Confirmando pagamento...' : 'Processando sua aquisição...');
+        const toastId = toast.loading('Processando sua aquisição...');
 
         try {
             let response;
             let data;
             
-            const priceBRLCents = isPaid ? priceInCents : 0; // Já temos o valor correto em centavos.
+            const priceBRLCents = isPaid ? priceInCents : 0;
 
-
-            // CASO 1: Usuário está conectado com carteira externa
+            // CASO 1: Usuário está conectado com carteira (local OU externa).
+            // A API vai lidar com a lógica de "usuário existente" para ambos os casos.
             if (wallet.connected && wallet.publicKey) {
-                response = await fetch(`${API_URL}/mint-for-existing-user`, {
+                response = await fetch(`${API_URL}/api/tickets/mint-for-existing-user`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         eventAddress,
                         buyerAddress: wallet.publicKey.toString(),
                         tierIndex: selectedTierIndex,
-                        priceBRLCents: priceBRLCents, // Passa o preço BRL para o servidor
+                        priceBRLCents: priceBRLCents,
                         ...formData,
                     }),
                 });
-                data = await response.json();
-
-                if (!response.ok || !data.success) {
-                    throw new Error(data.details || 'Falha ao processar a solicitação.');
-                }
-                
-                // Transação SOL on-chain removida. Pagamento é validado via PIX/servidor.
-
-
             } 
-            // CASO 2: Usuário NÃO está conectado (novo usuário)
+            // CASO 2: Usuário NÃO está conectado (comprando como convidado/novo usuário).
             else {
-                if (isPaid) {
-                    // Para novos usuários com ingresso pago (após PIX)
-                    response = await fetch(`${API_URL}/generate-wallet-and-mint-paid`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            eventAddress,
-                            tierIndex: selectedTierIndex,
-                            priceBRLCents: priceBRLCents, // Passa o preço BRL para o servidor
-                            ...formData,
-                            paymentMethod: 'pix', // Indicar que foi pago via PIX
-                        }),
-                    });
-                } else {
-                    // Para novos usuários com ingresso gratuito
-                    response = await fetch(`${API_URL}/generate-wallet-and-mint`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            eventAddress,
-                            tierIndex: selectedTierIndex,
-                            ...formData,
-                        }),
-                    });
-                }
+                const endpoint = isPaid ? '/api/tickets/generate-wallet-and-mint-paid' : '/api/tickets/generate-wallet-and-mint';
+                response = await fetch(`${API_URL}${endpoint}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        eventAddress,
+                        tierIndex: selectedTierIndex,
+                        priceBRLCents: priceBRLCents,
+                        paymentMethod: isPaid ? 'pix' : undefined,
+                        ...formData,
+                    }),
+                });
+            }
 
-                data = await response.json();
+            data = await response.json();
 
-                if (!response.ok || !data.success) {
-                    throw new Error(data.details || 'Falha ao criar carteira e ingresso.');
-                }
+            if (!response.ok || !data.success) {
+                throw new Error(data.details || 'Falha ao processar a solicitação.');
             }
 
             // Prepara dados para o modal de sucesso
@@ -183,15 +134,12 @@ export const PurchaseCard = ({ metadata, eventAccount, eventAddress, onPurchaseS
                 eventDate: metadata.properties.dateTime.start,
                 eventLocation: metadata.properties.location,
                 eventImage: metadata.image,
-                isNewUser: !wallet.connected, // Indica se é um novo usuário
+                isNewUser: !wallet.connected, // Se não estava conectado, é um novo usuário
+                registrationId: data.registrationId,
             });
 
             toast.success('Ingresso adquirido com sucesso!', { id: toastId });
-            
-            // Atualiza os dados do evento
             onPurchaseSuccess();
-            
-            // Abre modal de sucesso
             setSuccessModalOpen(true);
 
         } catch (error) {
@@ -212,7 +160,6 @@ export const PurchaseCard = ({ metadata, eventAccount, eventAddress, onPurchaseS
                 <div className="flex items-center justify-between mb-2">
                     <h2 className="text-2xl font-bold text-slate-900">Ingressos</h2>
                     <span className="text-sm text-slate-600 bg-slate-100 px-3 py-1 rounded-full">
-                        {/* Usa o maxTotalSupply calculado */}
                         {eventAccount.totalTicketsSold} / {maxTotalSupply} vendidos
                     </span>
                 </div>
@@ -241,53 +188,15 @@ export const PurchaseCard = ({ metadata, eventAccount, eventAddress, onPurchaseS
                             isPaidTier ? "Comprar Ingresso" : "Pegar Ingresso Grátis"}
                     </ActionButton>
 
-                    {/* Avisos para ingressos pagos */}
+                    {/* LÓGICA DE AVISOS SIMPLIFICADA */}
                     {selectedTierIndex !== null && isPaidTier && (
-                        <div className="mt-4 space-y-3">
-                            {!wallet.connected && (
-                                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-                                    <p className="text-amber-800 text-sm text-center font-medium">
-                                        Para ingressos pagos, conecte sua carteira:
-                                    </p>
-                                    <div className="flex items-center gap-3 mt-3">
-                                        <Link 
-                                            to="/login" 
-                                            className="flex-1 text-center bg-amber-100 text-amber-800 font-semibold py-3 rounded-lg hover:bg-amber-200 transition-colors"
-                                        >
-                                            Fazer Login
-                                        </Link>
-                                        <WalletMultiButton 
-                                            style={{ 
-                                                flex: '1',
-                                                backgroundColor: '#f59e0b',
-                                                color: 'white',
-                                                borderRadius: '0.5rem',
-                                                padding: '0.75rem',
-                                                justifyContent: 'center'
-                                            }} 
-                                        />
-                                    </div>
-                                </div>
-                            )}
-                            
-                            {wallet.connected && wallet.walletType === 'local' && (
-                                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                                    <p className="text-red-800 text-sm text-center">
-                                        ❌ Ingresos pagos não estão disponíveis para carteira local. 
-                                        Conecte uma carteira externa como Phantom ou Solflare.
-                                    </p>
-                                </div>
-                            )}
-
-                            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                                <p className="text-blue-800 text-sm text-center">
-                                    💳 <strong>Pagamento via PIX</strong> - R$ {tierPriceInReais}
-                                </p>
-                            </div>
+                        <div className="mt-4 bg-blue-50 border border-blue-200 rounded-lg p-3">
+                            <p className="text-blue-800 text-sm text-center">
+                                💳 <strong>Pagamento via PIX</strong> - R$ {tierPriceInReais}
+                            </p>
                         </div>
                     )}
 
-                    {/* Aviso para ingressos gratuitos */}
                     {selectedTierIndex !== null && !isPaidTier && (
                         <div className="mt-4 bg-green-50 border border-green-200 rounded-lg p-4">
                             <p className="text-green-800 text-sm text-center">
@@ -312,7 +221,7 @@ export const PurchaseCard = ({ metadata, eventAccount, eventAddress, onPurchaseS
                 </div>
             </div>
 
-            {/* Modal de Cadastro */}
+            {/* Modais */}
             <RegistrationModal
                 isOpen={isRegistrationModalOpen}
                 onClose={() => setRegistrationModalOpen(false)}
@@ -323,21 +232,22 @@ export const PurchaseCard = ({ metadata, eventAccount, eventAddress, onPurchaseS
                 price={tierPriceInReais}
             />
 
-            {/* Modal de Pagamento PIX */}
             <PaymentModal
                 isOpen={isPaymentModalOpen}
                 onClose={() => {
                     setPaymentModalOpen(false);
-                    toast.info('Compra cancelada. Você pode tentar novamente quando quiser.');
+                    toast('Compra cancelada. Você pode tentar novamente quando quiser.');
                 }}
                 onPaymentSuccess={handlePaymentSuccess}
-                onCryptoPayment={handleCryptoPayment}
                 tierPrice={parseFloat(tierPriceInReais)}
                 eventName={metadata.name}
                 tierName={selectedTier?.name || 'Ingresso'}
+                // Passando dados do formulário para o modal de pagamento
+                formData={pendingFormData}
+                eventAddress={eventAddress}
+                tierIndex={selectedTierIndex}
             />
 
-            {/* Modal de Sucesso */}
             <TicketSuccessModal
                 isOpen={isSuccessModalOpen}
                 onClose={() => setSuccessModalOpen(false)}

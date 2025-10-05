@@ -16,10 +16,10 @@ export const ParticipantTable = ({ participants, isLoading }) => {
                 <table className="w-full text-sm text-left text-slate-500">
                     <thead className="text-xs text-slate-700 uppercase bg-slate-100">
                         <tr>
-                            <th scope="col" className="p-3">Nome</th>
+                            <th scope="col" className="p-3">Participante</th>
                             <th scope="col" className="p-3">Email</th>
                             <th scope="col" className="p-3 hidden md:table-cell">Telefone</th>
-                            <th scope="col" className="p-3 hidden lg:table-cell">Carteira</th>
+                            <th scope="col" className="p-3 hidden lg:table-cell">Comprador</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -35,7 +35,7 @@ export const ParticipantTable = ({ participants, isLoading }) => {
             <div className="text-center py-10 px-4 bg-slate-50 rounded-lg">
                 <UserIcon className="mx-auto h-12 w-12 text-slate-400" />
                 <h3 className="mt-2 text-sm font-semibold text-slate-900">Nenhum Participante Encontrado</h3>
-                <p className="mt-1 text-sm text-slate-500">Ainda não há ingressos vendidos ou registrados para este evento.</p>
+                <p className="mt-1 text-sm text-slate-500">Ainda não há ingressos vendidos para este evento.</p>
             </div>
         );
     }
@@ -45,20 +45,26 @@ export const ParticipantTable = ({ participants, isLoading }) => {
             <table className="w-full text-sm text-left text-slate-500">
                 <thead className="text-xs text-slate-700 uppercase bg-slate-100">
                     <tr>
-                        <th scope="col" className="p-3">Nome</th>
+                        <th scope="col" className="p-3">Participante</th>
                         <th scope="col" className="p-3">Email</th>
                         <th scope="col" className="p-3 hidden md:table-cell">Telefone</th>
-                        <th scope="col" className="p-3 hidden lg:table-cell">Carteira</th>
+                        <th scope="col" className="p-3 hidden lg:table-cell">Comprador (Carteira)</th>
                     </tr>
                 </thead>
                 <tbody>
                     {participants.map((p) => (
-                        <tr key={p.wallet_address} className="bg-white border-b hover:bg-slate-50">
-                            <td className="p-3 font-medium text-slate-900">{p.name}</td>
-                            <td className="p-3">{p.email}</td>
-                            <td className="p-3 hidden md:table-cell">{p.phone}</td>
-                            <td className="p-3 font-mono text-xs hidden lg:table-cell" title={p.wallet_address}>
-                                {p.wallet_address.slice(0, 6)}...{p.wallet_address.slice(-6)}
+                        <tr key={p.id} className="bg-white border-b hover:bg-slate-50">
+                            <td className="p-3 font-medium text-slate-900">{p.participantDetails?.name || 'N/A'}</td>
+                            <td className="p-3">{p.participantDetails?.email || 'N/A'}</td>
+                            <td className="p-3 hidden md:table-cell">{p.participantDetails?.phone || 'N/A'}</td>
+                            <td className="p-3 hidden lg:table-cell">
+                                <span className="font-medium text-slate-700">{p.buyerProfile?.name || 'Desconhecido'}</span>
+                                <span 
+                                    className="block font-mono text-xs text-slate-500" 
+                                    title={p.buyerProfile?.wallet_address}
+                                >
+                                    {p.buyerProfile?.wallet_address.slice(0, 6)}...{p.buyerProfile?.wallet_address.slice(-6)}
+                                </span>
                             </td>
                         </tr>
                     ))}
