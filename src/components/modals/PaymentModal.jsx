@@ -217,7 +217,8 @@ export const PaymentModal = ({
                 </div>
 
                 <div className="p-6">
-                {paymentStatus === 'pending' && (
+               // ✅ CORREÇÃO NO COMPONENTE REACT
+{paymentStatus === 'pending' && (
     <div className="text-center mb-6">
         {isLoading ? (
             <div className="flex justify-center items-center h-48">
@@ -225,7 +226,7 @@ export const PaymentModal = ({
             </div>
         ) : qrCodeData ? (
             <>
-                {/* ✅ CORREÇÃO: Mostrar QR Code se disponível, senão mostrar botão para URL */}
+                {/* ✅ PRIORIDADE: QR Code Base64 */}
                 {qrCodeData.qrCodeBase64 ? (
                     <>
                         <div className="bg-white p-4 rounded-xl border-2 border-slate-200 inline-block shadow-lg mb-4">
@@ -236,7 +237,7 @@ export const PaymentModal = ({
                             />
                         </div>
                         <p className="text-gray-600 text-sm mb-4 font-medium">
-                            1. Escaneie o QR Code com seu app bancário
+                            Escaneie o QR Code com seu app bancário
                         </p>
                         
                         {qrCodeData.qrCode && (
@@ -245,16 +246,30 @@ export const PaymentModal = ({
                                 className="w-full flex items-center justify-center px-4 py-3 bg-indigo-600 text-white font-semibold rounded-xl hover:bg-indigo-500 transition-colors shadow-md mb-3"
                             >
                                 <DocumentDuplicateIcon className="w-5 h-5 mr-2" />
-                                {copied ? 'Código Copiado!' : '2. Copiar Código PIX'}
+                                {copied ? 'Código Copiado!' : 'Copiar Código PIX'}
                             </button>
                         )}
                     </>
+                ) : qrCodeData.qrCodeImageUrl ? (
+                    // ✅ FALLBACK 2: QR Code de imagem externa
+                    <>
+                        <div className="bg-white p-4 rounded-xl border-2 border-slate-200 inline-block shadow-lg mb-4">
+                            <img 
+                                src={qrCodeData.qrCodeImageUrl} 
+                                alt="QR Code PIX" 
+                                className="w-48 h-48" 
+                            />
+                        </div>
+                        <p className="text-gray-600 text-sm mb-4 font-medium">
+                            Escaneie o QR Code com seu app bancário
+                        </p>
+                    </>
                 ) : qrCodeData.ticketUrl ? (
-                    // ✅ FALLBACK: Botão para página de pagamento
+                    // ✅ FALLBACK 3: Botão para página de pagamento
                     <div className="space-y-4">
                         <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 mb-4">
                             <p className="text-yellow-800 text-sm">
-                                ⚠️ QR Code não disponível. Clique abaixo para ir para a página de pagamento.
+                                ⚠️ QR Code direto não disponível. Clique abaixo para ir para a página de pagamento PIX.
                             </p>
                         </div>
                         <a 
@@ -263,30 +278,23 @@ export const PaymentModal = ({
                             rel="noopener noreferrer"
                             className="w-full flex items-center justify-center px-4 py-3 bg-green-600 text-white font-semibold rounded-xl hover:bg-green-500 transition-colors shadow-md"
                         >
-                            🔗 Abrir Página de Pagamento
+                            🔗 Abrir Página de Pagamento PIX
                         </a>
                         <p className="text-gray-500 text-xs">
-                            Você será redirecionado para o Mercado Pago para concluir o pagamento PIX
+                            Você será redirecionado para o Mercado Pago para concluir o pagamento via PIX
                         </p>
                     </div>
                 ) : (
-                    <div className="bg-gray-100 p-8 rounded-xl border-2 border-slate-200 inline-block shadow-lg mb-4">
-                        <p className="text-gray-500 text-sm">QR Code não disponível</p>
-                    </div>
-                )}
-                
-                {/* Mostrar código PIX se disponível */}
-                {qrCodeData.qrCode && (
-                    <div className="text-xs text-gray-500 bg-slate-100 p-3 rounded-lg break-all">
-                        <span className="font-mono">
-                            {qrCodeData.qrCode.substring(0, 60)}...
-                        </span>
+                    <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+                        <p className="text-red-800 text-sm">
+                            ❌ Não foi possível gerar o QR Code. Tente novamente.
+                        </p>
                     </div>
                 )}
             </>
         ) : (
             <div className="text-center text-gray-500 h-48 flex items-center justify-center">
-                Falha ao carregar QR Code
+                Falha ao carregar dados de pagamento
             </div>
         )}
     </div>
@@ -382,4 +390,5 @@ export const PaymentModal = ({
     );
 
     return createPortal(modalContent, document.body);
+
 };
