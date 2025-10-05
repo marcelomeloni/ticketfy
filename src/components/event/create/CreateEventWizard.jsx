@@ -1,6 +1,9 @@
 // src/components/event/create/CreateEventWizard.jsx
 import { useState } from 'react';
 import toast from 'react-hot-toast';
+import { useConnection } from '@solana/wallet-adapter-react';
+import { PublicKey, SystemProgram, Transaction } from '@solana/web3.js';
+import * as anchor from '@coral-xyz/anchor';
 
 import { Step1_MetadataForm } from './Step1_MetadataForm';
 import { Step2_OnChainForm } from './Step2_OnChainForm';
@@ -10,6 +13,7 @@ import { API_URL } from '@/lib/constants';
 import { useAppWallet } from '@/hooks/useAppWallet';
 
 export function CreateEventWizard({ program, onEventCreated }) {
+    const { connection } = useConnection();
     const wallet = useAppWallet();
     const [loading, setLoading] = useState(false);
     const [step, setStep] = useState(1);
@@ -129,14 +133,109 @@ export function CreateEventWizard({ program, onEventCreated }) {
         toast.success("Dados prontos para envio!");
     };
 
-    const getWalletTypeDisplayName = () => {
-        switch (wallet.walletType) {
-            case 'adapter': return 'Carteira Externa (Phantom/Solflare)';
-            case 'local': return 'Login Local';
-            case 'seedphrase': return 'Seed Phrase';
-            case 'privateKey': return 'Private Key';
-            default: return 'Não identificado';
+    // ✅ NOVA FUNÇÃO: Criar evento com assinatura da extensão
+    const createEventWithWalletSignature = async () => {
+        if (!wallet.publicKey || !wallet.signTransaction) {
+            throw new Error("Carteira não conectada ou não suporta assinatura");
         }
+
+        console.log('🦊 Criando evento com assinatura da extensão...');
+
+        const finalFormData = new FormData();
+        
+        // Upload de arquivos
+        const isImageValid = offChainData.image && (offChainData.image instanceof File || offChainData.image instanceof Blob);
+        if (isImageValid) {
+            finalFormData.append('image', offChainData.image);
+        } else {
+            throw new Error("A imagem principal do evento é obrigatória.");
+        }
+        
+        if (offChainData.organizer.organizerLogo && (offChainData.organizer.organizerLogo instanceof File || offChainData.organizer.organizerLogo instanceof Blob)) {
+            finalFormData.append('organizerLogo', offChainData.organizer.organizerLogo);
+        }
+
+        // Preparar dados para JSON
+        const offChainDataForJson = JSON.parse(JSON.stringify(offChainData));
+        if (isImageValid) offChainDataForJson.image = '[FILE_UPLOADED]';
+        if (offChainData.organizer.organizerLogo) offChainDataForJson.organizer.organizerLogo = '[FILE_UPLOADED]';
+
+        // Adicionar dados ao FormData
+        finalFormData.append('offChainData', JSON.stringify(offChainDataForJson));
+        finalFormData.append('onChainData', JSON.stringify(onChainData));
+        finalFormData.append('controller', wallet.publicKey.toString());
+        finalFormData.append('walletType', 'adapter');
+
+        // ✅ PARA EXTENSÃO: Não enviar userLoginData, apenas indicar que é adapter
+        finalFormData.append('userLoginData', JSON.stringify({
+            loginType: 'adapter',
+            publicKey: wallet.publicKey.toString(),
+            walletType: 'adapter'
+        }));
+
+        const response = await fetch(`${API_URL}/api/events/create-full-event`, {
+            method: 'POST',
+            body: finalFormData,
+        });
+
+        const result = await response.json();
+        
+        if (!response.ok || !result.success) {
+            throw new Error(result.error || "Falha ao criar o evento no servidor.");
+        }
+
+        return result;
+    };
+
+    // ✅ NOVA FUNÇÃO: Criar evento com backend signing (para login local)
+    const createEventWithBackendSigning = async () => {
+        console.log('🔐 Criando evento com assinatura do backend...');
+
+        const savedCredentials = localStorage.getItem('solana-local-wallet-credentials');
+        if (!savedCredentials) {
+            throw new Error("Credenciais de login não encontradas. Faça login novamente.");
+        }
+
+        const finalFormData = new FormData();
+        
+        // Upload de arquivos
+        const isImageValid = offChainData.image && (offChainData.image instanceof File || offChainData.image instanceof Blob);
+        if (isImageValid) {
+            finalFormData.append('image', offChainData.image);
+        } else {
+            throw new Error("A imagem principal do evento é obrigatória.");
+        }
+        
+        if (offChainData.organizer.organizerLogo && (offChainData.organizer.organizerLogo instanceof File || offChainData.organizer.organizerLogo instanceof Blob)) {
+            finalFormData.append('organizerLogo', offChainData.organizer.organizerLogo);
+        }
+
+        // Preparar dados para JSON
+        const offChainDataForJson = JSON.parse(JSON.stringify(offChainData));
+        if (isImageValid) offChainDataForJson.image = '[FILE_UPLOADED]';
+        if (offChainData.organizer.organizerLogo) offChainDataForJson.organizer.organizerLogo = '[FILE_UPLOADED]';
+
+        // Adicionar dados ao FormData
+        finalFormData.append('offChainData', JSON.stringify(offChainDataForJson));
+        finalFormData.append('onChainData', JSON.stringify(onChainData));
+        finalFormData.append('controller', wallet.publicKey.toString());
+        finalFormData.append('walletType', wallet.walletType);
+        
+        // ✅ ENVIAR CREDENCIAIS PARA O BACKEND DERIVAR A KEYPAIR
+        finalFormData.append('userLoginData', savedCredentials);
+
+        const response = await fetch(`${API_URL}/api/events/create-full-event`, {
+            method: 'POST',
+            body: finalFormData,
+        });
+
+        const result = await response.json();
+        
+        if (!response.ok || !result.success) {
+            throw new Error(result.error || "Falha ao criar o evento no servidor.");
+        }
+
+        return result;
     };
 
     const handleSubmit = async (event) => {
@@ -150,87 +249,24 @@ export function CreateEventWizard({ program, onEventCreated }) {
         console.log('--- Iniciando submit ---');
         console.log('Public Key:', wallet.publicKey.toString());
         console.log('Tipo de carteira:', wallet.walletType);
-        console.log('Método de login:', getWalletTypeDisplayName());
     
         const loadingToast = toast.loading("Iniciando criação do evento...");
         setLoading(true);
     
         try {
-            // Preparar dados de login baseado no tipo de wallet
-            let userLoginData = null;
-            
-            if (wallet.walletType === 'local') {
-                // Para login local (username/senha), enviar credenciais do localStorage
-                const savedCredentials = localStorage.getItem('solana-local-wallet-credentials');
-                if (!savedCredentials) {
-                    throw new Error("Credenciais de login não encontradas. Faça login novamente.");
-                }
-                userLoginData = savedCredentials;
-            } else if (wallet.walletType === 'adapter') {
-                // Para carteiras externas, enviar apenas informações básicas
-                userLoginData = JSON.stringify({ 
-                    loginType: 'adapter',
-                    publicKey: wallet.publicKey.toString(),
-                    walletType: 'adapter'
-                });
-            } else if (wallet.walletType === 'seedphrase' || wallet.walletType === 'privateKey') {
-                // Para seedphrase e private key, enviar as credenciais salvas
-                const savedCredentials = localStorage.getItem('solana-local-wallet-credentials');
-                if (savedCredentials) {
-                    userLoginData = savedCredentials;
-                } else {
-                    userLoginData = JSON.stringify({ 
-                        loginType: wallet.walletType,
-                        publicKey: wallet.publicKey.toString(),
-                        walletType: wallet.walletType
-                    });
-                }
-            }
-    
-            const finalFormData = new FormData();
-            
-            // Upload de arquivos
-            const isImageValid = offChainData.image && (offChainData.image instanceof File || offChainData.image instanceof Blob);
-            if (isImageValid) {
-                finalFormData.append('image', offChainData.image);
+            let result;
+
+            // ✅ DECISÃO: Se for adapter, usa um fluxo; se for local, usa outro
+            if (wallet.walletType === 'adapter') {
+                console.log('🎯 Usando fluxo para carteira externa...');
+                toast.loading("Assinando com sua carteira...", { id: loadingToast });
+                result = await createEventWithWalletSignature();
             } else {
-                console.error('Imagem inválida no momento do submit:', offChainData.image);
-                throw new Error("A imagem principal do evento é inválida. Por favor, selecione-a novamente.");
+                console.log('🎯 Usando fluxo para login local...');
+                toast.loading("Processando no servidor...", { id: loadingToast });
+                result = await createEventWithBackendSigning();
             }
-            
-            if (offChainData.organizer.organizerLogo && (offChainData.organizer.organizerLogo instanceof File || offChainData.organizer.organizerLogo instanceof Blob)) {
-                finalFormData.append('organizerLogo', offChainData.organizer.organizerLogo);
-            }
-    
-            // Preparar dados para JSON
-            const offChainDataForJson = JSON.parse(JSON.stringify(offChainData));
-            if (isImageValid) offChainDataForJson.image = '[FILE_UPLOADED]';
-            if (offChainData.organizer.organizerLogo) offChainDataForJson.organizer.organizerLogo = '[FILE_UPLOADED]';
-    
-            // Adicionar dados ao FormData
-            finalFormData.append('offChainData', JSON.stringify(offChainDataForJson));
-            finalFormData.append('onChainData', JSON.stringify(onChainData));
-            finalFormData.append('controller', wallet.publicKey.toString());
-            finalFormData.append('walletType', wallet.walletType);
-            
-            // ✅ ENVIAR DADOS DE LOGIN APROPRIADOS PARA O BACKEND
-            if (userLoginData) {
-                finalFormData.append('userLoginData', userLoginData);
-            }
-    
-            toast.loading("Enviando para o servidor e blockchain...", { id: loadingToast });
-            
-            const response = await fetch(`${API_URL}/api/events/create-full-event`, {
-                method: 'POST',
-                body: finalFormData,
-            });
-    
-            const result = await response.json();
-            
-            if (!response.ok || !result.success) {
-                throw new Error(result.error || "Falha ao criar o evento no servidor.");
-            }
-    
+
             toast.success("Evento criado com sucesso!", { 
                 id: loadingToast, 
                 duration: 5000 
@@ -238,7 +274,7 @@ export function CreateEventWizard({ program, onEventCreated }) {
             
             console.log('✅ Evento criado! Authority:', result.authority);
             console.log('✅ Endereço do evento:', result.eventAddress);
-            console.log('✅ Transação:', result.txSignature);
+            console.log('✅ Transação:', result.signature);
             
             if (onEventCreated) onEventCreated();
     
@@ -295,6 +331,11 @@ export function CreateEventWizard({ program, onEventCreated }) {
                     <div className="mt-3 pt-3 border-t border-slate-200">
                         <p className="text-xs text-slate-500 break-all">
                             <strong>Public Key:</strong> {wallet.publicKey.toString()}
+                        </p>
+                        <p className="text-xs text-slate-500 mt-1">
+                            <strong>Fluxo:</strong> {wallet.walletType === 'adapter' 
+                                ? 'Assinatura pela extensão' 
+                                : 'Assinatura pelo servidor'}
                         </p>
                     </div>
                 )}
