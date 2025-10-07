@@ -110,6 +110,7 @@ const OrganizerSection = ({ organizer }) => (
 );
 
 // 🗺️ Seção de Localização Premium
+// 🗺️ Seção de Localização Premium - MODIFICADA
 const LocationSection = ({ location }) => {
     if (location?.type !== 'Physical' || !location?.address) {
         return location?.onlineUrl ? (
@@ -133,14 +134,21 @@ const LocationSection = ({ location }) => {
     }
 
     const { address, coordinates, venueName } = location;
-    const position = [parseFloat(coordinates.latitude), parseFloat(coordinates.longitude)];
+    const hasCoordinates = coordinates && 
+                          coordinates.latitude && 
+                          coordinates.longitude &&
+                          !isNaN(parseFloat(coordinates.latitude)) && 
+                          !isNaN(parseFloat(coordinates.longitude));
+
     const addressLine1 = `${address.street}${address.number ? `, ${address.number}` : ''}`;
     const addressLine2 = `${address.neighborhood ? `${address.neighborhood}, ` : ''}${address.city} - ${address.state}`;
-    const googleMapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${coordinates.latitude},${coordinates.longitude}`;
+    const googleMapsUrl = hasCoordinates 
+        ? `https://www.google.com/maps/dir/?api=1&destination=${coordinates.latitude},${coordinates.longitude}`
+        : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addressLine1 + ' ' + addressLine2)}`;
 
     return (
         <Section title="Localização" icon={MapPinIcon}>
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-8 items-start">
+            <div className={hasCoordinates ? "grid grid-cols-1 xl:grid-cols-2 gap-8 items-start" : "space-y-6"}>
                 {/* Informações do Local */}
                 <div className="space-y-6">
                     <div>
@@ -153,15 +161,21 @@ const LocationSection = ({ location }) => {
                                     <p className="font-semibold text-slate-800">Endereço</p>
                                     <p className="text-slate-600">{addressLine1}</p>
                                     <p className="text-slate-600">{addressLine2}</p>
+                                    {address.zipCode && (
+                                        <p className="text-slate-500 text-sm mt-1">CEP: {address.zipCode}</p>
+                                    )}
                                 </div>
                             </div>
                             
-                            {address.zipCode && (
-                                <div className="flex items-start gap-4 p-4 bg-slate-50 rounded-2xl">
-                                    <EnvelopeIcon className="h-6 w-6 text-blue-500 mt-1 flex-shrink-0" />
+                            {/* Aviso sobre falta de coordenadas */}
+                            {!hasCoordinates && (
+                                <div className="flex items-start gap-4 p-4 bg-amber-50 rounded-2xl border border-amber-200">
+                                    <ExclamationTriangleIcon className="h-6 w-6 text-amber-500 mt-1 flex-shrink-0" />
                                     <div>
-                                        <p className="font-semibold text-slate-800">CEP</p>
-                                        <p className="text-slate-600">{address.zipCode}</p>
+                                        <p className="font-semibold text-amber-800">Localização aproximada</p>
+                                        <p className="text-amber-600 text-sm">
+                                            O mapa não está disponível, mas você pode ver a localização no Google Maps.
+                                        </p>
                                     </div>
                                 </div>
                             )}
@@ -175,32 +189,34 @@ const LocationSection = ({ location }) => {
                         className="inline-flex items-center justify-center gap-3 w-full px-6 py-4 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-2xl font-bold shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105"
                     >
                         <MapIcon className="h-5 w-5" />
-                        Ver no Mapa e Traçar Rota
+                        {hasCoordinates ? 'Ver no Mapa e Traçar Rota' : 'Ver Localização no Google Maps'}
                     </a>
                 </div>
 
-                {/* Mapa */}
-                <div className="relative leaflet-map-container h-96 rounded-2xl overflow-hidden shadow-lg border border-slate-200">
-                    <MapContainer 
-                        center={position} 
-                        zoom={16} 
-                        scrollWheelZoom={false} 
-                        style={{ height: '100%', width: '100%' }}
-                        className="rounded-2xl"
-                    >
-                        <TileLayer
-                            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                        />
-                        <Marker position={position}>
-                            <Popup className="custom-popup">
-                                <div className="font-semibold text-slate-900">{venueName}</div>
-                                <div className="text-slate-600">{addressLine1}</div>
-                                <div className="text-slate-600">{addressLine2}</div>
-                            </Popup>
-                        </Marker>
-                    </MapContainer>
-                </div>
+                {/* Mapa - APENAS SE HOUVER COORDENADAS */}
+                {hasCoordinates && (
+                    <div className="relative leaflet-map-container h-96 rounded-2xl overflow-hidden shadow-lg border border-slate-200">
+                        <MapContainer 
+                            center={[parseFloat(coordinates.latitude), parseFloat(coordinates.longitude)]} 
+                            zoom={16} 
+                            scrollWheelZoom={false} 
+                            style={{ height: '100%', width: '100%' }}
+                            className="rounded-2xl"
+                        >
+                            <TileLayer
+                                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                            />
+                            <Marker position={[parseFloat(coordinates.latitude), parseFloat(coordinates.longitude)]}>
+                                <Popup className="custom-popup">
+                                    <div className="font-semibold text-slate-900">{venueName}</div>
+                                    <div className="text-slate-600">{addressLine1}</div>
+                                    <div className="text-slate-600">{addressLine2}</div>
+                                </Popup>
+                            </Marker>
+                        </MapContainer>
+                    </div>
+                )}
             </div>
         </Section>
     );
@@ -279,3 +295,4 @@ export const EventSections = ({ metadata }) => {
 export const EventDetailsSidebar = ({ metadata }) => {
     return <DetailsSection metadata={metadata} />;
 }
+
