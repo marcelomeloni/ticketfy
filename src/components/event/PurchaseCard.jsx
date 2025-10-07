@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { useConnection } from '@solana/wallet-adapter-react';
 import toast from 'react-hot-toast';
-import { Link } from 'react-router-dom';
 
 import { useAppWallet } from '@/hooks/useAppWallet';
 import { TierOption } from '@/components/event/TierOption';
@@ -25,25 +24,17 @@ export const PurchaseCard = ({ metadata, eventAccount, eventAddress, onPurchaseS
 
     const selectedTier = selectedTierIndex !== null ? eventAccount.tiers[selectedTierIndex] : null;
     
-    // ✅ CORREÇÃO: Converter valores BN/hexadecimal para números
     const getTierValue = (value) => {
         if (!value) return 0;
-        
-        // Se for objeto Anchor BN
         if (typeof value === 'object' && value.toNumber) {
             return value.toNumber();
         }
-        
-        // Se for string hexadecimal
         if (typeof value === 'string' && value.startsWith('0x')) {
             return parseInt(value, 16);
         }
-        
-        // Se já for número
         return Number(value) || 0;
     };
 
-    // ✅ CORREÇÃO: Calcular totais corretamente
     const totalTicketsSold = eventAccount.tiers.reduce((total, tier) => {
         return total + getTierValue(tier.ticketsSold);
     }, 0);
@@ -96,8 +87,6 @@ export const PurchaseCard = ({ metadata, eventAccount, eventAddress, onPurchaseS
 
         try {
             let response;
-            let data;
-            
             const priceBRLCents = isPaid ? priceInCents : 0;
 
             if (wallet.connected && wallet.publicKey) {
@@ -127,7 +116,7 @@ export const PurchaseCard = ({ metadata, eventAccount, eventAddress, onPurchaseS
                 });
             }
 
-            data = await response.json();
+            const data = await response.json();
 
             if (!response.ok || !data.success) {
                 throw new Error(data.details || 'Falha ao processar a solicitação.');
@@ -139,7 +128,7 @@ export const PurchaseCard = ({ metadata, eventAccount, eventAddress, onPurchaseS
                 privateKey: data.privateKey,
                 eventName: metadata.name,
                 eventDate: metadata.properties.dateTime.start,
-                eventLocation: metadata.properties.location,
+                eventLocation: metadata.properties.location.venueName || 'Online',
                 eventImage: metadata.image,
                 isNewUser: !wallet.connected,
                 registrationId: data.registrationId,
@@ -157,10 +146,9 @@ export const PurchaseCard = ({ metadata, eventAccount, eventAddress, onPurchaseS
         }
     };
 
-    // ✅ CORREÇÃO: Usar totalTicketsSold calculado corretamente
+    // Indica se esgotou o total geral
     const isSoldOut = totalTicketsSold >= maxTotalSupply;
-    
-    // ✅ CORREÇÃO: Verificar disponibilidade do tier selecionado
+    // Disponibilidade do tier selecionado
     const hasAvailableTickets = selectedTier ? 
         getTierValue(selectedTier.ticketsSold) < getTierValue(selectedTier.maxTicketsSupply) : true;
 
@@ -170,7 +158,6 @@ export const PurchaseCard = ({ metadata, eventAccount, eventAddress, onPurchaseS
                 <div className="flex items-center justify-between mb-2">
                     <h2 className="text-2xl font-bold text-slate-900">Ingressos</h2>
                     <span className="text-sm text-slate-600 bg-slate-100 px-3 py-1 rounded-full">
-                        {/* ✅ CORREÇÃO: Mostrar total calculado corretamente */}
                         {totalTicketsSold} / {maxTotalSupply} vendidos
                     </span>
                 </div>
