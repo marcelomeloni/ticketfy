@@ -3,16 +3,17 @@ import { TicketIcon, XCircleIcon } from '@heroicons/react/24/solid';
 export const TierOption = ({ tier, isSelected, isSoldOut, onSelect }) => {
     
     // Função auxiliar para converter valores que podem vir como BN, hex ou número
-    const getTierValue = (value) => {
-        if (!value) return 0;
-        if (typeof value === 'object' && value.toNumber) {
-            return value.toNumber();
-        }
-        if (typeof value === 'string' && value.startsWith('0x')) {
-            return parseInt(value, 16);
-        }
-        return Number(value) || 0;
-    };
+const getTierValue = (value) => {
+  if (!value) return 0;
+  if (typeof value === 'object' && value.toNumber) {
+    return value.toNumber();
+  }
+  if (typeof value === 'string' && value.startsWith('0x')) {
+    return parseInt(value, 16);
+  }
+  // Se valor for string numérica, converter para número
+  return Number(value) || 0;
+};
 
     const priceInCents = getTierValue(tier.priceBrlCents);
     const ticketsSold = getTierValue(tier.ticketsSold);
@@ -87,3 +88,4 @@ export const TierOption = ({ tier, isSelected, isSoldOut, onSelect }) => {
         </div>
     );
 };
+
