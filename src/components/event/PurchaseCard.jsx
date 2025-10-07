@@ -9,7 +9,6 @@ import { ActionButton } from '@/components/ui/ActionButton';
 import { RegistrationModal } from '@/components/modals/RegistrationModal';
 import { PaymentModal } from '@/components/modals/PaymentModal';
 import { TicketSuccessModal } from '@/components/modals/TicketSuccessModal';
-import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
 import { API_URL } from '@/lib/constants';
 
 export const PurchaseCard = ({ metadata, eventAccount, eventAddress, onPurchaseSuccess }) => {
@@ -26,18 +25,36 @@ export const PurchaseCard = ({ metadata, eventAccount, eventAddress, onPurchaseS
 
     const selectedTier = selectedTierIndex !== null ? eventAccount.tiers[selectedTierIndex] : null;
     
-    // O Anchor serializa BN como string hexadecimal. Convertemos para decimal.
-    const hexPriceString = selectedTier?.priceBrlCents || '0';
-    const priceInCents = parseInt(hexPriceString, 16) || 0;
-    
-    // O ingresso é pago se o preço decimal for maior que zero.
+    // ✅ CORREÇÃO: Converter valores BN/hexadecimal para números
+    const getTierValue = (value) => {
+        if (!value) return 0;
+        
+        // Se for objeto Anchor BN
+        if (typeof value === 'object' && value.toNumber) {
+            return value.toNumber();
+        }
+        
+        // Se for string hexadecimal
+        if (typeof value === 'string' && value.startsWith('0x')) {
+            return parseInt(value, 16);
+        }
+        
+        // Se já for número
+        return Number(value) || 0;
+    };
+
+    // ✅ CORREÇÃO: Calcular totais corretamente
+    const totalTicketsSold = eventAccount.tiers.reduce((total, tier) => {
+        return total + getTierValue(tier.ticketsSold);
+    }, 0);
+
+    const maxTotalSupply = eventAccount.tiers.reduce((total, tier) => {
+        return total + getTierValue(tier.maxTicketsSupply);
+    }, 0);
+
+    const priceInCents = selectedTier ? getTierValue(selectedTier.priceBrlCents) : 0;
     const isPaidTier = priceInCents > 0;
-    
-    // Calcula o preço em Reais (BRL)
     const tierPriceInReais = (priceInCents / 100).toFixed(2);
-    
-    // Calcula o fornecimento total somando todos os tiers
-    const maxTotalSupply = eventAccount.tiers.reduce((total, tier) => total + Number(tier.maxTicketsSupply), 0);
 
     const handleSelectTier = (index) => {
         setSelectedTierIndex(index);
@@ -49,13 +66,11 @@ export const PurchaseCard = ({ metadata, eventAccount, eventAddress, onPurchaseS
             return;
         }
 
-        // Se o preço for zero, mas o organizador espera que seja pago, é um erro de configuração
         if (isPaidTier && priceInCents === 0) {
             toast.error("Erro: Preço inválido (R$ 0,00). Verifique a configuração do evento.");
             return;
         }
         
-        // Abre o modal de registro para todos os usuários, independentemente do tipo de carteira.
         setRegistrationModalOpen(true);
     };
 
@@ -64,17 +79,14 @@ export const PurchaseCard = ({ metadata, eventAccount, eventAddress, onPurchaseS
         setRegistrationModalOpen(false);
 
         if (isPaidTier) {
-            // Para ingressos pagos, abre o modal de pagamento PIX.
             setPaymentModalOpen(true);
         } else {
-            // Para ingressos gratuitos, processa diretamente.
             await processTicketPurchase(formData);
         }
     };
 
     const handlePaymentSuccess = async () => {
         setPaymentModalOpen(false);
-        // Após o sucesso do PIX, processa a compra com os dados do formulário salvos.
         await processTicketPurchase(pendingFormData, true);
     };
 
@@ -88,8 +100,6 @@ export const PurchaseCard = ({ metadata, eventAccount, eventAddress, onPurchaseS
             
             const priceBRLCents = isPaid ? priceInCents : 0;
 
-            // CASO 1: Usuário está conectado com carteira (local OU externa).
-            // A API vai lidar com a lógica de "usuário existente" para ambos os casos.
             if (wallet.connected && wallet.publicKey) {
                 response = await fetch(`${API_URL}/api/tickets/mint-for-existing-user`, {
                     method: 'POST',
@@ -102,9 +112,7 @@ export const PurchaseCard = ({ metadata, eventAccount, eventAddress, onPurchaseS
                         ...formData,
                     }),
                 });
-            } 
-            // CASO 2: Usuário NÃO está conectado (comprando como convidado/novo usuário).
-            else {
+            } else {
                 const endpoint = isPaid ? '/api/tickets/generate-wallet-and-mint-paid' : '/api/tickets/generate-wallet-and-mint';
                 response = await fetch(`${API_URL}${endpoint}`, {
                     method: 'POST',
@@ -125,7 +133,6 @@ export const PurchaseCard = ({ metadata, eventAccount, eventAddress, onPurchaseS
                 throw new Error(data.details || 'Falha ao processar a solicitação.');
             }
 
-            // Prepara dados para o modal de sucesso
             setTicketData({
                 mintAddress: data.mintAddress,
                 seedPhrase: data.seedPhrase,
@@ -134,7 +141,7 @@ export const PurchaseCard = ({ metadata, eventAccount, eventAddress, onPurchaseS
                 eventDate: metadata.properties.dateTime.start,
                 eventLocation: metadata.properties.location,
                 eventImage: metadata.image,
-                isNewUser: !wallet.connected, // Se não estava conectado, é um novo usuário
+                isNewUser: !wallet.connected,
                 registrationId: data.registrationId,
             });
 
@@ -150,9 +157,12 @@ export const PurchaseCard = ({ metadata, eventAccount, eventAddress, onPurchaseS
         }
     };
 
-    const isSoldOut = eventAccount.totalTicketsSold >= maxTotalSupply;
+    // ✅ CORREÇÃO: Usar totalTicketsSold calculado corretamente
+    const isSoldOut = totalTicketsSold >= maxTotalSupply;
+    
+    // ✅ CORREÇÃO: Verificar disponibilidade do tier selecionado
     const hasAvailableTickets = selectedTier ? 
-        selectedTier.ticketsSold < selectedTier.maxTicketsSupply : true;
+        getTierValue(selectedTier.ticketsSold) < getTierValue(selectedTier.maxTicketsSupply) : true;
 
     return (
         <>
@@ -160,7 +170,8 @@ export const PurchaseCard = ({ metadata, eventAccount, eventAddress, onPurchaseS
                 <div className="flex items-center justify-between mb-2">
                     <h2 className="text-2xl font-bold text-slate-900">Ingressos</h2>
                     <span className="text-sm text-slate-600 bg-slate-100 px-3 py-1 rounded-full">
-                        {eventAccount.totalTicketsSold} / {maxTotalSupply} vendidos
+                        {/* ✅ CORREÇÃO: Mostrar total calculado corretamente */}
+                        {totalTicketsSold} / {maxTotalSupply} vendidos
                     </span>
                 </div>
                 
@@ -170,7 +181,7 @@ export const PurchaseCard = ({ metadata, eventAccount, eventAddress, onPurchaseS
                             key={index} 
                             tier={tier} 
                             isSelected={selectedTierIndex === index}
-                            isSoldOut={tier.ticketsSold >= tier.maxTicketsSupply}
+                            isSoldOut={getTierValue(tier.ticketsSold) >= getTierValue(tier.maxTicketsSupply)}
                             onSelect={() => handleSelectTier(index)}
                         />
                     ))}
@@ -188,7 +199,6 @@ export const PurchaseCard = ({ metadata, eventAccount, eventAddress, onPurchaseS
                             isPaidTier ? "Comprar Ingresso" : "Pegar Ingresso Grátis"}
                     </ActionButton>
 
-                    {/* LÓGICA DE AVISOS SIMPLIFICADA */}
                     {selectedTierIndex !== null && isPaidTier && (
                         <div className="mt-4 bg-blue-50 border border-blue-200 rounded-lg p-3">
                             <p className="text-blue-800 text-sm text-center">
@@ -242,7 +252,6 @@ export const PurchaseCard = ({ metadata, eventAccount, eventAddress, onPurchaseS
                 tierPrice={parseFloat(tierPriceInReais)}
                 eventName={metadata.name}
                 tierName={selectedTier?.name || 'Ingresso'}
-                // Passando dados do formulário para o modal de pagamento
                 formData={pendingFormData}
                 eventAddress={eventAddress}
                 tierIndex={selectedTierIndex}

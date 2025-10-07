@@ -14,40 +14,35 @@ import {
 } from '@heroicons/react/24/outline';
 
 export function Home() {
-    const [allEvents, setAllEvents] = useState([]);
-    const [visibleEvents, setVisibleEvents] = useState([]); // Eventos visíveis
-    const [pendingEvents, setPendingEvents] = useState([]); // Eventos pendentes de carregamento
-    const [isLoading, setIsLoading] = useState(true);
-    const [isLoadingMore, setIsLoadingMore] = useState(false);
+    const [nextEvents, setNextEvents] = useState([]);
     const [featuredEvent, setFeaturedEvent] = useState(null);
+    const [isLoading, setIsLoading] = useState(true);
+    const [hasEvents, setHasEvents] = useState(false);
 
     useEffect(() => {
         const fetchHomeData = async () => {
             setIsLoading(true);
             try {
-                // Busca eventos ativos
-                const eventsResponse = await fetch(`${API_URL}/api/events/active`);
+                console.log('🎯 Buscando 4 próximos eventos (API otimizada)...');
+                
+                // ✨ NOVA API SUPER RÁPIDA
+                const eventsResponse = await fetch(`${API_URL}/api/events/active/next-four`);
                 if (!eventsResponse.ok) throw new Error('Falha ao buscar eventos');
                 const eventsData = await eventsResponse.json();
                 
-                setAllEvents(eventsData);
+                console.log(`✅ ${eventsData.length} eventos carregados instantaneamente`);
                 
-                // ✨ CARREGAMENTO PROGRESSIVO PARA A HOME
-                // 1. Primeiro evento vai para o destaque
+                setNextEvents(eventsData);
+                setHasEvents(eventsData.length > 0);
+                
+                // Primeiro evento vai para o destaque (se houver)
                 if (eventsData.length > 0) {
                     setFeaturedEvent(eventsData[0]);
                 }
-                
-                // 2. Próximos 3 eventos carregam imediatamente
-                const immediateEvents = eventsData.slice(1, 4); // Pula o primeiro (destaque)
-                setVisibleEvents(immediateEvents);
-                
-                // 3. Restante fica pendente (se houver)
-                const remainingEvents = eventsData.slice(4);
-                setPendingEvents(remainingEvents);
 
             } catch (error) {
                 console.error("Erro ao buscar dados para a home:", error);
+                setHasEvents(false);
             } finally {
                 setIsLoading(false);
             }
@@ -56,43 +51,7 @@ export function Home() {
         fetchHomeData();
     }, []);
 
-    // ✨ Efeito para carregar eventos pendentes em background
-    useEffect(() => {
-        if (pendingEvents.length === 0) return;
-
-        const loadPendingEvents = async () => {
-            setIsLoadingMore(true);
-            
-            // Carregar em lotes menores para a home (2 eventos por vez)
-            const batchSize = 2;
-            const batch = pendingEvents.slice(0, batchSize);
-            const remaining = pendingEvents.slice(batchSize);
-            
-            // Pequeno delay para UX suave
-            await new Promise(resolve => setTimeout(resolve, 400));
-            
-            setVisibleEvents(prev => [...prev, ...batch]);
-            setPendingEvents(remaining);
-            setIsLoadingMore(false);
-        };
-
-        // Carregar automaticamente após um breve delay
-        const timer = setTimeout(loadPendingEvents, 1000);
-        return () => clearTimeout(timer);
-    }, [pendingEvents.length]);
-
-    // ✨ Função para carregar mais eventos manualmente
-    const loadMoreEvents = () => {
-        if (pendingEvents.length === 0 || isLoadingMore) return;
-        
-        setIsLoadingMore(true);
-        const nextBatch = pendingEvents.slice(0, 3);
-        setVisibleEvents(prev => [...prev, ...nextBatch]);
-        setPendingEvents(prev => prev.slice(3));
-        setIsLoadingMore(false);
-    };
-
-    // ✨ Seção de Recursos/Benefícios
+    // ✨ Recursos/Benefícios
     const features = [
         {
             icon: ShieldCheckIcon,
@@ -124,9 +83,10 @@ export function Home() {
         { number: "2s", label: "Tempo Médio de Compra" }
     ];
 
-    // Calcular eventos totais para exibição
-    const totalEventsCount = allEvents.length;
-    const loadedEventsCount = visibleEvents.length + (featuredEvent ? 1 : 0);
+    // Eventos para a grade (exclui o evento em destaque)
+    const gridEvents = featuredEvent 
+        ? nextEvents.filter(event => event.publicKey !== featuredEvent.publicKey)
+        : nextEvents;
 
     return (
         <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white">
@@ -146,7 +106,7 @@ export function Home() {
                         <div className="inline-flex items-center gap-2 bg-white/10 backdrop-blur-sm border border-white/20 rounded-full px-6 py-3 mb-8">
                             <SparklesIcon className="h-5 w-5 text-cyan-400" />
                             <span className="text-sm font-semibold text-white">
-                                Viva experiências inesqueciveis!
+                                Viva experiências inesquecíveis!
                             </span>
                         </div>
 
@@ -177,7 +137,6 @@ export function Home() {
                             </Link>
                         </div>
 
-                        
                     </div>
                 </div>
             </section>
@@ -215,7 +174,7 @@ export function Home() {
                                 <div className="p-8 lg:p-12 flex flex-col justify-center">
                                     <div className="flex items-center gap-4 mb-4">
                                         <span className="bg-slate-100 text-slate-700 px-3 py-1 rounded-full text-sm font-medium">
-                                            {featuredEvent.metadata?.category}
+                                            {featuredEvent.metadata?.category || 'Evento'}
                                         </span>
                                         <div className="flex items-center gap-1 text-slate-500">
                                             <UserGroupIcon className="h-4 w-4" />
@@ -237,7 +196,7 @@ export function Home() {
                                         <div className="flex items-center gap-3 text-slate-700">
                                             <CalendarDaysIcon className="h-5 w-5 text-cyan-500" />
                                             <span className="font-medium">
-                                                {new Date(featuredEvent.metadata?.properties.dateTime.start).toLocaleDateString('pt-BR', {
+                                                {new Date(featuredEvent.metadata?.properties?.dateTime?.start || featuredEvent.account.salesStartDate.toNumber() * 1000).toLocaleDateString('pt-BR', {
                                                     weekday: 'long',
                                                     day: 'numeric',
                                                     month: 'long',
@@ -248,7 +207,7 @@ export function Home() {
                                         <div className="flex items-center gap-3 text-slate-700">
                                             <MapPinIcon className="h-5 w-5 text-cyan-500" />
                                             <span className="font-medium">
-                                                {featuredEvent.metadata?.properties.location.venueName || 'Online'}
+                                                {featuredEvent.metadata?.properties?.location?.venueName || 'Online'}
                                             </span>
                                         </div>
                                     </div>
@@ -276,43 +235,25 @@ export function Home() {
                         <p className="text-xl text-slate-400 max-w-2xl mx-auto">
                             Descubra experiências incríveis que vão transformar sua rotina
                         </p>
-                        
-                      
                     </div>
 
                     {isLoading ? (
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-                            {Array.from({ length: 4 }).map((_, i) => (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                            {Array.from({ length: 3 }).map((_, i) => (
                                 <div key={i} className="bg-slate-800 rounded-3xl h-96 animate-pulse"></div>
                             ))}
                         </div>
                     ) : (
                         <>
-                            {/* Eventos visíveis */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-                                {visibleEvents.map(event => (
+                            {/* Grade de Eventos */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                                {gridEvents.map(event => (
                                     <EventCard key={event.publicKey} event={event} />
-                                ))}
-                                
-                                {/* ✨ Skeleton loading para eventos sendo carregados */}
-                                {isLoadingMore && Array.from({ length: 2 }).map((_, i) => (
-                                    <div key={`loading-${i}`} className="bg-slate-800 rounded-3xl h-96 animate-pulse"></div>
                                 ))}
                             </div>
 
-                            {/* ✨ Botão "Carregar mais" ou mensagem */}
-                            {pendingEvents.length > 0 && !isLoadingMore && (
-                                <div className="text-center mt-12">
-                                    <button
-                                        onClick={loadMoreEvents}
-                                        className="bg-cyan-600 text-white px-8 py-4 rounded-2xl hover:bg-cyan-700 transition-colors font-bold text-lg"
-                                    >
-                                        Carregar mais eventos ({pendingEvents.length} restantes)
-                                    </button>
-                                </div>
-                            )}
-
-                            {visibleEvents.length === 0 && !isLoading && (
+                            {/* Mensagem quando não há eventos */}
+                            {!hasEvents && (
                                 <div className="text-center text-slate-400 py-12">
                                     <p className="text-lg">Nenhum evento próximo encontrado.</p>
                                     <Link to="/create-event" className="text-cyan-400 hover:text-cyan-300 mt-4 inline-block">
@@ -321,8 +262,8 @@ export function Home() {
                                 </div>
                             )}
 
-                            {/* Link para ver todos os eventos */}
-                            {loadedEventsCount > 0 && (
+                            {/* Link para ver todos os eventos (só mostra se temos eventos) */}
+                            {hasEvents && (
                                 <div className="text-center mt-12">
                                     <Link 
                                         to="/events" 
@@ -338,7 +279,7 @@ export function Home() {
                 </div>
             </section>
 
-          
+           
         </div>
     );
 }

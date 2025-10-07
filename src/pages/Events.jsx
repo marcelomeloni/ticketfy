@@ -1,222 +1,442 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import { EventCard } from '@/components/event/EventCard';
-import { MagnifyingGlassIcon } from '@heroicons/react/24/outline';
 import { API_URL } from '@/lib/constants';
+import { 
+  MagnifyingGlassIcon,
+  FunnelIcon,
+  MapPinIcon,
+  CalendarDaysIcon,
+  TagIcon,
+  XMarkIcon,
+  AdjustmentsHorizontalIcon,
+  SparklesIcon,
+  FireIcon,
+  StarIcon,
+  ClockIcon,
+  UsersIcon
+} from '@heroicons/react/24/outline';
 
 export function Events() {
-    const [allEvents, setAllEvents] = useState([]);
-    const [visibleEvents, setVisibleEvents] = useState([]); // Eventos visíveis (carregados)
+    const [events, setEvents] = useState([]);
+    const [filteredEvents, setFilteredEvents] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
-    const [isLoadingMore, setIsLoadingMore] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
-    const [category, setCategory] = useState('all');
-    const [eventType, setEventType] = useState('all');
-    const [isFree, setIsFree] = useState('all');
+    const [selectedCategory, setSelectedCategory] = useState('all');
+    const [selectedDate, setSelectedDate] = useState('all');
+    const [selectedLocation, setSelectedLocation] = useState('all');
+    const [sortBy, setSortBy] = useState('date');
+    const [showFilters, setShowFilters] = useState(false);
 
-    // ✨ NOVO: Estado para controlar eventos pendentes de carregamento
-    const [pendingEvents, setPendingEvents] = useState([]);
-
+    // Buscar eventos
     useEffect(() => {
-        const fetchEventsFromApi = async () => {
+        const fetchEvents = async () => {
             setIsLoading(true);
             try {
-                const response = await fetch(`${API_URL}/api/events/active`);
-                if (!response.ok) {
-                    throw new Error(`Erro na API: ${response.statusText}`);
-                }
-                const data = await response.json();
+                console.log('🎯 Buscando eventos (API otimizada)...');
+                const eventsResponse = await fetch(`${API_URL}/api/events/active/fast`);
+                if (!eventsResponse.ok) throw new Error('Falha ao buscar eventos');
+                const eventsData = await eventsResponse.json();
+                
+                console.log(`✅ ${eventsData.length} eventos carregados`);
+                setEvents(eventsData);
+                setFilteredEvents(eventsData);
 
-                setAllEvents(data);
-                
-                // ✨ ESTRATÉGIA DE CARREGAMENTO PROGRESSIVO:
-                // 1. Mostrar os primeiros 2-4 eventos imediatamente
-                const immediateEvents = data.slice(0, 3);
-                setVisibleEvents(immediateEvents);
-                
-                // 2. Colocar o resto em "pending" para carregar depois
-                const remainingEvents = data.slice(3);
-                setPendingEvents(remainingEvents);
-                
             } catch (error) {
-                console.error("Falha ao buscar eventos da API:", error);
+                console.error("Erro ao buscar eventos:", error);
             } finally {
                 setIsLoading(false);
             }
         };
 
-        fetchEventsFromApi();
+        fetchEvents();
     }, []);
 
-    // ✨ NOVO: Efeito para carregar eventos pendentes em background
+    // Extrair categorias únicas
+    const categories = useMemo(() => {
+        const cats = events
+            .map(event => event.metadata?.category)
+            .filter(Boolean)
+            .filter((cat, index, self) => self.indexOf(cat) === index);
+        return ['all', ...cats];
+    }, [events]);
+
+    // Extrair localizações únicas
+    const locations = useMemo(() => {
+        const locs = events
+            .map(event => event.metadata?.properties?.location?.venueName || 'Online')
+            .filter((loc, index, self) => self.indexOf(loc) === index);
+        return ['all', ...locs];
+    }, [events]);
+
+    // Aplicar filtros e busca
     useEffect(() => {
-        if (pendingEvents.length === 0) return;
+        let results = events;
 
-        const loadPendingEvents = async () => {
-            setIsLoadingMore(true);
-            
-            // Carregar em lotes de 2-3 eventos por vez
-            const batchSize = 2;
-            const batch = pendingEvents.slice(0, batchSize);
-            const remaining = pendingEvents.slice(batchSize);
-            
-            // Simular um pequeno delay para UX melhor (opcional)
-            await new Promise(resolve => setTimeout(resolve, 300));
-            
-            setVisibleEvents(prev => [...prev, ...batch]);
-            setPendingEvents(remaining);
-            setIsLoadingMore(false);
-        };
-
-        loadPendingEvents();
-    }, [pendingEvents.length]); // Executa quando pendingEvents muda
-
-    // Filtragem - agora funciona apenas nos eventos visíveis
-    useEffect(() => {
-        let eventsToFilter = [...allEvents];
-
+        // Filtro de busca
         if (searchTerm) {
-            eventsToFilter = eventsToFilter.filter(event => 
-                event.metadata.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                event.metadata.description.toLowerCase().includes(searchTerm.toLowerCase())
+            results = results.filter(event => 
+                event.metadata?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                event.metadata?.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                event.metadata?.category?.toLowerCase().includes(searchTerm.toLowerCase())
             );
         }
 
-        if (category !== 'all') {
-            eventsToFilter = eventsToFilter.filter(event => event.metadata.category === category);
-        }
-        
-        if (eventType !== 'all') {
-            eventsToFilter = eventsToFilter.filter(event => event.metadata.properties.location.type === eventType);
-        }
-        
-        if (isFree !== 'all') {
-            const isEventFree = event => Math.min(...event.account.tiers.map(t => t.priceLamports.toNumber())) === 0;
-            eventsToFilter = eventsToFilter.filter(event => (isFree === 'yes') ? isEventFree(event) : !isEventFree(event));
+        // Filtro de categoria
+        if (selectedCategory !== 'all') {
+            results = results.filter(event => 
+                event.metadata?.category === selectedCategory
+            );
         }
 
-        // ✨ ATUALIZADO: Aplicar a mesma lógica de carregamento progressivo aos eventos filtrados
-        if (eventsToFilter.length !== allEvents.length || searchTerm || category !== 'all' || eventType !== 'all' || isFree !== 'all') {
-            // Se há filtros ativos, mostrar todos os eventos filtrados de uma vez
-            setVisibleEvents(eventsToFilter);
-            setPendingEvents([]);
-        } else {
-            // Sem filtros, aplicar carregamento progressivo
-            const immediateEvents = eventsToFilter.slice(0, 3);
-            const remainingEvents = eventsToFilter.slice(3);
-            setVisibleEvents(immediateEvents);
-            setPendingEvents(remainingEvents);
+        // Filtro de localização
+        if (selectedLocation !== 'all') {
+            results = results.filter(event => 
+                (event.metadata?.properties?.location?.venueName || 'Online') === selectedLocation
+            );
         }
-    }, [searchTerm, category, eventType, isFree, allEvents]);
 
-    const uniqueCategories = useMemo(() => {
-        const categories = new Set(allEvents.map(event => event.metadata.category));
-        return ['all', ...Array.from(categories)];
-    }, [allEvents]);
+        // Filtro de data
+        if (selectedDate !== 'all') {
+            const now = new Date();
+            const tomorrow = new Date(now);
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            
+            const nextWeek = new Date(now);
+            nextWeek.setDate(nextWeek.getDate() + 7);
 
-   
-    const loadMoreEvents = () => {
-        if (pendingEvents.length === 0) return;
-        
-        const nextBatch = pendingEvents.slice(0, 3);
-        setVisibleEvents(prev => [...prev, ...nextBatch]);
-        setPendingEvents(prev => prev.slice(3));
+            results = results.filter(event => {
+                const eventDate = new Date(event.metadata?.properties?.dateTime?.start || event.account.salesStartDate.toNumber() * 1000);
+                
+                switch (selectedDate) {
+                    case 'today':
+                        return eventDate.toDateString() === now.toDateString();
+                    case 'tomorrow':
+                        return eventDate.toDateString() === tomorrow.toDateString();
+                    case 'week':
+                        return eventDate >= now && eventDate <= nextWeek;
+                    case 'month':
+                        const nextMonth = new Date(now);
+                        nextMonth.setMonth(nextMonth.getMonth() + 1);
+                        return eventDate >= now && eventDate <= nextMonth;
+                    default:
+                        return true;
+                }
+            });
+        }
+
+        // Ordenação
+        results.sort((a, b) => {
+            switch (sortBy) {
+                case 'date':
+                    return a.account.salesStartDate.toNumber() - b.account.salesStartDate.toNumber();
+                case 'name':
+                    return a.metadata?.name?.localeCompare(b.metadata?.name);
+                case 'popular':
+                    return (b.account.totalTicketsSold || 0) - (a.account.totalTicketsSold || 0);
+                default:
+                    return 0;
+            }
+        });
+
+        setFilteredEvents(results);
+    }, [events, searchTerm, selectedCategory, selectedLocation, selectedDate, sortBy]);
+
+    // Limpar filtros
+    const clearFilters = () => {
+        setSearchTerm('');
+        setSelectedCategory('all');
+        setSelectedLocation('all');
+        setSelectedDate('all');
+        setSortBy('date');
+    };
+
+    // Estatísticas rápidas
+    const stats = {
+        total: events.length,
+        online: events.filter(e => (e.metadata?.properties?.location?.venueName || 'Online') === 'Online').length,
+        thisWeek: events.filter(e => {
+            const eventDate = new Date(e.metadata?.properties?.dateTime?.start || e.account.salesStartDate.toNumber() * 1000);
+            const nextWeek = new Date();
+            nextWeek.setDate(nextWeek.getDate() + 7);
+            return eventDate <= nextWeek;
+        }).length
     };
 
     return (
-        <div className="container mx-auto px-4 py-12">
-            <header className="text-center mb-12">
-                <h1 className="text-4xl font-bold text-slate-900">Próximos Eventos</h1>
-                <p className="mt-2 text-slate-600">Descubra shows, festivais e conferências.</p>
-            </header>
-
-            <EventFilters
-                searchTerm={searchTerm} setSearchTerm={setSearchTerm}
-                category={category} setCategory={setCategory}
-                eventType={eventType} setEventType={setEventType}
-                isFree={isFree} setIsFree={setIsFree}
-                categories={uniqueCategories}
-            />
-
-            {isLoading ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8 mt-12">
-                    {Array.from({ length: 8 }).map((_, i) => (
-                        <div key={i} className="bg-slate-200 h-80 rounded-lg animate-pulse"></div>
-                    ))}
-                </div>
-            ) : (
-                <>
-                    {/* Eventos visíveis */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8 mt-12">
-                        {visibleEvents.map(event => (
-                            <EventCard key={event.publicKey} event={event} />
-                        ))}
+        <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-cyan-50">
+            {/* === HEADER === */}
+            <div className="bg-slate-900 text-white py-16">
+                <div className="container mx-auto px-4">
+                    <div className="text-center max-w-4xl mx-auto">
+                        <h1 className="text-4xl md:text-6xl font-bold mb-6">
+                            Descubra Eventos <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-fuchsia-500">Exclusivos</span>
+                        </h1>
+                        <p className="text-xl text-slate-300 mb-8">
+                            Encontre os melhores eventos e garanta seus ingressos NFT com segurança e facilidade
+                        </p>
                         
-                        {/* ✨ NOVO: Skeleton loading para eventos que estão sendo carregados */}
-                        {isLoadingMore && Array.from({ length: 2 }).map((_, i) => (
-                            <div key={`loading-${i}`} className="bg-slate-200 h-80 rounded-lg animate-pulse"></div>
-                        ))}
+                        {/* Barra de Pesquisa Principal */}
+                        <div className="relative max-w-2xl mx-auto">
+                            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                <MagnifyingGlassIcon className="h-5 w-5 text-slate-400" />
+                            </div>
+                            <input
+                                type="text"
+                                placeholder="Buscar eventos, categorias, artistas..."
+                                className="w-full pl-12 pr-4 py-4 bg-white/10 backdrop-blur-sm border border-white/20 rounded-2xl text-white placeholder-slate-300 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent"
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                            />
+                            {searchTerm && (
+                                <button
+                                    onClick={() => setSearchTerm('')}
+                                    className="absolute inset-y-0 right-3 flex items-center"
+                                >
+                                    <XMarkIcon className="h-5 w-5 text-slate-400 hover:text-white" />
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {/* === FILTROS E CONTROLES === */}
+            <div className="container mx-auto px-4 -mt-8">
+                <div className="bg-white rounded-2xl shadow-xl border border-slate-200 p-6 mb-8">
+                    <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between">
+                        {/* Estatísticas Rápidas */}
+                        <div className="flex items-center gap-6 text-sm text-slate-600">
+                            <span className="flex items-center gap-2">
+                                <UsersIcon className="h-4 w-4" />
+                                {stats.total} eventos
+                            </span>
+                            <span className="flex items-center gap-2">
+                                <SparklesIcon className="h-4 w-4" />
+                                {stats.thisWeek} esta semana
+                            </span>
+                            <span className="flex items-center gap-2">
+                                <MapPinIcon className="h-4 w-4" />
+                                {stats.online} online
+                            </span>
+                        </div>
+
+                        {/* Controles */}
+                        <div className="flex flex-wrap gap-3 items-center">
+                            {/* Botão Filtros */}
+                            <button
+                                onClick={() => setShowFilters(!showFilters)}
+                                className={`flex items-center gap-2 px-4 py-2 rounded-xl border transition-colors ${
+                                    showFilters 
+                                        ? 'bg-cyan-500 text-white border-cyan-500' 
+                                        : 'bg-white text-slate-700 border-slate-300 hover:border-cyan-400'
+                                }`}
+                            >
+                                <AdjustmentsHorizontalIcon className="h-4 w-4" />
+                                Filtros
+                                {(selectedCategory !== 'all' || selectedLocation !== 'all' || selectedDate !== 'all') && (
+                                    <span className="bg-cyan-500 text-white rounded-full w-5 h-5 text-xs flex items-center justify-center">
+                                        !
+                                    </span>
+                                )}
+                            </button>
+
+                            {/* Ordenação */}
+                            <select
+                                value={sortBy}
+                                onChange={(e) => setSortBy(e.target.value)}
+                                className="px-4 py-2 rounded-xl border border-slate-300 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-cyan-400"
+                            >
+                                <option value="date">Ordenar por Data</option>
+                                <option value="name">Ordenar por Nome</option>
+                                <option value="popular">Mais Populares</option>
+                            </select>
+
+                            {/* Limpar Filtros */}
+                            {(searchTerm || selectedCategory !== 'all' || selectedLocation !== 'all' || selectedDate !== 'all') && (
+                                <button
+                                    onClick={clearFilters}
+                                    className="flex items-center gap-2 px-4 py-2 text-red-600 hover:text-red-700 transition-colors"
+                                >
+                                    <XMarkIcon className="h-4 w-4" />
+                                    Limpar
+                                </button>
+                            )}
+                        </div>
                     </div>
 
-                    {/* ✨ NOVO: Botão "Carregar mais" ou mensagem */}
-                    {pendingEvents.length > 0 && !isLoadingMore && (
-                        <div className="text-center mt-8">
+                    {/* Filtros Expandidos */}
+                    {showFilters && (
+                        <div className="mt-6 pt-6 border-t border-slate-200">
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                {/* Filtro de Categoria */}
+                                <div>
+                                    <label className="flex items-center gap-2 text-sm font-medium text-slate-700 mb-3">
+                                        <TagIcon className="h-4 w-4" />
+                                        Categoria
+                                    </label>
+                                    <select
+                                        value={selectedCategory}
+                                        onChange={(e) => setSelectedCategory(e.target.value)}
+                                        className="w-full border border-slate-300 rounded-xl p-3 bg-white focus:outline-none focus:ring-2 focus:ring-cyan-400"
+                                    >
+                                        <option value="all">Todas as categorias</option>
+                                        {categories.filter(cat => cat !== 'all').map(category => (
+                                            <option key={category} value={category}>
+                                                {category}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                {/* Filtro de Localização */}
+                                <div>
+                                    <label className="flex items-center gap-2 text-sm font-medium text-slate-700 mb-3">
+                                        <MapPinIcon className="h-4 w-4" />
+                                        Localização
+                                    </label>
+                                    <select
+                                        value={selectedLocation}
+                                        onChange={(e) => setSelectedLocation(e.target.value)}
+                                        className="w-full border border-slate-300 rounded-xl p-3 bg-white focus:outline-none focus:ring-2 focus:ring-cyan-400"
+                                    >
+                                        <option value="all">Todas as localizações</option>
+                                        {locations.filter(loc => loc !== 'all').map(location => (
+                                            <option key={location} value={location}>
+                                                {location}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                {/* Filtro de Data */}
+                                <div>
+                                    <label className="flex items-center gap-2 text-sm font-medium text-slate-700 mb-3">
+                                        <CalendarDaysIcon className="h-4 w-4" />
+                                        Data
+                                    </label>
+                                    <select
+                                        value={selectedDate}
+                                        onChange={(e) => setSelectedDate(e.target.value)}
+                                        className="w-full border border-slate-300 rounded-xl p-3 bg-white focus:outline-none focus:ring-2 focus:ring-cyan-400"
+                                    >
+                                        <option value="all">Qualquer data</option>
+                                        <option value="today">Hoje</option>
+                                        <option value="tomorrow">Amanhã</option>
+                                        <option value="week">Esta semana</option>
+                                        <option value="month">Este mês</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                {/* === RESULTADOS === */}
+                <div className="mb-6 flex items-center justify-between">
+                    <h2 className="text-2xl font-bold text-slate-900">
+                        {filteredEvents.length} {filteredEvents.length === 1 ? 'evento encontrado' : 'eventos encontrados'}
+                    </h2>
+                    
+                    {/* Tags de Filtros Ativos */}
+                    <div className="flex flex-wrap gap-2">
+                        {searchTerm && (
+                            <span className="inline-flex items-center gap-1 bg-cyan-100 text-cyan-800 px-3 py-1 rounded-full text-sm">
+                                "{searchTerm}"
+                                <button onClick={() => setSearchTerm('')}>
+                                    <XMarkIcon className="h-3 w-3" />
+                                </button>
+                            </span>
+                        )}
+                        {selectedCategory !== 'all' && (
+                            <span className="inline-flex items-center gap-1 bg-purple-100 text-purple-800 px-3 py-1 rounded-full text-sm">
+                                {selectedCategory}
+                                <button onClick={() => setSelectedCategory('all')}>
+                                    <XMarkIcon className="h-3 w-3" />
+                                </button>
+                            </span>
+                        )}
+                        {selectedLocation !== 'all' && (
+                            <span className="inline-flex items-center gap-1 bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm">
+                                {selectedLocation}
+                                <button onClick={() => setSelectedLocation('all')}>
+                                    <XMarkIcon className="h-3 w-3" />
+                                </button>
+                            </span>
+                        )}
+                        {selectedDate !== 'all' && (
+                            <span className="inline-flex items-center gap-1 bg-orange-100 text-orange-800 px-3 py-1 rounded-full text-sm">
+                                {selectedDate === 'today' ? 'Hoje' : 
+                                 selectedDate === 'tomorrow' ? 'Amanhã' : 
+                                 selectedDate === 'week' ? 'Esta semana' : 'Este mês'}
+                                <button onClick={() => setSelectedDate('all')}>
+                                    <XMarkIcon className="h-3 w-3" />
+                                </button>
+                            </span>
+                        )}
+                    </div>
+                </div>
+
+                {/* === GRADE DE EVENTOS === */}
+                {isLoading ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                        {Array.from({ length: 8 }).map((_, i) => (
+                            <div key={i} className="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 animate-pulse">
+                                <div className="bg-slate-200 rounded-xl h-48 mb-4"></div>
+                                <div className="space-y-3">
+                                    <div className="bg-slate-200 rounded h-4"></div>
+                                    <div className="bg-slate-200 rounded h-3 w-2/3"></div>
+                                    <div className="bg-slate-200 rounded h-3 w-1/2"></div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                ) : filteredEvents.length > 0 ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                        {filteredEvents.map(event => (
+                            <EventCard key={event.publicKey} event={event} />
+                        ))}
+                    </div>
+                ) : (
+                    <div className="text-center py-16">
+                        <div className="bg-white rounded-3xl shadow-sm border border-slate-200 p-12 max-w-md mx-auto">
+                            <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                <MagnifyingGlassIcon className="h-8 w-8 text-slate-400" />
+                            </div>
+                            <h3 className="text-xl font-bold text-slate-900 mb-2">Nenhum evento encontrado</h3>
+                            <p className="text-slate-600 mb-6">
+                                Tente ajustar os filtros ou buscar por outros termos.
+                            </p>
                             <button
-                                onClick={loadMoreEvents}
-                                className="bg-indigo-600 text-white px-6 py-3 rounded-lg hover:bg-indigo-700 transition-colors"
+                                onClick={clearFilters}
+                                className="bg-gradient-to-r from-cyan-500 to-fuchsia-600 text-white font-bold py-3 px-6 rounded-2xl hover:shadow-lg transition-all duration-300"
                             >
-                                Carregar mais eventos ({pendingEvents.length} restantes)
+                                Limpar Filtros
                             </button>
                         </div>
-                    )}
+                    </div>
+                )}
 
-                    {visibleEvents.length === 0 && !isLoading && (
-                        <div className="text-center text-slate-500 mt-12">
-                            Nenhum evento encontrado com os filtros selecionados.
+                {/* === CTA FINAL === */}
+                {!isLoading && filteredEvents.length > 0 && (
+                    <div className="text-center mt-16 mb-8">
+                        <div className="bg-gradient-to-r from-cyan-500 to-fuchsia-600 rounded-3xl p-8 text-white">
+                            <h3 className="text-2xl font-bold mb-4">
+                                Não encontrou o que procurava?
+                            </h3>
+                            <p className="text-cyan-100 mb-6 max-w-md mx-auto">
+                                Crie seu próprio evento e compartilhe experiências incríveis com a comunidade.
+                            </p>
+                            <Link 
+                                to="/create-event"
+                                className="inline-flex items-center gap-2 bg-white text-cyan-600 font-bold py-3 px-6 rounded-2xl hover:shadow-lg transition-all duration-300"
+                            >
+                                <SparklesIcon className="h-5 w-5" />
+                                Criar Evento
+                            </Link>
                         </div>
-                    )}
-
-                    {/* ✨ NOVO: Indicador de carregamento automático em background */}
-                    {pendingEvents.length > 0 && isLoadingMore && (
-                        <div className="text-center text-slate-500 mt-4">
-                            Carregando mais eventos...
-                        </div>
-                    )}
-                </>
-            )}
-        </div>
-    );
-}
-
-// Componente de filtros permanece o mesmo
-function EventFilters({ searchTerm, setSearchTerm, category, setCategory, eventType, setEventType, isFree, setIsFree, categories }) {
-    return (
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm sticky top-20 z-30">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div className="relative">
-                    <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
-                    <input 
-                        type="text"
-                        placeholder="Buscar por nome ou palavra-chave..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
-                    />
-                </div>
-                <select value={category} onChange={(e) => setCategory(e.target.value)} className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500">
-                    {categories.map(cat => (
-                        <option key={cat} value={cat}>{cat === 'all' ? 'Todas as Categorias' : cat}</option>
-                    ))}
-                </select>
-                <select value={eventType} onChange={(e) => setEventType(e.target.value)} className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500">
-                    <option value="all">Todos os Tipos</option>
-                    <option value="Physical">Presencial</option>
-                    <option value="Online">Online</option>
-                </select>
-                <select value={isFree} onChange={(e) => setIsFree(e.target.value)} className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500">
-                    <option value="all">Todos os Preços</option>
-                    <option value="yes">Apenas Gratuitos</option>
-                    <option value="no">Apenas Pagos</option>
-                </select>
+                    </div>
+                )}
             </div>
         </div>
     );
