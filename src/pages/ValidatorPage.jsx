@@ -144,34 +144,47 @@ export function ValidatorPage() {
     }, [isValidator, fetchRecentEntries]);
     
     // 🔄 ATUALIZADO: Nova URL da API modularizada
-    const handleValidationAttempt = useCallback(async (registrationId) => {
-        if (!registrationId || !publicKey) return;
+   const handleValidationAttempt = useCallback(async (registrationId) => {
+  if (!registrationId || !publicKey) return;
 
-        const loadingToast = toast.loading("Validando ingresso...");
-        try {
-            const response = await fetch(`${API_URL}/api/validations/validate-by-id/${registrationId}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    validatorAddress: publicKey.toString(),
-                }),
-            });
-            const result = await response.json();
+  const loadingToast = toast.loading("Validando ingresso...");
+  try {
+    // Determinar o tipo de autenticação baseado no contexto
+    let authPayload = {
+      validatorAddress: publicKey.toString(),
+    };
 
-            if (!response.ok || !result.success) {
-                throw new Error(result.error || 'Falha na validação via API.');
-            }
-            
-            toast.success(`Entrada liberada para ${result.participantName}!`, { id: loadingToast, duration: 4000 });
-            
-            // Atualiza a UI imediatamente
-            fetchRecentEntries();
+    // Se estiver usando AuthContext (login local), adicionar credenciais
+    const { isAuthenticated, keypair, loginType } = useAuth(); // Adicione este hook
+    
+    if (isAuthenticated) {
+      // Para autenticação local, enviar as credenciais
+      authPayload.authType = loginType; // 'privateKey', 'seedPhrase', 'credentials'
+      // ⚠️ AVISO: Em produção, isso deve ser feito de forma mais segura
+      // Possivelmente usando sessões ou tokens JWT
+    }
+    // Para wallet extension, usar a versão com assinatura no frontend
 
-        } catch (error) {
-            console.error("Erro ao validar ingresso:", error);
-            toast.error(`Falha na validação: ${error.message}`, { id: loadingToast });
-        }
-    }, [publicKey, eventAddress, fetchRecentEntries]);
+    const response = await fetch(`${API_URL}/api/validations/validate-by-id/${registrationId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(authPayload),
+    });
+
+    const result = await response.json();
+
+    if (!response.ok || !result.success) {
+      throw new Error(result.error || 'Falha na validação via API.');
+    }
+    
+    toast.success(`Entrada liberada para ${result.participantName}!`, { id: loadingToast, duration: 4000 });
+    fetchRecentEntries();
+
+  } catch (error) {
+    console.error("Erro ao validar ingresso:", error);
+    toast.error(`Falha na validação: ${error.message}`, { id: loadingToast });
+  }
+}, [publicKey, fetchRecentEntries]);
     
     if (!connected) {
         return ( <div className="flex flex-col justify-center items-center h-screen bg-slate-100 text-center p-4"> <ShieldExclamationIcon className="h-16 w-16 text-slate-500" /> <h1 className="mt-4 text-2xl font-bold">Área do Validador</h1> <p className="mt-2 text-slate-600">Conecte sua carteira para continuar.</p> <div className="mt-6"><WalletMultiButton /></div></div>);
@@ -219,4 +232,5 @@ export function ValidatorPage() {
             </main>
         </div>
     );
+
 }
