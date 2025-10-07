@@ -12,6 +12,7 @@ const LOCAL_STORAGE_KEY = 'solana-local-wallet-credentials';
 
 export function AuthProvider({ children }) {
     const [keypair, setKeypair] = useState(null);
+    const [loginType, setLoginType] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState(null);
 
@@ -56,33 +57,47 @@ export function AuthProvider({ children }) {
         }
     }, []);
 
-    // Efeito para login automático do localStorage
     useEffect(() => {
         const tryRestoreSession = async () => {
             try {
                 const savedCredentials = localStorage.getItem(LOCAL_STORAGE_KEY);
                 if (savedCredentials) {
-                    const { username, password, loginType, seedPhrase, privateKey } = JSON.parse(savedCredentials);
+                    const { username, password, loginType: savedLoginType, seedPhrase, privateKey } = JSON.parse(savedCredentials);
                     
-                    if (loginType === 'credentials' && username && password) {
+                    console.log("Restaurando sessão com tipo:", savedLoginType);
+                    
+                    if (savedLoginType === 'credentials' && username && password) {
                         console.log("Restaurando sessão com credenciais...");
                         const generatedKeypair = await getKeypairFromCredentials(username, password);
                         setKeypair(generatedKeypair);
+                        setLoginType('credentials'); // ✅ DEFINIR LOGIN TYPE
+                        console.log("✅ Sessão restaurada com credenciais");
                     }
-                    else if (loginType === 'seedphrase' && seedPhrase) {
+                    else if (savedLoginType === 'seedphrase' && seedPhrase) {
                         console.log("Restaurando sessão com seedphrase...");
                         const keypair = await getKeypairFromSeedphrase(seedPhrase);
                         setKeypair(keypair);
+                        setLoginType('seedphrase'); // ✅ DEFINIR LOGIN TYPE
+                        console.log("✅ Sessão restaurada com seedphrase");
                     }
-                    else if (loginType === 'privateKey' && privateKey) {
+                    else if (savedLoginType === 'privateKey' && privateKey) {
                         console.log("Restaurando sessão com private key...");
                         const keypair = await getKeypairFromPrivateKey(privateKey);
                         setKeypair(keypair);
+                        setLoginType('privateKey'); // ✅ DEFINIR LOGIN TYPE
+                        console.log("✅ Sessão restaurada com private key");
+                    } else {
+                        console.log("❌ Credenciais salvas inválidas ou incompletas");
+                        localStorage.removeItem(LOCAL_STORAGE_KEY);
                     }
+                } else {
+                    console.log("Nenhuma sessão salva encontrada");
                 }
             } catch (err) {
-                console.error("Falha ao restaurar sessão:", err);
+                console.error("❌ Falha ao restaurar sessão:", err);
                 localStorage.removeItem(LOCAL_STORAGE_KEY);
+                setKeypair(null);
+                setLoginType(null);
             } finally {
                 setIsLoading(false);
             }
@@ -98,6 +113,7 @@ export function AuthProvider({ children }) {
         try {
             const generatedKeypair = await getKeypairFromCredentials(username, password);
             setKeypair(generatedKeypair);
+            setLoginType('credentials'); // ✅ DEFINIR LOGIN TYPE
             
             // Salva no localStorage
             const credentialsToSave = JSON.stringify({ 
@@ -107,11 +123,14 @@ export function AuthProvider({ children }) {
             });
             localStorage.setItem(LOCAL_STORAGE_KEY, credentialsToSave);
             
+            console.log("✅ Login realizado com credenciais");
             return true;
         } catch (err) {
-            console.error("Falha no login:", err);
+            console.error("❌ Falha no login:", err);
             setError("Credenciais inválidas ou falha ao gerar a carteira.");
             localStorage.removeItem(LOCAL_STORAGE_KEY);
+            setKeypair(null);
+            setLoginType(null);
             return false;
         } finally {
             setIsLoading(false);
@@ -125,6 +144,7 @@ export function AuthProvider({ children }) {
         try {
             const keypair = await getKeypairFromSeedphrase(seedWords);
             setKeypair(keypair);
+            setLoginType('seedphrase'); // ✅ DEFINIR LOGIN TYPE
             
             // Salva no localStorage (apenas a seedphrase, não as palavras individuais)
             const credentialsToSave = JSON.stringify({ 
@@ -133,11 +153,14 @@ export function AuthProvider({ children }) {
             });
             localStorage.setItem(LOCAL_STORAGE_KEY, credentialsToSave);
             
+            console.log("✅ Login realizado com seedphrase");
             return true;
         } catch (err) {
-            console.error("Falha no login com seedphrase:", err);
+            console.error("❌ Falha no login com seedphrase:", err);
             setError(err.message || "Seedphrase inválida. Verifique as palavras.");
             localStorage.removeItem(LOCAL_STORAGE_KEY);
+            setKeypair(null);
+            setLoginType(null);
             return false;
         } finally {
             setIsLoading(false);
@@ -151,6 +174,7 @@ export function AuthProvider({ children }) {
         try {
             const keypair = await getKeypairFromPrivateKey(privateKey);
             setKeypair(keypair);
+            setLoginType('privateKey'); // ✅ DEFINIR LOGIN TYPE
             
             // Salva no localStorage
             const credentialsToSave = JSON.stringify({ 
@@ -159,11 +183,14 @@ export function AuthProvider({ children }) {
             });
             localStorage.setItem(LOCAL_STORAGE_KEY, credentialsToSave);
             
+            console.log("✅ Login realizado com private key");
             return true;
         } catch (err) {
-            console.error("Falha no login com private key:", err);
+            console.error("❌ Falha no login com private key:", err);
             setError(err.message || "Private key inválida. Verifique o formato.");
             localStorage.removeItem(LOCAL_STORAGE_KEY);
+            setKeypair(null);
+            setLoginType(null);
             return false;
         } finally {
             setIsLoading(false);
@@ -171,11 +198,13 @@ export function AuthProvider({ children }) {
     }, [getKeypairFromPrivateKey]);
 
     const logout = useCallback(() => {
+        console.log("🚪 Usuário deslogado");
         setKeypair(null);
+        setLoginType(null); // ✅ LIMPAR LOGIN TYPE
         setError(null);
         localStorage.removeItem(LOCAL_STORAGE_KEY);
-        console.log("Usuário deslogado.");
     }, []);
+
     const signTransaction = useCallback(async (transaction) => {
         if (!keypair) {
             throw new Error("Usuário não autenticado");
@@ -186,7 +215,6 @@ export function AuthProvider({ children }) {
         return transaction;
     }, [keypair]);
     
-    // Função para assinar e enviar transações automaticamente
     const signAndSendTransaction = useCallback(async (transaction, connection) => {
         if (!keypair) {
             throw new Error("Usuário não autenticado");
@@ -210,26 +238,31 @@ export function AuthProvider({ children }) {
             throw error;
         }
     }, [keypair, signTransaction]);
+
     const value = useMemo(() => ({
         keypair,
         publicKey: keypair?.publicKey,
         isAuthenticated: !!keypair,
+        loginType, // ✅ EXPOR LOGIN TYPE
         isLoading,
         error,
         login,
         loginWithSeedphrase,
         loginWithPrivateKey,
         logout,
-        signTransaction, // ✅ Nova função
-        signAndSendTransaction, // ✅ Nova função
+        signTransaction,
+        signAndSendTransaction,
         // Para compatibilidade com wallets externas
         signAllTransactions: async (transactions) => {
+            if (!keypair) {
+                throw new Error("Usuário não autenticado");
+            }
             return transactions.map(tx => {
                 tx.partialSign(keypair);
                 return tx;
             });
         }
-    }), [keypair, isLoading, error, login, loginWithSeedphrase, loginWithPrivateKey, logout, signTransaction, signAndSendTransaction]);
+    }), [keypair, loginType, isLoading, error, login, loginWithSeedphrase, loginWithPrivateKey, logout, signTransaction, signAndSendTransaction]);
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
