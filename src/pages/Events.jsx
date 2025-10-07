@@ -17,6 +17,36 @@ import {
   UsersIcon
 } from '@heroicons/react/24/outline';
 
+// Função auxiliar para extrair timestamp de salesStartDate
+const getSalesStartTimestamp = (event) => {
+  const salesStartDate = event.account.salesStartDate;
+  
+  // Se for um objeto Anchor BN (tem método toNumber)
+  if (salesStartDate && typeof salesStartDate.toNumber === 'function') {
+    return salesStartDate.toNumber();
+  }
+  
+  // Se já for um número (vindo da API rápida)
+  if (typeof salesStartDate === 'number') {
+    return salesStartDate;
+  }
+  
+  // Se for string ou outro formato, tenta converter
+  return Number(salesStartDate) || 0;
+};
+
+// Função auxiliar para obter data do evento
+const getEventDate = (event) => {
+  // Prioriza a data dos metadados
+  if (event.metadata?.properties?.dateTime?.start) {
+    return new Date(event.metadata.properties.dateTime.start);
+  }
+  
+  // Fallback para salesStartDate (convertendo de segundos para milissegundos)
+  const salesStartTimestamp = getSalesStartTimestamp(event);
+  return new Date(salesStartTimestamp * 1000);
+};
+
 export function Events() {
     const [events, setEvents] = useState([]);
     const [filteredEvents, setFilteredEvents] = useState([]);
@@ -96,7 +126,7 @@ export function Events() {
             );
         }
 
-        // Filtro de data
+        // Filtro de data - CORRIGIDO
         if (selectedDate !== 'all') {
             const now = new Date();
             const tomorrow = new Date(now);
@@ -106,7 +136,7 @@ export function Events() {
             nextWeek.setDate(nextWeek.getDate() + 7);
 
             results = results.filter(event => {
-                const eventDate = new Date(event.metadata?.properties?.dateTime?.start || event.account.salesStartDate.toNumber() * 1000);
+                const eventDate = getEventDate(event);
                 
                 switch (selectedDate) {
                     case 'today':
@@ -125,13 +155,15 @@ export function Events() {
             });
         }
 
-        // Ordenação
+        // Ordenação - CORRIGIDO
         results.sort((a, b) => {
             switch (sortBy) {
                 case 'date':
-                    return a.account.salesStartDate.toNumber() - b.account.salesStartDate.toNumber();
+                    const aTimestamp = getSalesStartTimestamp(a);
+                    const bTimestamp = getSalesStartTimestamp(b);
+                    return aTimestamp - bTimestamp;
                 case 'name':
-                    return a.metadata?.name?.localeCompare(b.metadata?.name);
+                    return (a.metadata?.name || '').localeCompare(b.metadata?.name || '');
                 case 'popular':
                     return (b.account.totalTicketsSold || 0) - (a.account.totalTicketsSold || 0);
                 default:
@@ -151,12 +183,12 @@ export function Events() {
         setSortBy('date');
     };
 
-    // Estatísticas rápidas
+    // Estatísticas rápidas - CORRIGIDO
     const stats = {
         total: events.length,
         online: events.filter(e => (e.metadata?.properties?.location?.venueName || 'Online') === 'Online').length,
         thisWeek: events.filter(e => {
-            const eventDate = new Date(e.metadata?.properties?.dateTime?.start || e.account.salesStartDate.toNumber() * 1000);
+            const eventDate = getEventDate(e);
             const nextWeek = new Date();
             nextWeek.setDate(nextWeek.getDate() + 7);
             return eventDate <= nextWeek;
