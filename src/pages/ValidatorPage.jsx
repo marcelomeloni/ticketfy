@@ -147,13 +147,11 @@ const ScannerView = ({ onScan, onManualSearch }) => {
     useEffect(() => {
         let scanner;
         if (document.getElementById('qr-reader-container')?.innerHTML === "") {
+            // ✅ CORREÇÃO: Removido Html5QrcodeScanType que estava causando o erro
             scanner = new Html5QrcodeScanner('qr-reader-container', { 
                 fps: 10, 
-                qrbox: { width: 250, height: 250 },
-                supportedScanTypes: [
-                    Html5QrcodeScanType.SCAN_TYPE_QR_CODE,
-                    Html5QrcodeScanType.SCAN_TYPE_BARCODE
-                ]
+                qrbox: { width: 250, height: 250 }
+                // ❌ REMOVIDO: supportedScanTypes que causava o erro
             }, false);
             
             const handleSuccess = (decodedText) => {
@@ -163,20 +161,32 @@ const ScannerView = ({ onScan, onManualSearch }) => {
                 // Pausa o scanner temporariamente para evitar múltiplas leituras
                 if (scanner && scanner.getState && scanner.getState() !== 1) {
                     setTimeout(() => {
-                        scanner.pause();
+                        try {
+                            scanner.pause();
+                        } catch (error) {
+                            console.log('[SCANNER] Erro ao pausar scanner:', error);
+                        }
                     }, 1000);
                 }
             };
             
-            scanner.render(handleSuccess, (error) => {
-                // Ignora erros de leitura
-                console.log('[SCANNER] Erro/nenhum QR code:', error);
-            });
+            const handleError = (error) => {
+                // Ignora erros de leitura normais, só loga erros críticos
+                if (!error.includes('No MultiFormat Readers')) {
+                    console.log('[SCANNER] Erro de scanner:', error);
+                }
+            };
+            
+            scanner.render(handleSuccess, handleError);
         }
         
         return () => {
             if (scanner && scanner.getState && scanner.getState() !== 1) {
-                scanner.clear().catch(() => {});
+                try {
+                    scanner.clear().catch(() => {});
+                } catch (error) {
+                    console.log('[SCANNER] Erro ao limpar scanner:', error);
+                }
             }
         };
     }, [onScan]);
@@ -286,7 +296,9 @@ export function ValidatorPage() {
                 const validatorPubkeys = event.validators.map(v => v.toString());
                 const isUserAValidator = validatorPubkeys.includes(publicKey.toString());
                 setIsValidator(isUserAValidator);
+                console.log(`[VALIDATOR] Status verificado: ${isUserAValidator ? 'AUTORIZADO' : 'NÃO AUTORIZADO'}`);
             } catch (error) {
+                console.error("[VALIDATOR] Erro ao carregar evento:", error);
                 toast.error("Não foi possível carregar os dados do evento.");
                 setIsValidator(false);
             } finally {
@@ -304,10 +316,12 @@ export function ValidatorPage() {
     
     const fetchRecentEntries = useCallback(async () => {
         try {
+            console.log(`[VALIDATOR] Buscando validações recentes para evento: ${eventAddress}`);
             const response = await fetch(`${API_URL}/api/validations/event/${eventAddress}/validated-tickets`);
             if (!response.ok) throw new Error('Falha ao buscar validações');
             const entriesFromApi = await response.json();
             setRecentEntries(entriesFromApi);
+            console.log(`[VALIDATOR] ${entriesFromApi.length} validações encontradas`);
         } catch (error) {
             console.error("Erro ao buscar entradas recentes:", error);
         }
@@ -354,6 +368,13 @@ export function ValidatorPage() {
     const handleScanOrSearch = async (registrationId) => {
         if (!registrationId) {
             toast.error("ID do ingresso inválido");
+            return;
+        }
+
+        // Validação básica do UUID
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        if (!uuidRegex.test(registrationId)) {
+            toast.error("ID do ingresso em formato inválido");
             return;
         }
 
@@ -419,6 +440,7 @@ export function ValidatorPage() {
                     }
                 }
 
+                console.log("[VALIDATION] Enviando requisição de validação...");
                 const response = await fetch(`${API_URL}/api/validations/validate-by-id/${pendingValidation}`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
@@ -437,6 +459,7 @@ export function ValidatorPage() {
                     duration: 5000 
                 });
                 
+                // Atualiza a lista de validações recentes
                 fetchRecentEntries();
                 handleCloseModal();
 
@@ -445,6 +468,7 @@ export function ValidatorPage() {
                     id: loadingToast, 
                     duration: 5000 
                 });
+                setIsValidating(false);
             }
         } catch (error) {
             console.error("[VALIDATION] Erro ao validar ingresso:", error);
@@ -456,7 +480,6 @@ export function ValidatorPage() {
             } else {
                 toast.error(`❌ Falha na validação: ${error.message}`, { id: loadingToast });
             }
-        } finally {
             setIsValidating(false);
         }
     };
@@ -478,6 +501,7 @@ export function ValidatorPage() {
         }, 100);
     };
 
+    // Estados de carregamento
     if (!connected) {
         return ( 
             <div className="flex flex-col justify-center items-center h-screen bg-slate-100 text-center p-4"> 
@@ -495,6 +519,7 @@ export function ValidatorPage() {
         return (
             <div className="flex justify-center items-center h-screen bg-slate-100">
                 <ClockIcon className="h-12 w-12 text-slate-500 animate-spin"/>
+                <span className="ml-4 text-slate-600">Verificando permissões...</span>
             </div>
         );
     }
@@ -505,6 +530,7 @@ export function ValidatorPage() {
                 <ShieldExclamationIcon className="h-16 w-16" /> 
                 <h1 className="mt-4 text-2xl font-bold">Acesso Negado</h1>
                 <p className="mt-2">A carteira conectada não é um validador autorizado para este evento.</p>
+                <p className="mt-1 text-sm text-slate-600">Endereço: {publicKey.toString().slice(0, 8)}...{publicKey.toString().slice(-8)}</p>
             </div>
         );
     }
