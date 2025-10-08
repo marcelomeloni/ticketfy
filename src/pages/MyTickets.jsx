@@ -649,7 +649,7 @@ function TicketCard({ ticket, isSubmitting, onSellClick, onCancelClick, onRefund
                         src={eventData.image} 
                         alt={eventData.name}
                         onError={(e) => {
-                            e.target.src = 'https://via.placeholder.com/300x200?text=Imagem+Indisponível';
+                            e.target.src = 'https://red-obedient-stingray-854.mypinata.cloud/ipfs/QmZDu6Ex1XXcYjnhikLYLUxDJtueSSHUre74cqmBxsFJBR';
                         }}
                     />
                 </Link>
@@ -755,3 +755,4 @@ function SellModal({ isOpen, onClose, onSubmit, isSubmitting }) {
         </div>
     );
 }
+
