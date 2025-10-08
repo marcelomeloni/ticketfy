@@ -38,109 +38,114 @@ const StatCard = ({ title, value, icon: Icon, color }) => (
 
 // Modal de Confirmação
 const ValidationModal = ({ 
-    isOpen, 
-    onClose, 
-    onConfirm, 
-    ticketData, 
-    isLoading 
+  isOpen, 
+  onClose, 
+  onConfirm, 
+  ticketData, 
+  isLoading 
 }) => {
-    if (!isOpen) return null;
+  if (!isOpen) return null;
 
-    return (
-        <div className="fixed inset-0 bg-black/60 flex justify-center items-center z-50 p-4 animate-fade-in">
-            <div className="w-full max-w-md bg-white p-6 rounded-lg shadow-xl">
-                <div className="flex justify-between items-center mb-4">
-                    <h2 className="text-xl font-bold text-slate-800">Confirmar Validação</h2>
-                    <button 
-                        onClick={onClose}
-                        className="text-slate-400 hover:text-slate-600 transition-colors"
-                        disabled={isLoading}
-                    >
-                        <XMarkIcon className="h-6 w-6" />
-                    </button>
-                </div>
-
-                {ticketData ? (
-                    <>
-                        <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 mb-6">
-                            <div className="flex items-center gap-3 mb-3">
-                                <UserIcon className="h-8 w-8 text-indigo-600" />
-                                <div>
-                                    <p className="font-semibold text-slate-800 text-lg">
-                                        {ticketData.participantName || 'Participante'}
-                                    </p>
-                                    <p className="text-sm text-slate-500 font-mono">
-                                        {ticketData.ownerAddress?.slice(0, 8)}...{ticketData.ownerAddress?.slice(-8)}
-                                    </p>
-                                </div>
-                            </div>
-                            
-                            <div className="space-y-2 text-sm">
-                                <div className="flex justify-between">
-                                    <span className="text-slate-600">Evento:</span>
-                                    <span className="font-medium">{ticketData.eventName || 'Evento'}</span>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span className="text-slate-600">Ingresso:</span>
-                                    <span className="font-mono text-xs">
-                                        {ticketData.ticketId?.slice(0, 10)}...
-                                    </span>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span className="text-slate-600">Status:</span>
-                                    <span className={`font-semibold ${
-                                        ticketData.isRedeemed ? 'text-red-500' : 'text-green-500'
-                                    }`}>
-                                        {ticketData.isRedeemed ? 'JÁ VALIDADO' : 'PRONTO PARA VALIDAR'}
-                                    </span>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="flex gap-3">
-                            <button
-                                onClick={onClose}
-                                disabled={isLoading}
-                                className="flex-1 bg-slate-200 text-slate-700 py-3 px-4 rounded-lg font-medium hover:bg-slate-300 transition-colors disabled:opacity-50"
-                            >
-                                Cancelar
-                            </button>
-                            <ActionButton
-                                onClick={onConfirm}
-                                disabled={isLoading || ticketData.isRedeemed}
-                                className="flex-1 flex justify-center items-center gap-2"
-                            >
-                                {isLoading ? (
-                                    <>
-                                        <ClockIcon className="h-5 w-5 animate-spin" />
-                                        Validando...
-                                    </>
-                                ) : (
-                                    <>
-                                        <CheckBadgeIcon className="h-5 w-5" />
-                                        Confirmar Entrada
-                                    </>
-                                )}
-                            </ActionButton>
-                        </div>
-
-                        {ticketData.isRedeemed && (
-                            <p className="text-red-500 text-sm text-center mt-3">
-                                Este ingresso já foi validado anteriormente.
-                            </p>
-                        )}
-                    </>
-                ) : (
-                    <div className="text-center py-8">
-                        <ClockIcon className="h-12 w-12 text-slate-400 animate-spin mx-auto mb-4" />
-                        <p className="text-slate-600">Carregando dados do ingresso...</p>
-                    </div>
-                )}
-            </div>
+  return (
+    <div className="fixed inset-0 bg-black/60 flex justify-center items-center z-50 p-4 animate-fade-in">
+      <div className="w-full max-w-md bg-white p-6 rounded-lg shadow-xl">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-xl font-bold text-slate-800">Confirmar Validação</h2>
+          <button 
+            onClick={onClose}
+            className="text-slate-400 hover:text-slate-600 transition-colors"
+            disabled={isLoading}
+          >
+            <XMarkIcon className="h-6 w-6" />
+          </button>
         </div>
-    );
-};
 
+        {ticketData ? (
+          <>
+            <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 mb-6">
+              <div className="flex items-center gap-3 mb-3">
+                <UserIcon className="h-8 w-8 text-indigo-600" />
+                <div>
+                  <p className="font-semibold text-slate-800 text-lg">
+                    {ticketData.participantName || 'Participante'}
+                  </p>
+                  <p className="text-sm text-slate-500">
+                    {ticketData.ownerName && ticketData.ownerName !== ticketData.participantName 
+                      ? `(${ticketData.ownerName})` 
+                      : ''
+                    }
+                  </p>
+                  <p className="text-xs text-slate-400 font-mono mt-1">
+                    {ticketData.ownerAddress?.slice(0, 8)}...{ticketData.ownerAddress?.slice(-8)}
+                  </p>
+                </div>
+              </div>
+              
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-slate-600">Evento:</span>
+                  <span className="font-medium text-right">{ticketData.eventName || 'Evento'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-600">ID do Ingresso:</span>
+                  <span className="font-mono text-xs">
+                    {ticketData.ticketId?.slice(0, 10)}...
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-600">Status:</span>
+                  <span className={`font-semibold ${
+                    ticketData.isRedeemed ? 'text-red-500' : 'text-green-500'
+                  }`}>
+                    {ticketData.isRedeemed ? 'JÁ VALIDADO' : 'PRONTO PARA VALIDAR'}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={onClose}
+                disabled={isLoading}
+                className="flex-1 bg-slate-200 text-slate-700 py-3 px-4 rounded-lg font-medium hover:bg-slate-300 transition-colors disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <ActionButton
+                onClick={onConfirm}
+                disabled={isLoading || ticketData.isRedeemed}
+                className="flex-1 flex justify-center items-center gap-2"
+              >
+                {isLoading ? (
+                  <>
+                    <ClockIcon className="h-5 w-5 animate-spin" />
+                    Validando...
+                  </>
+                ) : (
+                  <>
+                    <CheckBadgeIcon className="h-5 w-5" />
+                    Confirmar Entrada
+                  </>
+                )}
+              </ActionButton>
+            </div>
+
+            {ticketData.isRedeemed && (
+              <p className="text-red-500 text-sm text-center mt-3">
+                Este ingresso já foi validado anteriormente.
+              </p>
+            )}
+          </>
+        ) : (
+          <div className="text-center py-8">
+            <ClockIcon className="h-12 w-12 text-slate-400 animate-spin mx-auto mb-4" />
+            <p className="text-slate-600">Carregando dados do ingresso...</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
 const ScannerView = ({ onScan, onManualSearch }) => {
     const [manualId, setManualId] = useState('');
 
@@ -336,70 +341,86 @@ export function ValidatorPage() {
     }, [isValidator, fetchRecentEntries]);
 
     // Função para buscar dados do ingresso (sem validar)
-    const fetchTicketInfo = async (registrationId) => {
-        try {
-            console.log("[VALIDATION] Buscando informações do ingresso:", registrationId);
-            
-            const response = await fetch(`${API_URL}/api/validations/ticket-info/${registrationId}`);
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || "Ingresso não encontrado");
-            }
-            
-            const data = await response.json();
-            console.log("[VALIDATION] Dados do ingresso recebidos:", data);
-            
-            return {
-                ticketId: registrationId,
-                participantName: data.participantName,
-                ownerAddress: data.ownerAddress,
-                eventName: data.eventName,
-                isRedeemed: data.isRedeemed || false,
-                rawData: data
-            };
-            
-        } catch (error) {
-            console.error("[VALIDATION] Erro ao buscar informações:", error);
-            throw error;
-        }
+  const fetchTicketInfo = async (registrationId) => {
+  try {
+    console.log("[VALIDATION] Buscando informações do ingresso:", registrationId);
+    
+    const response = await fetch(`${API_URL}/api/validations/ticket-info/${registrationId}`);
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || errorData.details || "Ingresso não encontrado");
+    }
+    
+    const data = await response.json();
+    console.log("[VALIDATION] Dados do ingresso recebidos:", data);
+    
+    if (!data.success) {
+      throw new Error(data.error || "Falha ao buscar informações do ingresso");
+    }
+    
+    return {
+      ticketId: registrationId,
+      participantName: data.participantName,
+      ownerAddress: data.ownerAddress,
+      ownerName: data.ownerName,
+      eventName: data.eventName,
+      isRedeemed: data.isRedeemed || false,
+      rawData: data
     };
+    
+  } catch (error) {
+    console.error("[VALIDATION] Erro ao buscar informações:", error);
+    throw error;
+  }
+};
 
-    // Função chamada ao escanear QR code ou busca manual
-    const handleScanOrSearch = async (registrationId) => {
-        if (!registrationId) {
-            toast.error("ID do ingresso inválido");
-            return;
-        }
+// Função chamada ao escanear QR code ou busca manual - ATUALIZADA
+const handleScanOrSearch = async (registrationId) => {
+  if (!registrationId) {
+    toast.error("ID do ingresso inválido");
+    return;
+  }
 
-        // Validação básica do UUID
-        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-        if (!uuidRegex.test(registrationId)) {
-            toast.error("ID do ingresso em formato inválido");
-            return;
-        }
+  // Validação básica do UUID
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (!uuidRegex.test(registrationId)) {
+    toast.error("ID do ingresso em formato inválido");
+    return;
+  }
 
-        const loadingToast = toast.loading("Buscando informações do ingresso...");
-        
-        try {
-            const ticketInfo = await fetchTicketInfo(registrationId);
-            
-            // Se o ingresso já foi validado, mostra alerta imediatamente
-            if (ticketInfo.isRedeemed) {
-                toast.error("Este ingresso já foi validado anteriormente!", { id: loadingToast });
-                return;
-            }
+  const loadingToast = toast.loading("Buscando informações do ingresso...");
+  
+  try {
+    const ticketInfo = await fetchTicketInfo(registrationId);
+    
+    // Se o ingresso já foi validado, mostra alerta imediatamente
+    if (ticketInfo.isRedeemed) {
+      toast.error("Este ingresso já foi validado anteriormente!", { id: loadingToast });
+      return;
+    }
 
-            setTicketData(ticketInfo);
-            setPendingValidation(registrationId);
-            setIsModalOpen(true);
-            
-            toast.success("Ingresso encontrado! Confirme a validação.", { id: loadingToast });
-            
-        } catch (error) {
-            console.error("[VALIDATION] Erro ao processar ingresso:", error);
-            toast.error(error.message || "Erro ao buscar informações do ingresso", { id: loadingToast });
-        }
-    };
+    setTicketData(ticketInfo);
+    setPendingValidation(registrationId);
+    setIsModalOpen(true);
+    
+    toast.success("Ingresso encontrado! Confirme a validação.", { id: loadingToast });
+    
+  } catch (error) {
+    console.error("[VALIDATION] Erro ao processar ingresso:", error);
+    
+    // Mensagens de erro mais específicas
+    let errorMessage = "Erro ao buscar informações do ingresso";
+    if (error.message.includes("não encontrado")) {
+      errorMessage = "Ingresso não encontrado. Verifique o ID.";
+    } else if (error.message.includes("formato inválido")) {
+      errorMessage = "ID do ingresso em formato inválido.";
+    } else {
+      errorMessage = error.message || errorMessage;
+    }
+    
+    toast.error(errorMessage, { id: loadingToast });
+  }
+};
 
     // Função para confirmar a validação
     const handleConfirmValidation = async () => {
@@ -601,3 +622,4 @@ export function ValidatorPage() {
         </div>
     );
 }
+
