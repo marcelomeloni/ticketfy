@@ -4,17 +4,14 @@ import { useConnection } from '@solana/wallet-adapter-react';
 import { Program, web3, BN, AnchorProvider } from '@coral-xyz/anchor';
 import { getAssociatedTokenAddress } from '@solana/spl-token';
 import toast from 'react-hot-toast';
-import { pdf } from '@react-pdf/renderer';
-import QRCode from 'qrcode';
 
 import { useAppWallet } from '@/hooks/useAppWallet';
 import { useUserRegistrations } from '@/hooks/useUserRegistrations';
 import { getRegistrationIdByMint } from '@/utils/ticketUtils'; 
-import { TicketPDF } from '@/components/pdf/TicketPDF';
+import { TicketDownloader } from '@/components/TicketDownloader'; // ✅ IMPORTE O COMPONENTE UNIFICADO
 import idl from '@/idl/ticketing_system.json';
 import { PROGRAM_ID, API_URL } from '@/lib/constants';
 import { AcademicCapIcon, ArrowDownTrayIcon, CalendarIcon, MapPinIcon, TagIcon } from '@heroicons/react/24/outline';
-import { supabase } from '@/lib/supabaseClient';
 
 // --- Constantes ---
 const LISTING_SEED = Buffer.from("listing");
@@ -43,7 +40,7 @@ export function MyTickets() {
         return new Program(idl, PROGRAM_ID, provider);
     }, [connection, wallet]);
 
-    // 🔄 ATUALIZADO: Buscar tickets e combinar com registrationIds de forma mais robusta
+    // 🔄 Buscar tickets e combinar com registrationIds
     const fetchAllData = async () => {
         if (!wallet.publicKey) {
             setTickets([]);
@@ -60,7 +57,6 @@ export function MyTickets() {
             const data = await response.json();
 
             if (data.success) {
-                // ✅ CORREÇÃO: Usar abordagem mais robusta para combinar dados
                 const ticketsWithRegistrations = await combineTicketsWithRegistrations(data.tickets);
                 setTickets(ticketsWithRegistrations);
             } else {
@@ -75,13 +71,11 @@ export function MyTickets() {
         }
     };
 
-    // ✅ CORREÇÃO: Função atualizada para buscar registrationIds individualmente
     const combineTicketsWithRegistrations = async (ticketsFromApi) => {
         if (!ticketsFromApi || !wallet.publicKey) return ticketsFromApi;
 
         console.log('[MY_TICKETS] Combinando tickets com registrationIds...');
         
-        // Se temos registrations do hook, usar primeiro (mais eficiente)
         if (registrations && registrations.length > 0) {
             console.log('[MY_TICKETS] Usando registrations do hook:', registrations.length);
             return ticketsFromApi.map(ticket => {
@@ -94,7 +88,6 @@ export function MyTickets() {
             });
         }
 
-        // ✅ FALLBACK: Buscar individualmente para cada ticket
         console.log('[MY_TICKETS] Buscando registrationIds individualmente...');
         const ticketsWithRegistrations = await Promise.all(
             ticketsFromApi.map(async (ticket) => {
@@ -120,17 +113,9 @@ export function MyTickets() {
 
     useEffect(() => {
         fetchAllData();
-    }, [wallet.publicKey, registrations]); // ✅ Mantém a dependência do registrations
+    }, [wallet.publicKey, registrations]);
 
-    // Log de debug para problemas
-    useEffect(() => {
-        if (registrationsError) {
-            console.error('[MY_TICKETS] Erro no hook de registrations:', registrationsError);
-        }
-    }, [registrationsError]);
-
-    // ... (restante do código permanece igual: openSellModal, closeSellModal, handleListForSale, etc.)
-
+    // ... (restante das funções: openSellModal, closeSellModal, handleListForSale, etc.)
     const openSellModal = (ticket) => { setSelectedTicket(ticket); setIsSellModalOpen(true); };
     const closeSellModal = () => { setSelectedTicket(null); setIsSellModalOpen(false); };
 
@@ -290,7 +275,6 @@ export function MyTickets() {
                 <h1 className="text-4xl font-bold text-slate-900">Meus Ingressos</h1>
                 <p className="mt-2 text-slate-600">Aqui estão todos os ingressos que você adquiriu.</p>
                 
-                {/* ✅ DEBUG: Mostrar status dos registrations */}
                 {registrationsError && (
                     <div className="mt-4 p-3 bg-yellow-100 border border-yellow-400 rounded-md text-yellow-800 text-sm">
                         <strong>Aviso:</strong> Não foi possível carregar algumas informações dos ingressos.
@@ -312,116 +296,10 @@ export function MyTickets() {
         </div>
     );
 }
-// ✅ COMPONENTE TicketDownloader ATUALIZADO
-const TicketDownloader = ({ ticket, eventDetails, children, className }) => {
-    const [isLoading, setIsLoading] = useState(false);
-
-    const handleDownload = async () => {
-        if (!eventDetails) return toast.error("Detalhes do evento não encontrados.");
-        
-        setIsLoading(true);
-        const loadingToast = toast.loading('Gerando PDF do ingresso...');
-
-        try {
-            const { account: ticketData, registrationId } = ticket; // ✅ AGORA TEM registrationId
-            const mintAddress = ticketData.nftMint.toString();
-
-            // ✅ VERIFICAÇÃO: Garantir que temos registrationId
-            if (!registrationId) {
-                throw new Error("Não foi possível encontrar o registro do ingresso.");
-            }
-
-            console.log(`[DOWNLOAD] Gerando QR Code com registrationId: ${registrationId}`);
-
-            // ✅ AGORA USA registrationId PARA O QR CODE
-            const qrCodeImage = await QRCode.toDataURL(registrationId, {
-                width: 512,
-                margin: 1,
-            });
-
-            // Processamento da imagem do evento (mantido igual)
-            let eventImageBase64 = null;
-            if (eventDetails.metadata.image) {
-                const response = await fetch(eventDetails.metadata.image, {
-                    headers: { 'Cache-Control': 'no-cache' }
-                });
-                if (!response.ok) throw new Error('Falha ao buscar a imagem do evento.');
-                const blob = await response.blob();
-
-                eventImageBase64 = await new Promise((resolve, reject) => {
-                    const img = new Image();
-                    img.crossOrigin = "anonymous";
-                    const url = URL.createObjectURL(blob);
-                    img.onload = () => {
-                        const canvas = document.createElement('canvas');
-                        canvas.width = img.naturalWidth;
-                        canvas.height = img.naturalHeight;
-                        const ctx = canvas.getContext('2d');
-                        ctx.fillStyle = '#FFFFFF';
-                        ctx.fillRect(0, 0, canvas.width, canvas.height);
-                        ctx.drawImage(img, 0, 0);
-                        const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
-                        URL.revokeObjectURL(url);
-                        resolve(dataUrl);
-                    };
-                    img.onerror = (error) => { 
-                        URL.revokeObjectURL(url); 
-                        reject(error); 
-                    };
-                    img.src = url;
-                });
-            }
-
-            // ✅ Dados atualizados com registrationId
-            const pdfData = {
-                eventName: eventDetails.metadata.name,
-                eventDate: eventDetails.metadata.properties.dateTime.start,
-                eventLocation: eventDetails.metadata.properties.location,
-                mintAddress: mintAddress,
-                eventImage: eventImageBase64,
-                registrationId: registrationId, // ✅ ENVIADO PARA O PDF
-            };
-
-            // Geração do PDF
-            const blob = await pdf(
-                <TicketPDF 
-                    ticketData={pdfData} 
-                    qrCodeImage={qrCodeImage}
-                    brandLogoImage="https://red-obedient-stingray-854.mypinata.cloud/ipfs/bafkreih7ofsa246z5vnjvrol6xk5tpj4zys42tcaotxq7tp7ptgraalrya"
-                />
-            ).toBlob();
-            
-            const downloadUrl = URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = downloadUrl;
-            link.download = `Ingresso_${pdfData.eventName.replace(/\s/g, '_')}.pdf`;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            URL.revokeObjectURL(downloadUrl);
-            
-            toast.success('Ingresso baixado com sucesso!', { id: loadingToast });
-        } catch (error) {
-            console.error('Erro ao gerar PDF:', error);
-            toast.error(error.message || 'Erro ao gerar PDF.', { id: loadingToast });
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    return (
-        <button onClick={handleDownload} disabled={isLoading} className={className}>
-            {isLoading ? 'Gerando...' : children}
-        </button>
-    );
-};
 
 // ✅ COMPONENTE TicketCard ATUALIZADO
 function TicketCard({ ticket, isSubmitting, onSellClick, onCancelClick, onRefundClick }) {
-    const { account: ticketData, event: eventDetails, isListed, registrationId } = ticket; // ✅ AGORA TEM registrationId
-
-    // ✅ REMOVIDA a função handleDownload antiga
-    // Todo o download agora é feito pelo TicketDownloader
+    const { account: ticketData, event: eventDetails, isListed, registrationId } = ticket;
 
     if (!eventDetails) {
         return (
@@ -516,10 +394,11 @@ function TicketCard({ ticket, isSubmitting, onSellClick, onCancelClick, onRefund
                             </Link>
                         )}
                         
-                        {/* ✅ AGORA USA O TicketDownloader ATUALIZADO */}
+                        {/* ✅ AGORA USA O TICKETDOWNLOADER UNIFICADO */}
                         <TicketDownloader 
-                            ticket={ticket} 
+                            ticket={ticket}
                             eventDetails={eventDetails}
+                            registrationId={registrationId}
                             className="w-full bg-slate-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-slate-700 transition flex items-center justify-center gap-2"
                         >
                             <ArrowDownTrayIcon className="h-5 w-5"/> 
@@ -565,5 +444,6 @@ function SellModal({ isOpen, onClose, onSubmit, isSubmitting }) {
     );
 
 }
+
 
 
