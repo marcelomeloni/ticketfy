@@ -114,67 +114,88 @@ export function MyTickets() {
     };
 
     // ✅ FUNÇÃO PARA COMPLETAR DADOS FALTANTES DO EVENTO - VERSÃO CORRIGIDA
-    const enhanceTicketWithEventData = async (ticket) => {
-        // Se o ticket já tem event details válidos, retorna como está
-        if (ticket.event && (ticket.event.metadata || ticket.event.account || ticket.event.name)) {
-            console.log(`[ENHANCE] Ticket ${ticket.publicKey} já tem dados do evento`);
+   const enhanceTicketWithEventData = async (ticket) => {
+    // Se o ticket já tem event details válidos, retorna como está
+    if (ticket.event && (ticket.event.metadata || ticket.event.account || ticket.event.name)) {
+        console.log(`[ENHANCE] Ticket ${ticket.publicKey} já tem dados do evento`);
+        return ticket;
+    }
+
+    try {
+        console.log(`[ENHANCE] Buscando detalhes do evento para ticket: ${ticket.publicKey}`);
+        const eventAddress = ticket.account.event;
+        
+        if (!eventAddress) {
+            console.warn(`[ENHANCE] Ticket ${ticket.publicKey} não tem event address`);
             return ticket;
         }
 
+        // ✅ PRIMEIRO: Tenta a API do Supabase (mais confiável)
         try {
-            console.log(`[ENHANCE] Buscando detalhes do evento para ticket: ${ticket.publicKey}`);
-            const eventAddress = ticket.account.event;
-            
-            if (!eventAddress) {
-                console.warn(`[ENHANCE] Ticket ${ticket.publicKey} não tem event address`);
-                return ticket;
-            }
-
-            // Tenta a API rápida primeiro
-            const eventResponse = await fetch(`${API_URL}/api/events/fast/${eventAddress}`);
-            if (eventResponse.ok) {
-                const eventData = await eventResponse.json();
-                console.log(`[ENHANCE] Dados do evento recebidos para ${eventAddress}:`, {
-                    success: eventData.success,
-                    hasEvent: !!eventData.event,
-                    eventKeys: eventData.event ? Object.keys(eventData.event) : 'NO EVENT IN RESPONSE'
-                });
+            const supabaseResponse = await fetch(`${API_URL}/api/events/supabase/${eventAddress}`);
+            if (supabaseResponse.ok) {
+                const supabaseData = await supabaseResponse.json();
+                console.log(`[ENHANCE] Dados do Supabase recebidos para ${eventAddress}`);
                 
-                if (eventData.success && eventData.event) {
+                if (supabaseData.success && supabaseData.event) {
                     return {
                         ...ticket,
-                        event: eventData.event
-                    };
-                } else if (eventData.success && !eventData.event) {
-                    // A API pode retornar os dados diretamente (sem nested event)
-                    return {
-                        ...ticket,
-                        event: eventData
-                    };
-                }
-            } else {
-                console.warn(`[ENHANCE] API fast falhou: ${eventResponse.status}`);
-            }
-
-            // Fallback: tenta a API tradicional
-            const fallbackResponse = await fetch(`${API_URL}/api/events/${eventAddress}`);
-            if (fallbackResponse.ok) {
-                const fallbackData = await fallbackResponse.json();
-                if (fallbackData.success) {
-                    return {
-                        ...ticket,
-                        event: fallbackData.event
+                        event: supabaseData.event
                     };
                 }
             }
-            
-        } catch (error) {
-            console.error(`[ENHANCE] Erro ao buscar evento para ticket ${ticket.publicKey}:`, error);
+        } catch (supabaseError) {
+            console.warn(`[ENHANCE] API Supabase falhou:`, supabaseError.message);
         }
 
-        // Retorna o ticket original se não conseguiu melhorar
-        return ticket;
-    };
+        // ✅ SEGUNDO: Tenta a API rápida
+        try {
+            const fastResponse = await fetch(`${API_URL}/api/events/fast/${eventAddress}`);
+            if (fastResponse.ok) {
+                const fastData = await fastResponse.json();
+                
+                if (fastData.success && fastData.event) {
+                    return {
+                        ...ticket,
+                        event: fastData.event
+                    };
+                }
+            }
+        } catch (fastError) {
+            console.warn(`[ENHANCE] API fast falhou:`, fastError.message);
+        }
+
+        // ✅ TERCEIRO: Fallback mínimo
+        console.log(`[ENHANCE] Usando fallback para evento ${eventAddress}`);
+        return {
+            ...ticket,
+            event: {
+                metadata: { 
+                    name: "Evento",
+                    properties: {
+                        dateTime: { start: new Date().toISOString() },
+                        location: { venueName: 'Online' }
+                    }
+                },
+                account: {},
+                imageUrl: ''
+            }
+        };
+        
+    } catch (error) {
+        console.error(`[ENHANCE] Erro ao buscar evento para ticket ${ticket.publicKey}:`, error);
+        
+        // Fallback final
+        return {
+            ...ticket,
+            event: {
+                metadata: { name: "Evento não disponível" },
+                account: {},
+                imageUrl: ''
+            }
+        };
+    }
+};
 
     // ✅ COMBINAR TICKETS COM REGISTRATIONS - VERSÃO CORRIGIDA
     const combineTicketsWithRegistrations = async (ticketsFromApi) => {
@@ -755,4 +776,5 @@ function SellModal({ isOpen, onClose, onSubmit, isSubmitting }) {
         </div>
     );
 }
+
 
