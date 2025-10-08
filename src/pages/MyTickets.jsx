@@ -1,3 +1,4 @@
+// components/MyTickets.js (versão atualizada)
 import { useState, useMemo, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useConnection } from '@solana/wallet-adapter-react';
@@ -8,10 +9,12 @@ import { pdf } from '@react-pdf/renderer';
 import QRCode from 'qrcode';
 
 import { useAppWallet } from '@/hooks/useAppWallet';
+import { useUserRegistrations } from '@/hooks/useUserRegistrations'; // ✅ NOVO HOOK
 import { TicketPDF } from '@/components/pdf/TicketPDF';
 import idl from '@/idl/ticketing_system.json';
 import { PROGRAM_ID, API_URL } from '@/lib/constants';
 import { AcademicCapIcon, ArrowDownTrayIcon, CalendarIcon, MapPinIcon, TagIcon } from '@heroicons/react/24/outline';
+import { supabase } from '@/lib/supabaseClient'; // ✅ IMPORT DO SUPABASE
 
 // --- Constantes ---
 const LISTING_SEED = Buffer.from("listing");
@@ -22,6 +25,8 @@ const APP_BASE_URL = "https://ticketfy.app";
 export function MyTickets() {
     const { connection } = useConnection();
     const wallet = useAppWallet();
+    const { registrations, isLoading: isLoadingRegistrations } = useUserRegistrations(); // ✅ NOVO HOOK
+    
     const [tickets, setTickets] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isSellModalOpen, setIsSellModalOpen] = useState(false);
@@ -38,7 +43,7 @@ export function MyTickets() {
         return new Program(idl, PROGRAM_ID, provider);
     }, [connection, wallet]);
 
-    // 🔄 ATUALIZADO: Nova URL da API modularizada
+    // 🔄 ATUALIZADO: Buscar tickets e combinar com registrationIds
     const fetchAllData = async () => {
         if (!wallet.publicKey) {
             setTickets([]);
@@ -54,7 +59,9 @@ export function MyTickets() {
             const data = await response.json();
 
             if (data.success) {
-                setTickets(data.tickets);
+                // ✅ COMBINAÇÃO: Juntar tickets com registrationIds
+                const ticketsWithRegistrations = await combineTicketsWithRegistrations(data.tickets, registrations);
+                setTickets(ticketsWithRegistrations);
             } else {
                 throw new Error(data.error || 'Erro desconhecido da API.');
             }
@@ -67,9 +74,29 @@ export function MyTickets() {
         }
     };
 
+    // ✅ NOVA FUNÇÃO: Combinar tickets com registrationIds
+    const combineTicketsWithRegistrations = async (ticketsFromApi, userRegistrations) => {
+        if (!ticketsFromApi || !userRegistrations) return ticketsFromApi;
+
+        return ticketsFromApi.map(ticket => {
+            const mintAddress = ticket.account.nftMint.toString();
+            
+            // Encontrar o registration correspondente
+            const registration = userRegistrations.find(reg => 
+                reg.mint_address === mintAddress
+            );
+
+            return {
+                ...ticket,
+                registrationId: registration?.id || null
+            };
+        });
+    };
+
     useEffect(() => {
         fetchAllData();
-    }, [wallet.publicKey]);
+    }, [wallet.publicKey, registrations]);
+
 
     const openSellModal = (ticket) => { setSelectedTicket(ticket); setIsSellModalOpen(true); };
     const closeSellModal = () => { setSelectedTicket(null); setIsSellModalOpen(false); };
@@ -179,8 +206,9 @@ export function MyTickets() {
         }
     };
 
+  
     const renderContent = () => {
-        if (isLoading) return <div className="text-center text-slate-500">Carregando seus ingressos...</div>;
+        if (isLoading || isLoadingRegistrations) return <div className="text-center text-slate-500">Carregando seus ingressos...</div>;
         if (!wallet.connected) return <div className="text-center text-slate-500">Conecte sua carteira ou faça login para ver seus ingressos.</div>;
         if (tickets.length === 0) return (
             <div className="text-center text-slate-500">
@@ -224,67 +252,77 @@ export function MyTickets() {
     );
 }
 
-function TicketCard({ ticket, isSubmitting, onSellClick, onCancelClick, onRefundClick }) {
-    const { account: ticketData, event: eventDetails, isListed } = ticket;
+// ✅ COMPONENTE TicketDownloader ATUALIZADO
+const TicketDownloader = ({ ticket, eventDetails, children, className }) => {
+    const [isLoading, setIsLoading] = useState(false);
 
     const handleDownload = async () => {
         if (!eventDetails) return toast.error("Detalhes do evento não encontrados.");
+        
+        setIsLoading(true);
         const loadingToast = toast.loading('Gerando PDF do ingresso...');
 
         try {
-            // Passo A: Gerar a imagem do QR Code como Base64 (Data URL)
-            const qrCodeImage = await QRCode.toDataURL(ticketData.nftMint.toString(), {
+            const { account: ticketData, registrationId } = ticket; // ✅ AGORA TEM registrationId
+            const mintAddress = ticketData.nftMint.toString();
+
+            // ✅ VERIFICAÇÃO: Garantir que temos registrationId
+            if (!registrationId) {
+                throw new Error("Não foi possível encontrar o registro do ingresso.");
+            }
+
+            console.log(`[DOWNLOAD] Gerando QR Code com registrationId: ${registrationId}`);
+
+            // ✅ AGORA USA registrationId PARA O QR CODE
+            const qrCodeImage = await QRCode.toDataURL(registrationId, {
                 width: 512,
                 margin: 1,
             });
 
-            // Passo B: Baixar a imagem do evento e CONVERTÊ-LA para JPEG
+            // Processamento da imagem do evento (mantido igual)
             let eventImageBase64 = null;
             if (eventDetails.metadata.image) {
-                const response = await fetch(eventDetails.metadata.image);
+                const response = await fetch(eventDetails.metadata.image, {
+                    headers: { 'Cache-Control': 'no-cache' }
+                });
                 if (!response.ok) throw new Error('Falha ao buscar a imagem do evento.');
                 const blob = await response.blob();
 
-                // Lógica de conversão usando Canvas
                 eventImageBase64 = await new Promise((resolve, reject) => {
                     const img = new Image();
+                    img.crossOrigin = "anonymous";
                     const url = URL.createObjectURL(blob);
-                    
                     img.onload = () => {
                         const canvas = document.createElement('canvas');
                         canvas.width = img.naturalWidth;
                         canvas.height = img.naturalHeight;
                         const ctx = canvas.getContext('2d');
-                        
                         ctx.fillStyle = '#FFFFFF';
                         ctx.fillRect(0, 0, canvas.width, canvas.height);
                         ctx.drawImage(img, 0, 0);
-                        
                         const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
-                        
                         URL.revokeObjectURL(url);
                         resolve(dataUrl);
                     };
-
-                    img.onerror = (error) => {
-                        URL.revokeObjectURL(url);
-                        reject(error);
+                    img.onerror = (error) => { 
+                        URL.revokeObjectURL(url); 
+                        reject(error); 
                     };
-
                     img.src = url;
                 });
             }
 
-            // Passo C: Montar os dados para o PDF
+            // ✅ Dados atualizados com registrationId
             const pdfData = {
                 eventName: eventDetails.metadata.name,
                 eventDate: eventDetails.metadata.properties.dateTime.start,
                 eventLocation: eventDetails.metadata.properties.location,
-                mintAddress: ticketData.nftMint.toString(),
+                mintAddress: mintAddress,
                 eventImage: eventImageBase64,
+                registrationId: registrationId, // ✅ ENVIADO PARA O PDF
             };
 
-            // Passo D: Gerar o blob do PDF e iniciar o download
+            // Geração do PDF
             const blob = await pdf(
                 <TicketPDF 
                     ticketData={pdfData} 
@@ -293,22 +331,38 @@ function TicketCard({ ticket, isSubmitting, onSellClick, onCancelClick, onRefund
                 />
             ).toBlob();
             
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `Ingresso_${pdfData.eventName.replace(/\s/g, '_')}.pdf`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
+            const downloadUrl = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = downloadUrl;
+            link.download = `Ingresso_${pdfData.eventName.replace(/\s/g, '_')}.pdf`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(downloadUrl);
             
             toast.success('Ingresso baixado com sucesso!', { id: loadingToast });
         } catch (error) {
             console.error('Erro ao gerar PDF:', error);
-            toast.error('Erro ao gerar PDF. Verifique o console.', { id: loadingToast });
+            toast.error(error.message || 'Erro ao gerar PDF.', { id: loadingToast });
+        } finally {
+            setIsLoading(false);
         }
     };
-    
+
+    return (
+        <button onClick={handleDownload} disabled={isLoading} className={className}>
+            {isLoading ? 'Gerando...' : children}
+        </button>
+    );
+};
+
+// ✅ COMPONENTE TicketCard ATUALIZADO
+function TicketCard({ ticket, isSubmitting, onSellClick, onCancelClick, onRefundClick }) {
+    const { account: ticketData, event: eventDetails, isListed, registrationId } = ticket; // ✅ AGORA TEM registrationId
+
+    // ✅ REMOVIDA a função handleDownload antiga
+    // Todo o download agora é feito pelo TicketDownloader
+
     if (!eventDetails) {
         return (
             <div className="bg-white rounded-xl shadow-lg overflow-hidden h-[420px] p-6 flex flex-col justify-center items-center">
@@ -334,9 +388,6 @@ function TicketCard({ ticket, isSubmitting, onSellClick, onCancelClick, onRefund
     const certificateUrl = `${APP_BASE_URL}/certificate/${ticketData.nftMint.toString()}`;
     
     const renderActionArea = () => {
-        // ✅ MUDANÇA PRINCIPAL: Removemos a distinção entre ingressos gratuitos e pagos para a venda
-        // Agora todos os ingressos podem ser vendidos, independente de serem gratuitos ou pagos
-
         if (isEventCanceled && isListed) {
             return ( 
                 <> 
@@ -351,8 +402,6 @@ function TicketCard({ ticket, isSubmitting, onSellClick, onCancelClick, onRefund
         }
         
         if (isEventCanceled && !isListed) {
-            // ✅ MUDANÇA: Agora também mostra reembolso para ingressos gratuitos se necessário
-            // (ou mantém a lógica específica se quiser diferenciar)
             return ( 
                 <button onClick={onRefundClick} disabled={isSubmitting || ticketData.redeemed} className="w-full bg-orange-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-orange-600 transition disabled:bg-slate-400 disabled:cursor-not-allowed">
                     {ticketData.redeemed ? 'Ingresso já utilizado' : (isSubmitting ? 'Processando...' : 'Solicitar Reembolso')}
@@ -368,8 +417,6 @@ function TicketCard({ ticket, isSubmitting, onSellClick, onCancelClick, onRefund
             );
         }
         
-        // ✅ MUDANÇA CRÍTICA: Botão de VENDER disponível para TODOS os ingressos
-        // (gratuitos e pagos), desde que não estejam utilizados
         return (
             <button onClick={onSellClick} disabled={ticketData.redeemed || isSubmitting} className="w-full bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-indigo-700 transition disabled:bg-slate-400 disabled:cursor-not-allowed flex items-center justify-center gap-2">
                 <TagIcon className="h-5 w-5"/>
@@ -397,9 +444,7 @@ function TicketCard({ ticket, isSubmitting, onSellClick, onCancelClick, onRefund
                 <div className="mt-auto pt-6 space-y-3">
                     {renderActionArea()}
                     
-                    {/* ✅ MUDANÇA: Área de ações secundárias unificada */}
                     <div className="flex flex-col gap-2">
-                        {/* Botão de Certificado (apenas para gratuitos e quando resgatado) */}
                         {isFreeTicket && (
                             <Link 
                                 to={certificateUrl} 
@@ -411,13 +456,16 @@ function TicketCard({ ticket, isSubmitting, onSellClick, onCancelClick, onRefund
                             </Link>
                         )}
                         
-                        {/* Botão de Download (sempre disponível) */}
-                        <button onClick={handleDownload} className="w-full bg-slate-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-slate-700 transition flex items-center justify-center gap-2">
+                        {/* ✅ AGORA USA O TicketDownloader ATUALIZADO */}
+                        <TicketDownloader 
+                            ticket={ticket} 
+                            eventDetails={eventDetails}
+                            className="w-full bg-slate-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-slate-700 transition flex items-center justify-center gap-2"
+                        >
                             <ArrowDownTrayIcon className="h-5 w-5"/> 
                             Baixar Ingresso
-                        </button>
+                        </TicketDownloader>
                         
-                        {/* Aviso sobre certificado */}
                         {isFreeTicket && !ticketData.redeemed && (
                             <p className="text-xs text-center text-slate-500 mt-1">
                                 Certificado disponível após check-in.
@@ -457,3 +505,4 @@ function SellModal({ isOpen, onClose, onSubmit, isSubmitting }) {
     );
 
 }
+
