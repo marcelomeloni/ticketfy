@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { ActionButton } from '../ui/ActionButton';
 import { CalendarIcon, MapPinIcon, TicketIcon } from '@heroicons/react/24/outline';
+import { API_URL } from '@/lib/constants';
 
 // --- COMPONENTE DE ESQUELETO (LOADING STATE) ---
 const CardSkeleton = () => (
@@ -49,50 +50,128 @@ const StatusBadge = ({ status }) => {
 };
 
 export function EventSummaryCard({ event, publicKey }) {
-    // Estado para os metadados (off-chain) e carregamento
-    const [metadata, setMetadata] = useState(null);
+    // Estado para os metadados (do Supabase) e carregamento
+    const [eventData, setEventData] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState(null);
 
     useEffect(() => {
-        const fetchMetadata = async () => {
+        const fetchEventData = async () => {
             try {
-                // Previne o fetch se a URI não existir
-                if (!event.metadataUri) throw new Error("Metadata URI is missing");
-                
                 setIsLoading(true);
-                const response = await fetch(event.metadataUri);
-                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                setError(null);
+                
+                console.log(`🎯 Buscando dados do evento via API rápida: ${publicKey.toString()}`);
+                
+                // ✅ BUSCA DIRETA DO SUPABASE VIA API RÁPIDA
+                const response = await fetch(`${API_URL}/api/events/fast/${publicKey.toString()}`);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
                 const data = await response.json();
-                setMetadata(data);
+                
+                if (data.success && data.event) {
+                    console.log('✅ Dados do evento carregados via API rápida');
+                    setEventData(data.event);
+                } else {
+                    throw new Error('Evento não encontrado na API');
+                }
             } catch (error) {
-                console.error("Failed to fetch event summary metadata:", error);
-                // Define um fallback caso o metadado falhe
-                setMetadata({ name: "Erro ao carregar evento", properties: {} }); 
+                console.error("❌ Falha ao buscar dados do evento via API:", error);
+                setError(error.message);
+                
+                // ✅ FALLBACK: Tenta usar os dados on-chain básicos
+                if (event.metadataUri) {
+                    console.log('🔄 Tentando fallback para metadata URI...');
+                    try {
+                        const fallbackResponse = await fetch(event.metadataUri);
+                        if (fallbackResponse.ok) {
+                            const metadata = await fallbackResponse.json();
+                            setEventData({
+                                metadata: metadata,
+                                account: event,
+                                imageUrl: metadata.image
+                            });
+                        }
+                    } catch (fallbackError) {
+                        console.error('❌ Fallback também falhou:', fallbackError);
+                        // Define um fallback mínimo
+                        setEventData({
+                            metadata: { 
+                                name: "Evento", 
+                                properties: {
+                                    location: { venueName: 'Online' },
+                                    dateTime: { start: new Date().toISOString() }
+                                }
+                            },
+                            account: event,
+                            imageUrl: ''
+                        });
+                    }
+                } else {
+                    // Fallback mínimo
+                    setEventData({
+                        metadata: { 
+                            name: "Evento", 
+                            properties: {
+                                location: { venueName: 'Online' },
+                                dateTime: { start: new Date().toISOString() }
+                            }
+                        },
+                        account: event,
+                        imageUrl: ''
+                    });
+                }
             } finally {
                 setIsLoading(false);
             }
         };
-        fetchMetadata();
-    }, [event.metadataUri]);
+        
+        fetchEventData();
+    }, [publicKey, event.metadataUri]);
 
-   
     const status = useMemo(() => {
+        if (!eventData) return 'upcoming';
+        
         const now = Math.floor(Date.now() / 1000);
-        if (event.canceled) return 'canceled';
-        // A data do evento real está off-chain, então usamos o fim das vendas como referência
-        if (now > event.salesEndDate.toNumber()) return 'finished'; 
-        if (now < event.salesStartDate.toNumber()) return 'upcoming';
+        if (eventData.account.canceled) return 'canceled';
+        if (now > eventData.account.salesEndDate.toNumber()) return 'finished';
+        if (now < eventData.account.salesStartDate.toNumber()) return 'upcoming';
         return 'active';
-    }, [event.canceled, event.salesStartDate, event.salesEndDate]);
+    }, [eventData]);
 
     // Lógica para a barra de progresso (on-chain)
-    const totalSupply = useMemo(() => Array.isArray(event.tiers) ? event.tiers.reduce((sum, tier) => sum + tier.maxTicketsSupply, 0) : 0, [event.tiers]);
-    const totalSold = event.totalTicketsSold || 0;
+    const totalSupply = useMemo(() => {
+        if (!eventData) return 0;
+        return Array.isArray(eventData.account.tiers) 
+            ? eventData.account.tiers.reduce((sum, tier) => sum + (tier.maxTicketsSupply || 0), 0) 
+            : 0;
+    }, [eventData]);
+
+    const totalSold = useMemo(() => {
+        if (!eventData) return 0;
+        return eventData.account.totalTicketsSold || 0;
+    }, [eventData]);
+
     const progress = totalSupply > 0 ? (totalSold / totalSupply) * 100 : 0;
     
-    // Renderiza o esqueleto enquanto os metadados carregam
+    // Renderiza o esqueleto enquanto os dados carregam
     if (isLoading) {
         return <CardSkeleton />;
+    }
+
+    // Se há erro mas temos dados mínimos, ainda renderiza
+    if (error && !eventData) {
+        return (
+            <div className="bg-white p-6 rounded-xl border border-red-200">
+                <div className="text-center text-red-600">
+                    <p>Erro ao carregar evento</p>
+                    <p className="text-sm text-red-400">{error}</p>
+                </div>
+            </div>
+        );
     }
 
     return (
@@ -101,13 +180,25 @@ export function EventSummaryCard({ event, publicKey }) {
                 {/* Coluna de Informações */}
                 <div className="flex-grow space-y-4">
                     <div className="flex items-center gap-4">
-                        <h3 className="text-2xl font-bold text-slate-900">{metadata.name}</h3>
+                        <h3 className="text-2xl font-bold text-slate-900">
+                            {eventData.metadata?.name || 'Evento sem nome'}
+                        </h3>
                         <StatusBadge status={status} />
                     </div>
                     <div className="flex items-center text-sm text-slate-500 gap-6">
-                        <span className="flex items-center gap-2"><MapPinIcon className="h-4 w-4" /> {metadata.properties?.location?.address?.city || 'Online'}</span>
-                        <span className="flex items-center gap-2"><CalendarIcon className="h-4 w-4" /> 
-                            {new Date(metadata.properties?.dateTime?.start || Date.now()).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}
+                        <span className="flex items-center gap-2">
+                            <MapPinIcon className="h-4 w-4" /> 
+                            {eventData.metadata?.properties?.location?.venueName || 'Online'}
+                        </span>
+                        <span className="flex items-center gap-2">
+                            <CalendarIcon className="h-4 w-4" /> 
+                            {eventData.metadata?.properties?.dateTime?.start 
+                                ? new Date(eventData.metadata.properties.dateTime.start).toLocaleDateString('pt-BR', { 
+                                    day: '2-digit', 
+                                    month: 'short' 
+                                })
+                                : 'Data não definida'
+                            }
                         </span>
                     </div>
 
@@ -119,7 +210,10 @@ export function EventSummaryCard({ event, publicKey }) {
                                 <span className="text-sm font-bold text-slate-700">{totalSold} / {totalSupply}</span>
                             </div>
                             <div className="w-full bg-slate-200 rounded-full h-2.5">
-                                <div className="bg-indigo-600 h-2.5 rounded-full" style={{ width: `${progress}%` }}></div>
+                                <div 
+                                    className="bg-indigo-600 h-2.5 rounded-full transition-all duration-300" 
+                                    style={{ width: `${progress}%` }}
+                                ></div>
                             </div>
                         </div>
                     )}
@@ -135,6 +229,13 @@ export function EventSummaryCard({ event, publicKey }) {
                     </Link>
                 </div>
             </div>
+            
+            {/* Aviso de erro se houver, mas com dados */}
+            {error && (
+                <div className="mt-4 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs text-yellow-800">
+                    <strong>Aviso:</strong> Alguns dados podem estar incompletos devido a problemas de conexão.
+                </div>
+            )}
         </div>
     );
 }
