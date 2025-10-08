@@ -4,61 +4,75 @@ import QRCode from 'react-qr-code';
 import toast from 'react-hot-toast';
 import { ArrowDownTrayIcon, ExclamationTriangleIcon, ShieldCheckIcon, ClockIcon } from '@heroicons/react/24/outline';
 import { supabase } from '../lib/supabaseClient';
-import { jsPDF } from "jspdf"; // Importando a biblioteca jsPDF
+import { jsPDF } from "jspdf";
 
 import { API_URL } from '@/lib/constants';
 
-// --- Componente de Exibição do Certificado (Design Profissional) ---
 const CertificateDisplay = ({ profile, ticketData, eventName }) => {
     const qrCodeContainerRef = useRef(null);
 
-    // Extrai os novos dados dos metadados do evento com segurança
-    const organizerLogoUrl = ticketData.event?.metadata?.organizer?.organizerLogo;
-    const complementaryHours = ticketData.event?.metadata?.additionalInfo?.complementaryHours;
+    // **CORREÇÃO: Extração segura dos dados do evento**
+    // Como o metadata vem de registration_details, ajustamos a extração
+    const eventMetadata = ticketData.event?.metadata || {};
+    
+    // Tentar buscar logo do organizador de várias fontes possíveis
+    const organizerLogoUrl = eventMetadata.organizerLogo || 
+                           eventMetadata.organizer?.organizerLogo || 
+                           eventMetadata.logo || 
+                           '/default-event-logo.png';
+    
+    // Tentar buscar horas complementares de várias fontes
+    const complementaryHours = eventMetadata.complementaryHours || 
+                             eventMetadata.hours || 
+                             eventMetadata.additionalInfo?.complementaryHours || 
+                             0;
 
-    const handleDownload = () => {
+    const handleDownload = async () => {
         const loadingToast = toast.loading("Gerando seu certificado em PDF...");
 
-        const loadImage = (src) => {
-            return new Promise((resolve, reject) => {
-                if (!src) {
-                    // Se a URL for nula ou vazia, resolve com null para não quebrar o Promise.all
-                    return resolve(null);
-                }
-                const img = new Image();
-                img.crossOrigin = "anonymous";
-                img.onload = () => resolve(img);
-                img.onerror = () => reject(new Error(`Falha ao carregar imagem: ${src}`));
-                img.src = src;
-            });
-        };
+        try {
+            const loadImage = (src) => {
+                return new Promise((resolve, reject) => {
+                    if (!src || src === '/default-event-logo.png') {
+                        return resolve(null);
+                    }
+                    const img = new Image();
+                    img.crossOrigin = "anonymous";
+                    img.onload = () => resolve(img);
+                    img.onerror = () => {
+                        console.warn(`Falha ao carregar imagem: ${src}`);
+                        resolve(null);
+                    };
+                    img.src = src;
+                });
+            };
 
-        const svgElement = qrCodeContainerRef.current?.querySelector('svg');
-        if (!svgElement) {
-            toast.error("QR Code não encontrado.", { id: loadingToast });
-            return;
-        }
-        const svgData = new XMLSerializer().serializeToString(svgElement);
-        const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
-        const qrCodeUrl = URL.createObjectURL(svgBlob);
+            const svgElement = qrCodeContainerRef.current?.querySelector('svg');
+            if (!svgElement) {
+                throw new Error("QR Code não encontrado.");
+            }
 
-        const imagePromises = [
-            loadImage(qrCodeUrl),
-            loadImage('/logo.png'), // Logo da Ticketfy
-            loadImage(organizerLogoUrl)  // Logo do organizador (pode ser nulo)
-        ];
+            const svgData = new XMLSerializer().serializeToString(svgElement);
+            const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+            const qrCodeUrl = URL.createObjectURL(svgBlob);
 
-        Promise.all(imagePromises).then(([qrCodeImage, ticketfyLogoImage, organizerLogoImage]) => {
+            const imagePromises = [
+                loadImage(qrCodeUrl),
+                loadImage('/logo.png'),
+                loadImage(organizerLogoUrl)
+            ];
+
+            const [qrCodeImage, ticketfyLogoImage, organizerLogoImage] = await Promise.all(imagePromises);
+
             const scale = 2;
             const canvas = document.createElement('canvas');
-            // Dimensões padrão A4 paisagem (em pontos)
             const canvasWidth = 842;
             const canvasHeight = 595;
             canvas.width = canvasWidth * scale;
             canvas.height = canvasHeight * scale;
             const ctx = canvas.getContext('2d');
 
-            // --- Início do Desenho (Lógica inalterada) ---
+            // Código de desenho do certificado (mantido igual)
             ctx.fillStyle = '#FFFFFF';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
             ctx.strokeStyle = '#E2E8F0';
@@ -118,34 +132,27 @@ const CertificateDisplay = ({ profile, ticketData, eventName }) => {
             const qrSize = 80 * scale;
             ctx.drawImage(qrCodeImage, canvas.width / 2 - qrSize / 2, canvas.height - 120 * scale, qrSize, qrSize);
             URL.revokeObjectURL(qrCodeUrl);
-            // --- Fim do Desenho ---
 
-
-            // --- ALTERAÇÃO: GERAÇÃO DE PDF ---
-            // 1. Converte o canvas para uma imagem PNG em data URL
+            // Geração do PDF
             const imgData = canvas.toDataURL('image/png');
-            
-            // 2. Cria uma nova instância do jsPDF em modo paisagem, usando as dimensões do canvas
             const pdf = new jsPDF({
                 orientation: 'landscape',
                 unit: 'px',
                 format: [canvasWidth, canvasHeight]
             });
             
-            // 3. Adiciona a imagem do canvas ao PDF, cobrindo a página inteira
             pdf.addImage(imgData, 'PNG', 0, 0, canvasWidth, canvasHeight);
-            
-            // 4. Inicia o download do PDF
             pdf.save(`Certificado-${eventName}-${profile.name.replace(/\s/g, '_')}.pdf`);
 
             toast.success("Download do PDF iniciado!", { id: loadingToast });
 
-        }).catch(error => {
-            console.error("Erro ao carregar imagens para o certificado:", error);
-            toast.error("Não foi possível carregar as imagens para o certificado.", { id: loadingToast });
-        });
+        } catch (error) {
+            console.error("Erro ao gerar certificado:", error);
+            toast.error(error.message || "Erro ao gerar certificado.", { id: loadingToast });
+        }
     };
 
+    const displayEventName = eventName || "Evento Especial";
     const certificateId = ticketData.ticket.nftMint;
     const issueDate = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
 
@@ -156,11 +163,11 @@ const CertificateDisplay = ({ profile, ticketData, eventName }) => {
                 <div className="absolute -bottom-16 -right-16 w-64 h-64 border-[12px] border-slate-50"></div>
                 <div className="relative z-10">
                     
-                    {organizerLogoUrl && (
+                    {organizerLogoUrl && organizerLogoUrl !== '/default-event-logo.png' && (
                         <img src={organizerLogoUrl} alt="Logo do Organizador" className="h-16 mx-auto mb-4 object-contain" />
                     )}
 
-                    <h1 className="text-4xl sm:text-5xl font-serif font-bold text-slate-800">{eventName}</h1>
+                    <h1 className="text-4xl sm:text-5xl font-serif font-bold text-slate-800">{displayEventName}</h1>
                     <h3 className="mt-4 text-sm uppercase tracking-widest text-slate-500">Certificado de Participação</h3>
 
                     <p className="mt-12 text-lg text-slate-600">Este certificado é concedido a</p>
@@ -290,3 +297,4 @@ export const CertificatePage = () => {
         </div>
     );
 };
+
