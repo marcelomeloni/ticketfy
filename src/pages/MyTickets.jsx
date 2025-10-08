@@ -1,4 +1,3 @@
-// components/MyTickets.js (versão atualizada)
 import { useState, useMemo, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useConnection } from '@solana/wallet-adapter-react';
@@ -9,12 +8,13 @@ import { pdf } from '@react-pdf/renderer';
 import QRCode from 'qrcode';
 
 import { useAppWallet } from '@/hooks/useAppWallet';
-import { useUserRegistrations } from '@/hooks/useUserRegistrations'; // ✅ NOVO HOOK
+import { useUserRegistrations } from '@/hooks/useUserRegistrations';
+import { getRegistrationIdByMint } from '@/utils/ticketUtils'; 
 import { TicketPDF } from '@/components/pdf/TicketPDF';
 import idl from '@/idl/ticketing_system.json';
 import { PROGRAM_ID, API_URL } from '@/lib/constants';
 import { AcademicCapIcon, ArrowDownTrayIcon, CalendarIcon, MapPinIcon, TagIcon } from '@heroicons/react/24/outline';
-import { supabase } from '@/lib/supabaseClient'; // ✅ IMPORT DO SUPABASE
+import { supabase } from '@/lib/supabaseClient';
 
 // --- Constantes ---
 const LISTING_SEED = Buffer.from("listing");
@@ -25,7 +25,7 @@ const APP_BASE_URL = "https://ticketfy.app";
 export function MyTickets() {
     const { connection } = useConnection();
     const wallet = useAppWallet();
-    const { registrations, isLoading: isLoadingRegistrations } = useUserRegistrations(); // ✅ NOVO HOOK
+    const { registrations, isLoading: isLoadingRegistrations, error: registrationsError } = useUserRegistrations();
     
     const [tickets, setTickets] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -43,7 +43,7 @@ export function MyTickets() {
         return new Program(idl, PROGRAM_ID, provider);
     }, [connection, wallet]);
 
-    // 🔄 ATUALIZADO: Buscar tickets e combinar com registrationIds
+    // 🔄 ATUALIZADO: Buscar tickets e combinar com registrationIds de forma mais robusta
     const fetchAllData = async () => {
         if (!wallet.publicKey) {
             setTickets([]);
@@ -52,6 +52,7 @@ export function MyTickets() {
         }
         setIsLoading(true);
         try {
+            console.log('[MY_TICKETS] Buscando tickets para:', wallet.publicKey.toString());
             const response = await fetch(`${API_URL}/api/tickets/user-tickets/${wallet.publicKey.toString()}`);
             if (!response.ok) {
                 throw new Error('Falha ao buscar ingressos na API.');
@@ -59,8 +60,8 @@ export function MyTickets() {
             const data = await response.json();
 
             if (data.success) {
-                // ✅ COMBINAÇÃO: Juntar tickets com registrationIds
-                const ticketsWithRegistrations = await combineTicketsWithRegistrations(data.tickets, registrations);
+                // ✅ CORREÇÃO: Usar abordagem mais robusta para combinar dados
+                const ticketsWithRegistrations = await combineTicketsWithRegistrations(data.tickets);
                 setTickets(ticketsWithRegistrations);
             } else {
                 throw new Error(data.error || 'Erro desconhecido da API.');
@@ -74,29 +75,61 @@ export function MyTickets() {
         }
     };
 
-    // ✅ NOVA FUNÇÃO: Combinar tickets com registrationIds
-    const combineTicketsWithRegistrations = async (ticketsFromApi, userRegistrations) => {
-        if (!ticketsFromApi || !userRegistrations) return ticketsFromApi;
+    // ✅ CORREÇÃO: Função atualizada para buscar registrationIds individualmente
+    const combineTicketsWithRegistrations = async (ticketsFromApi) => {
+        if (!ticketsFromApi || !wallet.publicKey) return ticketsFromApi;
 
-        return ticketsFromApi.map(ticket => {
-            const mintAddress = ticket.account.nftMint.toString();
-            
-            // Encontrar o registration correspondente
-            const registration = userRegistrations.find(reg => 
-                reg.mint_address === mintAddress
-            );
+        console.log('[MY_TICKETS] Combinando tickets com registrationIds...');
+        
+        // Se temos registrations do hook, usar primeiro (mais eficiente)
+        if (registrations && registrations.length > 0) {
+            console.log('[MY_TICKETS] Usando registrations do hook:', registrations.length);
+            return ticketsFromApi.map(ticket => {
+                const mintAddress = ticket.account.nftMint.toString();
+                const registration = registrations.find(reg => reg.mint_address === mintAddress);
+                return {
+                    ...ticket,
+                    registrationId: registration?.id || null
+                };
+            });
+        }
 
-            return {
-                ...ticket,
-                registrationId: registration?.id || null
-            };
-        });
+        // ✅ FALLBACK: Buscar individualmente para cada ticket
+        console.log('[MY_TICKETS] Buscando registrationIds individualmente...');
+        const ticketsWithRegistrations = await Promise.all(
+            ticketsFromApi.map(async (ticket) => {
+                const mintAddress = ticket.account.nftMint.toString();
+                try {
+                    const registrationId = await getRegistrationIdByMint(mintAddress, wallet.publicKey.toString());
+                    return {
+                        ...ticket,
+                        registrationId
+                    };
+                } catch (error) {
+                    console.error(`[MY_TICKETS] Erro ao buscar registrationId para ${mintAddress}:`, error);
+                    return {
+                        ...ticket,
+                        registrationId: null
+                    };
+                }
+            })
+        );
+
+        return ticketsWithRegistrations;
     };
 
     useEffect(() => {
         fetchAllData();
-    }, [wallet.publicKey, registrations]);
+    }, [wallet.publicKey, registrations]); // ✅ Mantém a dependência do registrations
 
+    // Log de debug para problemas
+    useEffect(() => {
+        if (registrationsError) {
+            console.error('[MY_TICKETS] Erro no hook de registrations:', registrationsError);
+        }
+    }, [registrationsError]);
+
+    // ... (restante do código permanece igual: openSellModal, closeSellModal, handleListForSale, etc.)
 
     const openSellModal = (ticket) => { setSelectedTicket(ticket); setIsSellModalOpen(true); };
     const closeSellModal = () => { setSelectedTicket(null); setIsSellModalOpen(false); };
@@ -206,16 +239,34 @@ export function MyTickets() {
         }
     };
 
-  
     const renderContent = () => {
-        if (isLoading || isLoadingRegistrations) return <div className="text-center text-slate-500">Carregando seus ingressos...</div>;
-        if (!wallet.connected) return <div className="text-center text-slate-500">Conecte sua carteira ou faça login para ver seus ingressos.</div>;
-        if (tickets.length === 0) return (
-            <div className="text-center text-slate-500">
-                <p>Você ainda não possui ingressos.</p>
-                <Link to="/events" className="text-indigo-600 hover:underline mt-2 inline-block">Ver eventos</Link>
-            </div>
-        );
+        if (isLoading || isLoadingRegistrations) {
+            return (
+                <div className="text-center text-slate-500">
+                    <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mb-2"></div>
+                    <p>Carregando seus ingressos...</p>
+                </div>
+            );
+        }
+        
+        if (!wallet.connected) {
+            return (
+                <div className="text-center text-slate-500">
+                    <p>Conecte sua carteira ou faça login para ver seus ingressos.</p>
+                </div>
+            );
+        }
+        
+        if (tickets.length === 0) {
+            return (
+                <div className="text-center text-slate-500">
+                    <p>Você ainda não possui ingressos.</p>
+                    <Link to="/events" className="text-indigo-600 hover:underline mt-2 inline-block">
+                        Ver eventos
+                    </Link>
+                </div>
+            );
+        }
 
         return (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
@@ -238,8 +289,18 @@ export function MyTickets() {
             <header className="text-center mb-12">
                 <h1 className="text-4xl font-bold text-slate-900">Meus Ingressos</h1>
                 <p className="mt-2 text-slate-600">Aqui estão todos os ingressos que você adquiriu.</p>
+                
+                {/* ✅ DEBUG: Mostrar status dos registrations */}
+                {registrationsError && (
+                    <div className="mt-4 p-3 bg-yellow-100 border border-yellow-400 rounded-md text-yellow-800 text-sm">
+                        <strong>Aviso:</strong> Não foi possível carregar algumas informações dos ingressos.
+                        Os QR Codes podem não funcionar corretamente.
+                    </div>
+                )}
             </header>
+            
             {renderContent()}
+            
             {isSellModalOpen && (
                 <SellModal 
                     isOpen={isSellModalOpen}
@@ -251,7 +312,6 @@ export function MyTickets() {
         </div>
     );
 }
-
 // ✅ COMPONENTE TicketDownloader ATUALIZADO
 const TicketDownloader = ({ ticket, eventDetails, children, className }) => {
     const [isLoading, setIsLoading] = useState(false);
@@ -505,4 +565,5 @@ function SellModal({ isOpen, onClose, onSubmit, isSubmitting }) {
     );
 
 }
+
 
