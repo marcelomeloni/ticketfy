@@ -158,7 +158,7 @@ export const PurchaseCard = ({ metadata, eventAccount, eventAddress, onPurchaseS
                 <div className="flex items-center justify-between mb-2">
                     <h2 className="text-2xl font-bold text-slate-900">Ingressos</h2>
                     <span className="text-sm text-slate-600 bg-slate-100 px-3 py-1 rounded-full">
-                        {totalTicketsSold} / {maxTotalSupply} vendidos
+                        {totalTicketsSold} / {maxTotalSupply} disponíveis
                     </span>
                 </div>
                 
@@ -252,3 +252,4 @@ export const PurchaseCard = ({ metadata, eventAccount, eventAddress, onPurchaseS
         </>
     );
 };
+
