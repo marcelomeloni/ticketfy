@@ -8,10 +8,19 @@ import toast from 'react-hot-toast';
 import { useAppWallet } from '@/hooks/useAppWallet';
 import { useUserRegistrations } from '@/hooks/useUserRegistrations';
 import { getRegistrationIdByMint } from '@/utils/ticketUtils'; 
-import { TicketDownloader } from '@/components/TicketDownloader'; // ✅ IMPORTE O COMPONENTE UNIFICADO
+import { TicketDownloader } from '@/components/TicketDownloader';
 import idl from '@/idl/ticketing_system.json';
 import { PROGRAM_ID, API_URL } from '@/lib/constants';
-import { AcademicCapIcon, ArrowDownTrayIcon, CalendarIcon, MapPinIcon, TagIcon } from '@heroicons/react/24/outline';
+import { 
+  AcademicCapIcon, 
+  ArrowDownTrayIcon, 
+  CalendarIcon, 
+  MapPinIcon, 
+  TagIcon, 
+  WalletIcon, 
+  TicketIcon,
+  ExclamationTriangleIcon 
+} from '@heroicons/react/24/outline';
 
 // --- Constantes ---
 const LISTING_SEED = Buffer.from("listing");
@@ -40,24 +49,57 @@ export function MyTickets() {
         return new Program(idl, PROGRAM_ID, provider);
     }, [connection, wallet]);
 
-    // 🔄 Buscar tickets e combinar com registrationIds
+    // 🔄 Buscar tickets e combinar com registrationIds - VERSÃO CORRIGIDA
     const fetchAllData = async () => {
         if (!wallet.publicKey) {
             setTickets([]);
             setIsLoading(false);
             return;
         }
+        
         setIsLoading(true);
         try {
             console.log('[MY_TICKETS] Buscando tickets para:', wallet.publicKey.toString());
             const response = await fetch(`${API_URL}/api/tickets/user-tickets/${wallet.publicKey.toString()}`);
+            
             if (!response.ok) {
-                throw new Error('Falha ao buscar ingressos na API.');
+                throw new Error(`Falha ao buscar ingressos: ${response.status} ${response.statusText}`);
             }
+            
             const data = await response.json();
+            console.log('[MY_TICKETS] Resposta da API:', data);
 
             if (data.success) {
-                const ticketsWithRegistrations = await combineTicketsWithRegistrations(data.tickets);
+                // ✅ VERIFICAÇÃO DE ESTRUTURA DOS DADOS
+                console.log(`[MY_TICKETS] ${data.tickets?.length || 0} tickets recebidos da API`);
+                
+                if (data.tickets && data.tickets.length > 0) {
+                    data.tickets.forEach((ticket, index) => {
+                        console.log(`[MY_TICKETS] Ticket ${index} estrutura:`, {
+                            publicKey: ticket.publicKey,
+                            hasEvent: !!ticket.event,
+                            eventKeys: ticket.event ? Object.keys(ticket.event) : 'NO EVENT',
+                            accountKeys: ticket.account ? Object.keys(ticket.account) : 'NO ACCOUNT',
+                            nftMint: ticket.account?.nftMint
+                        });
+                    });
+                }
+
+                const ticketsWithRegistrations = await combineTicketsWithRegistrations(data.tickets || []);
+                
+                // ✅ VERIFICAÇÃO FINAL
+                console.log(`[MY_TICKETS] ${ticketsWithRegistrations.length} tickets processados:`);
+                ticketsWithRegistrations.forEach((ticket, index) => {
+                    const hasValidEvent = ticket.event && 
+                        (ticket.event.metadata || ticket.event.account || ticket.event.name);
+                    
+                    console.log(`[MY_TICKETS] Ticket ${index} final:`, {
+                        hasValidEvent,
+                        eventType: ticket.event ? typeof ticket.event : 'NO EVENT',
+                        registrationId: ticket.registrationId
+                    });
+                });
+                
                 setTickets(ticketsWithRegistrations);
             } else {
                 throw new Error(data.error || 'Erro desconhecido da API.');
@@ -71,57 +113,182 @@ export function MyTickets() {
         }
     };
 
+    // ✅ FUNÇÃO PARA COMPLETAR DADOS FALTANTES DO EVENTO - VERSÃO CORRIGIDA
+    const enhanceTicketWithEventData = async (ticket) => {
+        // Se o ticket já tem event details válidos, retorna como está
+        if (ticket.event && (ticket.event.metadata || ticket.event.account || ticket.event.name)) {
+            console.log(`[ENHANCE] Ticket ${ticket.publicKey} já tem dados do evento`);
+            return ticket;
+        }
+
+        try {
+            console.log(`[ENHANCE] Buscando detalhes do evento para ticket: ${ticket.publicKey}`);
+            const eventAddress = ticket.account.event;
+            
+            if (!eventAddress) {
+                console.warn(`[ENHANCE] Ticket ${ticket.publicKey} não tem event address`);
+                return ticket;
+            }
+
+            // Tenta a API rápida primeiro
+            const eventResponse = await fetch(`${API_URL}/api/events/fast/${eventAddress}`);
+            if (eventResponse.ok) {
+                const eventData = await eventResponse.json();
+                console.log(`[ENHANCE] Dados do evento recebidos para ${eventAddress}:`, {
+                    success: eventData.success,
+                    hasEvent: !!eventData.event,
+                    eventKeys: eventData.event ? Object.keys(eventData.event) : 'NO EVENT IN RESPONSE'
+                });
+                
+                if (eventData.success && eventData.event) {
+                    return {
+                        ...ticket,
+                        event: eventData.event
+                    };
+                } else if (eventData.success && !eventData.event) {
+                    // A API pode retornar os dados diretamente (sem nested event)
+                    return {
+                        ...ticket,
+                        event: eventData
+                    };
+                }
+            } else {
+                console.warn(`[ENHANCE] API fast falhou: ${eventResponse.status}`);
+            }
+
+            // Fallback: tenta a API tradicional
+            const fallbackResponse = await fetch(`${API_URL}/api/events/${eventAddress}`);
+            if (fallbackResponse.ok) {
+                const fallbackData = await fallbackResponse.json();
+                if (fallbackData.success) {
+                    return {
+                        ...ticket,
+                        event: fallbackData.event
+                    };
+                }
+            }
+            
+        } catch (error) {
+            console.error(`[ENHANCE] Erro ao buscar evento para ticket ${ticket.publicKey}:`, error);
+        }
+
+        // Retorna o ticket original se não conseguiu melhorar
+        return ticket;
+    };
+
+    // ✅ COMBINAR TICKETS COM REGISTRATIONS - VERSÃO CORRIGIDA
     const combineTicketsWithRegistrations = async (ticketsFromApi) => {
-        if (!ticketsFromApi || !wallet.publicKey) return ticketsFromApi;
+        if (!ticketsFromApi || ticketsFromApi.length === 0) {
+            console.log('[MY_TICKETS] Nenhum ticket para processar');
+            return [];
+        }
+
+        if (!wallet.publicKey) {
+            console.log('[MY_TICKETS] Nenhuma wallet conectada');
+            return ticketsFromApi;
+        }
 
         console.log('[MY_TICKETS] Combinando tickets com registrationIds...');
         
+        // ✅ PRIMEIRO: Completar dados dos eventos se necessário
+        console.log('[MY_TICKETS] Completando dados dos eventos...');
+        const enhancedTickets = await Promise.all(
+            ticketsFromApi.map(ticket => enhanceTicketWithEventData(ticket))
+        );
+
+        // ✅ SEGUNDO: Adicionar registrationIds
+        let finalTickets = enhancedTickets;
+
         if (registrations && registrations.length > 0) {
             console.log('[MY_TICKETS] Usando registrations do hook:', registrations.length);
-            return ticketsFromApi.map(ticket => {
-                const mintAddress = ticket.account.nftMint.toString();
+            finalTickets = enhancedTickets.map(ticket => {
+                const mintAddress = ticket.account?.nftMint?.toString();
+                if (!mintAddress) {
+                    console.warn(`[MY_TICKETS] Ticket sem nftMint:`, ticket.publicKey);
+                    return { ...ticket, registrationId: null };
+                }
+                
                 const registration = registrations.find(reg => reg.mint_address === mintAddress);
                 return {
                     ...ticket,
                     registrationId: registration?.id || null
                 };
             });
+        } else {
+            console.log('[MY_TICKETS] Buscando registrationIds individualmente...');
+            finalTickets = await Promise.all(
+                enhancedTickets.map(async (ticket) => {
+                    const mintAddress = ticket.account?.nftMint?.toString();
+                    if (!mintAddress) {
+                        return { ...ticket, registrationId: null };
+                    }
+                    
+                    try {
+                        const registrationId = await getRegistrationIdByMint(mintAddress, wallet.publicKey.toString());
+                        return {
+                            ...ticket,
+                            registrationId
+                        };
+                    } catch (error) {
+                        console.error(`[MY_TICKETS] Erro ao buscar registrationId para ${mintAddress}:`, error);
+                        return {
+                            ...ticket,
+                            registrationId: null
+                        };
+                    }
+                })
+            );
         }
 
-        console.log('[MY_TICKETS] Buscando registrationIds individualmente...');
-        const ticketsWithRegistrations = await Promise.all(
-            ticketsFromApi.map(async (ticket) => {
-                const mintAddress = ticket.account.nftMint.toString();
-                try {
-                    const registrationId = await getRegistrationIdByMint(mintAddress, wallet.publicKey.toString());
-                    return {
-                        ...ticket,
-                        registrationId
-                    };
-                } catch (error) {
-                    console.error(`[MY_TICKETS] Erro ao buscar registrationId para ${mintAddress}:`, error);
-                    return {
-                        ...ticket,
-                        registrationId: null
-                    };
-                }
-            })
-        );
-
-        return ticketsWithRegistrations;
+        console.log(`[MY_TICKETS] Processamento finalizado: ${finalTickets.length} tickets`);
+        return finalTickets;
     };
 
     useEffect(() => {
         fetchAllData();
     }, [wallet.publicKey, registrations]);
 
-    // ... (restante das funções: openSellModal, closeSellModal, handleListForSale, etc.)
-    const openSellModal = (ticket) => { setSelectedTicket(ticket); setIsSellModalOpen(true); };
-    const closeSellModal = () => { setSelectedTicket(null); setIsSellModalOpen(false); };
+    // Debug useEffect
+    useEffect(() => {
+        if (tickets.length > 0) {
+            console.log('[DEBUG] Estrutura final dos tickets:', tickets);
+            
+            const ticketsWithIssues = tickets.filter(ticket => !ticket.event);
+            if (ticketsWithIssues.length > 0) {
+                console.warn('[DEBUG] Tickets sem dados de evento:', ticketsWithIssues);
+            }
+            
+            tickets.forEach((ticket, index) => {
+                if (ticket.event) {
+                    console.log(`[DEBUG] Ticket ${index} - Evento válido:`, {
+                        name: ticket.event.metadata?.name || ticket.event.name || 'Sem nome',
+                        hasMetadata: !!ticket.event.metadata,
+                        hasAccount: !!ticket.event.account,
+                        image: ticket.event.metadata?.image || ticket.event.imageUrl || 'Sem imagem'
+                    });
+                } else {
+                    console.warn(`[DEBUG] Ticket ${index} - SEM EVENTO:`, ticket);
+                }
+            });
+        }
+    }, [tickets]);
+
+    const openSellModal = (ticket) => { 
+        setSelectedTicket(ticket); 
+        setIsSellModalOpen(true); 
+    };
+    
+    const closeSellModal = () => { 
+        setSelectedTicket(null); 
+        setIsSellModalOpen(false); 
+    };
 
     const handleListForSale = async (priceInSol) => {
         if (!program || !wallet.connected || !selectedTicket) return;
-        if (priceInSol <= 0) { toast.error("O preço deve ser maior que zero."); return; }
+        if (priceInSol <= 0) { 
+            toast.error("O preço deve ser maior que zero."); 
+            return; 
+        }
         
         setIsSubmitting(true);
         const loadingToast = toast.loading("Listando seu ingresso...");
@@ -227,44 +394,77 @@ export function MyTickets() {
     const renderContent = () => {
         if (isLoading || isLoadingRegistrations) {
             return (
-                <div className="text-center text-slate-500">
-                    <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mb-2"></div>
+                <div className="text-center text-slate-500 py-12">
+                    <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mb-4"></div>
                     <p>Carregando seus ingressos...</p>
+                    <p className="text-sm text-slate-400 mt-2">Isso pode levar alguns segundos</p>
                 </div>
             );
         }
         
         if (!wallet.connected) {
             return (
-                <div className="text-center text-slate-500">
-                    <p>Conecte sua carteira ou faça login para ver seus ingressos.</p>
+                <div className="text-center text-slate-500 py-12">
+                    <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <WalletIcon className="h-8 w-8 text-slate-400" />
+                    </div>
+                    <p className="text-lg mb-2">Conecte sua carteira</p>
+                    <p className="text-slate-400">Para ver seus ingressos, conecte sua carteira ou faça login</p>
                 </div>
             );
         }
         
         if (tickets.length === 0) {
             return (
-                <div className="text-center text-slate-500">
-                    <p>Você ainda não possui ingressos.</p>
-                    <Link to="/events" className="text-indigo-600 hover:underline mt-2 inline-block">
-                        Ver eventos
+                <div className="text-center text-slate-500 py-12">
+                    <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <TicketIcon className="h-8 w-8 text-slate-400" />
+                    </div>
+                    <p className="text-lg mb-2">Nenhum ingresso encontrado</p>
+                    <p className="text-slate-400 mb-4">Você ainda não possui ingressos em sua carteira</p>
+                    <Link to="/events" className="bg-indigo-600 text-white font-bold py-3 px-6 rounded-2xl hover:bg-indigo-700 transition-all duration-300 inline-block">
+                        Explorar Eventos
                     </Link>
                 </div>
             );
         }
 
+        // ✅ VERIFICA SE HÁ TICKETS COM PROBLEMAS
+        const ticketsWithValidEvents = tickets.filter(ticket => ticket.event);
+        const ticketsWithoutEvents = tickets.filter(ticket => !ticket.event);
+
+        if (ticketsWithoutEvents.length > 0) {
+            console.warn(`[RENDER] ${ticketsWithoutEvents.length} tickets sem dados de evento`);
+        }
+
         return (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
-                {tickets.map(ticket => (
-                    <TicketCard 
-                        key={ticket.publicKey} 
-                        ticket={ticket}
-                        isSubmitting={isSubmitting}
-                        onSellClick={() => openSellModal(ticket)}
-                        onCancelClick={() => handleCancelListing(ticket)}
-                        onRefundClick={() => handleClaimRefund(ticket)}
-                    />
-                ))}
+            <div className="space-y-6">
+                {/* AVISO SE ALGUNS TICKETS TÊM PROBLEMAS */}
+                {ticketsWithoutEvents.length > 0 && (
+                    <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
+                        <div className="flex items-center">
+                            <ExclamationTriangleIcon className="h-5 w-5 text-yellow-600 mr-2" />
+                            <p className="text-yellow-800 text-sm">
+                                {ticketsWithoutEvents.length} ingresso(s) não pode(m) ser exibido(s) corretamente.
+                                Os dados do evento podem estar indisponíveis temporariamente.
+                            </p>
+                        </div>
+                    </div>
+                )}
+
+                {/* GRADE DE TICKETS */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
+                    {tickets.map(ticket => (
+                        <TicketCard 
+                            key={ticket.publicKey} 
+                            ticket={ticket}
+                            isSubmitting={isSubmitting}
+                            onSellClick={() => openSellModal(ticket)}
+                            onCancelClick={() => handleCancelListing(ticket)}
+                            onRefundClick={() => handleClaimRefund(ticket)}
+                        />
+                    ))}
+                </div>
             </div>
         );
     };
@@ -297,20 +497,97 @@ export function MyTickets() {
     );
 }
 
-// ✅ COMPONENTE TicketCard ATUALIZADO
+// ✅ COMPONENTE TicketCard ATUALIZADO - MAIS ROBUSTO
 function TicketCard({ ticket, isSubmitting, onSellClick, onCancelClick, onRefundClick }) {
     const { account: ticketData, event: eventDetails, isListed, registrationId } = ticket;
 
-    if (!eventDetails) {
+    // ✅ FUNÇÃO AUXILIAR PARA EXTRAIR DADOS DO EVENTO DE FORMA SEGURA
+    const getEventData = () => {
+        if (!eventDetails) {
+            console.warn('[TicketCard] Event details missing for ticket:', ticket.publicKey);
+            return null;
+        }
+
+        try {
+            // ✅ Diferentes estruturas possíveis do evento
+            let eventData = {};
+            
+            // Caso 1: Estrutura completa (account + metadata)
+            if (eventDetails.account && eventDetails.metadata) {
+                eventData = { 
+                    ...eventDetails.account, 
+                    ...eventDetails.metadata,
+                    publicKey: new web3.PublicKey(ticketData.event)
+                };
+            }
+            // Caso 2: Estrutura direta (dados planos)
+            else if (eventDetails.name || eventDetails.properties) {
+                eventData = { 
+                    ...eventDetails,
+                    publicKey: new web3.PublicKey(ticketData.event)
+                };
+            }
+            // Caso 3: Estrutura mínima
+            else {
+                eventData = {
+                    publicKey: new web3.PublicKey(ticketData.event),
+                    name: 'Evento',
+                    properties: {
+                        dateTime: { start: new Date().toISOString() },
+                        location: { venueName: 'Local não disponível' }
+                    },
+                    image: '',
+                    canceled: false
+                };
+            }
+
+            // ✅ Garantir que propriedades essenciais existam
+            return {
+                publicKey: eventData.publicKey,
+                name: eventData.name || 'Evento sem nome',
+                properties: {
+                    dateTime: {
+                        start: eventData.properties?.dateTime?.start || new Date().toISOString()
+                    },
+                    location: {
+                        venueName: eventData.properties?.location?.venueName || 'Online'
+                    }
+                },
+                image: eventData.image || eventData.imageUrl || '',
+                canceled: eventData.canceled || false
+            };
+
+        } catch (error) {
+            console.error('[TicketCard] Erro ao processar dados do evento:', error);
+            return null;
+        }
+    };
+
+    const eventData = getEventData();
+    
+    if (!eventData) {
         return (
-            <div className="bg-white rounded-xl shadow-lg overflow-hidden h-[420px] p-6 flex flex-col justify-center items-center">
-                 <p className="text-slate-500">Não foi possível carregar os detalhes deste ingresso.</p>
+            <div className="bg-white rounded-xl shadow-lg overflow-hidden h-[420px] p-6 flex flex-col justify-center items-center border-2 border-dashed border-slate-300">
+                <div className="text-center">
+                    <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <TagIcon className="h-8 w-8 text-slate-400" />
+                    </div>
+                    <p className="text-slate-500 mb-2">Não foi possível carregar os detalhes deste ingresso.</p>
+                    <p className="text-xs text-slate-400">Ticket: {ticket.publicKey.slice(0, 8)}...</p>
+                </div>
             </div>
         );
     }
     
-    const eventData = { ...eventDetails.account, ...eventDetails.metadata, publicKey: new web3.PublicKey(ticketData.event) };
-    const eventDate = new Date(eventData.properties.dateTime.start).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' });
+    // ✅ FORMATAR DADOS COM FALLBACKS
+    const eventDate = eventData.properties.dateTime.start 
+        ? new Date(eventData.properties.dateTime.start).toLocaleDateString('pt-BR', { 
+            day: '2-digit', 
+            month: 'short', 
+            year: 'numeric' 
+        })
+        : 'Data não definida';
+
     const location = eventData.properties.location.venueName || 'Online';
     const isEventCanceled = eventData.canceled;
     const isFreeTicket = new BN(ticketData.pricePaid).toNumber() === 0;
@@ -367,7 +644,14 @@ function TicketCard({ ticket, isSubmitting, onSellClick, onCancelClick, onRefund
         <div className="bg-white rounded-xl shadow-lg hover:shadow-2xl transition-shadow duration-300 overflow-hidden flex flex-col group">
             <div className="relative">
                 <Link to={`/event/${eventData.publicKey.toString()}`} className="block">
-                    <img className={`h-48 w-full object-cover transition-transform duration-300 group-hover:scale-105 ${isEventCanceled ? 'filter grayscale' : ''}`} src={eventData.image} alt={eventData.name} />
+                    <img 
+                        className={`h-48 w-full object-cover transition-transform duration-300 group-hover:scale-105 ${isEventCanceled ? 'filter grayscale' : ''}`} 
+                        src={eventData.image} 
+                        alt={eventData.name}
+                        onError={(e) => {
+                            e.target.src = 'https://via.placeholder.com/300x200?text=Imagem+Indisponível';
+                        }}
+                    />
                 </Link>
                 <div className={`absolute top-2 right-2 px-3 py-1 text-xs font-bold rounded-full ${status.color}`}>
                     {status.text}
@@ -376,8 +660,14 @@ function TicketCard({ ticket, isSubmitting, onSellClick, onCancelClick, onRefund
             <div className="p-6 flex-grow flex flex-col">
                 <h3 className="text-xl font-bold text-slate-900 truncate mb-2">{eventData.name}</h3>
                 <div className="space-y-2 text-slate-600">
-                    <p className="flex items-center text-sm gap-2"><CalendarIcon className="h-5 w-5 text-slate-400"/> {eventDate}</p>
-                    <p className="flex items-center text-sm gap-2"><MapPinIcon className="h-5 w-5 text-slate-400"/> {location}</p>
+                    <p className="flex items-center text-sm gap-2">
+                        <CalendarIcon className="h-5 w-5 text-slate-400"/> 
+                        {eventDate}
+                    </p>
+                    <p className="flex items-center text-sm gap-2">
+                        <MapPinIcon className="h-5 w-5 text-slate-400"/> 
+                        {location}
+                    </p>
                 </div>
                 <div className="mt-auto pt-6 space-y-3">
                     {renderActionArea()}
@@ -394,10 +684,10 @@ function TicketCard({ ticket, isSubmitting, onSellClick, onCancelClick, onRefund
                             </Link>
                         )}
                         
-                        {/* ✅ AGORA USA O TICKETDOWNLOADER UNIFICADO */}
+                        {/* ✅ TICKETDOWNLOADER COM FALLBACK */}
                         <TicketDownloader 
                             ticket={ticket}
-                            eventDetails={eventDetails}
+                            eventDetails={eventData}
                             registrationId={registrationId}
                             className="w-full bg-slate-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-slate-700 transition flex items-center justify-center gap-2"
                         >
@@ -433,17 +723,35 @@ function SellModal({ isOpen, onClose, onSubmit, isSubmitting }) {
                 <p className="text-slate-600 mb-6">Defina o preço em TFY para o seu ingresso.</p>
                 <form onSubmit={handleSubmit}>
                     <label htmlFor="price" className="block text-sm font-medium text-slate-700">Preço (TFY)</label>
-                    <input type="number" id="price" value={price} onChange={(e) => setPrice(e.target.value)} className="mt-1 block w-full px-3 py-2 bg-white border border-slate-300 rounded-md shadow-sm placeholder-slate-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" placeholder="Ex: 0.5" step="0.01" min="0.01" required />
+                    <input 
+                        type="number" 
+                        id="price" 
+                        value={price} 
+                        onChange={(e) => setPrice(e.target.value)} 
+                        className="mt-1 block w-full px-3 py-2 bg-white border border-slate-300 rounded-md shadow-sm placeholder-slate-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" 
+                        placeholder="Ex: 0.5" 
+                        step="0.01" 
+                        min="0.01" 
+                        required 
+                    />
                     <div className="mt-6 flex justify-end space-x-4">
-                        <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 rounded-md hover:bg-slate-200">Cancelar</button>
-                        <button type="submit" disabled={isSubmitting} className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 disabled:bg-indigo-400">{isSubmitting ? "Listando..." : "Confirmar Listagem"}</button>
+                        <button 
+                            type="button" 
+                            onClick={onClose} 
+                            className="px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 rounded-md hover:bg-slate-200"
+                        >
+                            Cancelar
+                        </button>
+                        <button 
+                            type="submit" 
+                            disabled={isSubmitting} 
+                            className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 disabled:bg-indigo-400"
+                        >
+                            {isSubmitting ? "Listando..." : "Confirmar Listagem"}
+                        </button>
                     </div>
                 </form>
             </div>
         </div>
     );
-
 }
-
-
-
