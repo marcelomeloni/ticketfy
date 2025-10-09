@@ -11,21 +11,14 @@ import { API_URL } from '@/lib/constants';
 const CertificateDisplay = ({ profile, ticketData, eventName }) => {
     const qrCodeContainerRef = useRef(null);
 
-    // **CORREÇÃO: Extração segura dos dados do evento**
-    // Como o metadata vem de registration_details, ajustamos a extração
     const eventMetadata = ticketData.event?.metadata || {};
     
-    // Tentar buscar logo do organizador de várias fontes possíveis
+   
     const organizerLogoUrl = eventMetadata.organizerLogo || 
-                           eventMetadata.organizer?.organizerLogo || 
-                           eventMetadata.logo || 
-                           '/default-event-logo.png';
+                           eventMetadata.organizer?.organizerLogo;
     
-    // Tentar buscar horas complementares de várias fontes
-    const complementaryHours = eventMetadata.complementaryHours || 
-                             eventMetadata.hours || 
-                             eventMetadata.additionalInfo?.complementaryHours || 
-                             0;
+
+    const complementaryHours = eventMetadata.complementaryHours || eventMetadata.additionalInfo?.complementaryHours || 0;
 
     const handleDownload = async () => {
         const loadingToast = toast.loading("Gerando seu certificado em PDF...");

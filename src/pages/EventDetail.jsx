@@ -8,7 +8,7 @@ import { PurchaseCard } from '@/components/event/PurchaseCard';
 import { EventHero } from '@/components/event/EventHero';
 import { EventSections, EventDetailsSidebar } from '@/components/event/EventSections';
 import { EventCard } from '@/components/event/EventCard';
-
+import {useTicketCalculations} from '@/hooks/useTicketCalculations'
 import { PROGRAM_ID, API_URL } from '@/lib/constants';
 import idl from '@/idl/ticketing_system.json';
 import { PageSkeleton } from '@/components/ui/PageSkeleton';
@@ -36,7 +36,7 @@ export function EventDetail() {
     const [relatedEvents, setRelatedEvents] = useState([]);
     const [isLiked, setIsLiked] = useState(false);
     const [activeTab, setActiveTab] = useState('details');
-
+    const { totalTicketsSold, maxTotalSupply } = useTicketCalculations(eventData?.account);
     const program = useMemo(() => {
         const anchorWallet = (wallet.connected && wallet.publicKey) ? {
             publicKey: wallet.publicKey,
@@ -47,7 +47,7 @@ export function EventDetail() {
         return new Program(idl, PROGRAM_ID, provider);
     }, [connection, wallet]);
 
-    // ✅ NOVA API RÁPIDA: Busca dados do Supabase
+
     const fetchEventDataFromFastAPI = useCallback(async () => {
         if (!eventAddress) return;
 
@@ -204,7 +204,11 @@ export function EventDetail() {
     }
 
     const { metadata, account: eventAccount } = eventData;
-
+    console.log('🔍 DEBUG EventDetail - Dados do evento:', {
+    eventData,
+    totalTicketsSoldFromAccount: eventData?.account?.totalTicketsSold,
+    tiers: eventData?.account?.tiers
+});
     return (
         <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
             {/* Header de Navegação */}
@@ -288,13 +292,13 @@ export function EventDetail() {
                                             {metadata.properties?.location?.venueName || 'Online'}
                                         </p>
                                     </div>
-                                    <div className="text-center p-4 bg-purple-50 rounded-2xl">
-                                        <UserGroupIcon className="h-6 w-6 text-purple-500 mx-auto mb-2" />
-                                        <p className="text-sm text-slate-600">Ingressos</p>
-                                        <p className="font-bold text-slate-900">
-                                            {eventAccount?.totalTicketsSold || 0} vendidos
-                                        </p>
-                                    </div>
+                                <div className="text-center p-4 bg-purple-50 rounded-2xl">
+    <UserGroupIcon className="h-6 w-6 text-purple-500 mx-auto mb-2" />
+    <p className="text-sm text-slate-600">Ingressos</p>
+    <p className="font-bold text-slate-900">
+        {totalTicketsSold} / {maxTotalSupply} vendidos
+    </p>
+</div>
                                     <div className="text-center p-4 bg-orange-50 rounded-2xl">
                                         <SparklesIcon className="h-6 w-6 text-orange-500 mx-auto mb-2" />
                                         <p className="text-sm text-slate-600">Categoria</p>

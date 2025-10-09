@@ -660,7 +660,11 @@ function TicketCard({ ticket, isSubmitting, onSellClick, onCancelClick, onRefund
             </button>
         );
     };
-
+console.log('[DEBUG] Estrutura completa do ticket para download:', {
+    ticket: ticket,
+    eventDetails: ticket.event,
+    registrationId: registrationId
+});
     return (
         <div className="bg-white rounded-xl shadow-lg hover:shadow-2xl transition-shadow duration-300 overflow-hidden flex flex-col group">
             <div className="relative">
@@ -705,16 +709,18 @@ function TicketCard({ ticket, isSubmitting, onSellClick, onCancelClick, onRefund
                             </Link>
                         )}
                         
-                        {/* ✅ TICKETDOWNLOADER COM FALLBACK */}
-                        <TicketDownloader 
-                            ticket={ticket}
-                            eventDetails={eventData}
-                            registrationId={registrationId}
-                            className="w-full bg-slate-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-slate-700 transition flex items-center justify-center gap-2"
-                        >
-                            <ArrowDownTrayIcon className="h-5 w-5"/> 
-                            Baixar Ingresso
-                        </TicketDownloader>
+          
+                       <TicketDownloader 
+    ticket={ticket}
+    registrationId={registrationId}
+    className="w-full bg-slate-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-slate-700 transition flex items-center justify-center gap-2"
+    onDownloadStart={() => console.log('Download iniciado')}
+    onDownloadComplete={(data) => console.log('Download completo:', data)}
+    onDownloadError={(error) => console.error('Erro no download:', error)}
+>
+    <ArrowDownTrayIcon className="h-5 w-5" /> 
+    Baixar Ingresso
+</TicketDownloader>
                         
                         {isFreeTicket && !ticketData.redeemed && (
                             <p className="text-xs text-center text-slate-500 mt-1">

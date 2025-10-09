@@ -35,7 +35,7 @@ export function Home() {
                 setNextEvents(eventsData);
                 setHasEvents(eventsData.length > 0);
                 
-                // Primeiro evento vai para o destaque (se houver)
+     
                 if (eventsData.length > 0) {
                     setFeaturedEvent(eventsData[0]);
                 }
@@ -51,37 +51,7 @@ export function Home() {
         fetchHomeData();
     }, []);
 
-    // ✨ Recursos/Benefícios
-    const features = [
-        {
-            icon: ShieldCheckIcon,
-            title: "Segurança Blockchain",
-            description: "Ingressos NFT únicos e impossíveis de falsificar na Solana"
-        },
-        {
-            icon: BoltIcon,
-            title: "Transações Rápidas",
-            description: "Compra e venda de ingressos em segundos com taxas mínimas"
-        },
-        {
-            icon: TicketIcon,
-            title: "Reembolsos Automáticos",
-            description: "Smart contracts garantem reembolsos seguros para eventos cancelados"
-        },
-        {
-            icon: SparklesIcon,
-            title: "Experiência Web3",
-            description: "Posse real dos seus ingressos como ativos digitais"
-        }
-    ];
-
-    // ✨ Estatísticas
-    const stats = [
-        { number: "50K+", label: "Ingressos Vendidos" },
-        { number: "500+", label: "Eventos Realizados" },
-        { number: "99.9%", label: "Satisfação dos Usuários" },
-        { number: "2s", label: "Tempo Médio de Compra" }
-    ];
+    
 
     // Eventos para a grade (exclui o evento em destaque)
     const gridEvents = featuredEvent 

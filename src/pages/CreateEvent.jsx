@@ -52,6 +52,7 @@ export function CreateEvent() {
     const [activeTab, setActiveTab] = useState('create');
     const [isAllowed, setIsAllowed] = useState(false);
     const [isLoadingPermissions, setIsLoadingPermissions] = useState(true);
+    const [eventAddress, setEventAddress] = useState(null);
 
     const provider = useMemo(() => {
         if (!wallet.connected || !wallet.publicKey) return null;
@@ -144,12 +145,33 @@ export function CreateEvent() {
             <div>
                 <div className="border-b border-slate-200 mb-8">
                     <nav className="-mb-px flex space-x-8">
-                        <TabButton name="Criar Novo Evento" active={activeTab === 'create'} onClick={() => setActiveTab('create')} />
-                        <TabButton name="Meus Eventos Criados" active={activeTab === 'manage'} onClick={() => setActiveTab('manage')} />
+                        <TabButton 
+                            name="Criar Novo Evento" 
+                            active={activeTab === 'create'} 
+                            onClick={() => {
+                                setActiveTab('create');
+                                setEventAddress(null); // Reset event address when switching to create tab
+                            }} 
+                        />
+                        <TabButton 
+                            name="Meus Eventos Criados" 
+                            active={activeTab === 'manage'} 
+                            onClick={() => setActiveTab('manage')} 
+                        />
                     </nav>
                 </div>
                 <div>
-                    {activeTab === 'create' && <CreateEventWizard program={program} wallet={wallet} onEventCreated={() => setActiveTab('manage')} />}
+                    {activeTab === 'create' && (
+                        <CreateEventWizard 
+                            program={program} 
+                            wallet={wallet} 
+                            onEventCreated={() => { 
+                                setActiveTab('manage'); 
+                                setEventAddress(null); 
+                            }}
+                            eventAddress={eventAddress}
+                        />
+                    )}
                     {activeTab === 'manage' && <MyEventsList program={program} wallet={wallet} />}
                 </div>
             </div>
@@ -171,7 +193,12 @@ export function CreateEvent() {
 }
 
 const TabButton = ({ name, active, onClick }) => (
-    <button onClick={onClick} className={`px-1 py-4 text-sm font-medium transition-colors ${active ? 'border-indigo-500 text-indigo-600 border-b-2' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'}`}>
+    <button 
+        onClick={onClick} 
+        className={`px-1 py-4 text-sm font-medium transition-colors ${
+            active ? 'border-indigo-500 text-indigo-600 border-b-2' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
+        }`}
+    >
         {name}
     </button>
 );

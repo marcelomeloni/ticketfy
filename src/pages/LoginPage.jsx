@@ -7,7 +7,7 @@ import {
 } from '@heroicons/react/24/solid';
 import { useAuth } from '@/contexts/AuthContext';
 
-// Componente para o formulário de Seedphrase
+
 const SeedPhraseForm = ({ isLoading, error, loginWithSeedphrase }) => {
   const [seedWords, setSeedWords] = useState(Array(12).fill(''));
 
@@ -94,7 +94,7 @@ const SeedPhraseForm = ({ isLoading, error, loginWithSeedphrase }) => {
   );
 };
 
-// Componente para o formulário de Private Key
+
 const PrivateKeyForm = ({ isLoading, error, loginWithPrivateKey }) => {
   const [privateKey, setPrivateKey] = useState('');
 
@@ -133,7 +133,7 @@ const PrivateKeyForm = ({ isLoading, error, loginWithPrivateKey }) => {
   );
 };
 
-// Componente Principal LoginPage
+
 export function LoginPage() {
   const { 
     login, 

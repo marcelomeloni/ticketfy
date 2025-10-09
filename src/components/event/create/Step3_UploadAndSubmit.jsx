@@ -1,10 +1,55 @@
+// Step3_UploadAndSubmit.jsx - versão corrigida
 import { ActionButton } from '@/components/ui/ActionButton';
 import { Step } from './common/Step';
-import { RocketLaunchIcon, CheckCircleIcon } from '@heroicons/react/24/outline';
+import { RocketLaunchIcon, CheckCircleIcon, DocumentArrowDownIcon } from '@heroicons/react/24/outline';
 import { useAuth } from '@/contexts/AuthContext';
+import toast from 'react-hot-toast';
+import { generateFlyerPdf } from '@/lib/generateFlyer';
 
-export function Step3_UploadAndSubmit({ isActive, generatedJson, loading }) {
+export function Step3_UploadAndSubmit({ isActive, generatedJson, loading, eventAddress, eventImageUrl }) {
     const { isAuthenticated, publicKey } = useAuth();
+    
+    const handleDownloadFlyer = async () => {
+        if (!generatedJson || !eventAddress) {
+            toast.error("Dados do evento ou endereço não disponíveis para gerar o flyer.");
+            return;
+        }
+
+        const eventData = JSON.parse(generatedJson);
+        const { offChain } = eventData;
+        const eventName = offChain.name || "Evento";
+        
+        // ✅ USE A URL DA IMAGEM REAL SE DISPONÍVEL
+        let finalImageUrl = eventImageUrl;
+
+        // Se não temos a URL real, tente usar a do generatedJson (pode ser placeholder)
+        if (!finalImageUrl) {
+            finalImageUrl = offChain.image;
+            
+            // Se for um placeholder, não podemos usar
+            if (finalImageUrl && typeof finalImageUrl === 'string' && finalImageUrl.startsWith('[Arquivo:')) {
+                finalImageUrl = null;
+                toast("⚠️ A imagem do flyer não está disponível. O flyer será gerado sem imagem.", {
+                    icon: '⚠️',
+                    duration: 4000,
+                });
+            }
+        }
+
+        console.log('🖼️ Tentando gerar flyer com imagem:', finalImageUrl);
+
+        try {
+            await generateFlyerPdf({ 
+                eventName, 
+                eventImageUrl: finalImageUrl, 
+                eventAddress 
+            });
+            toast.success("Flyer gerado com sucesso!");
+        } catch (error) {
+            console.error("Erro ao gerar flyer:", error);
+            toast.error(`Erro ao gerar flyer: ${error.message}`);
+        }
+    };
     
     if (!isActive) {
         return <Step title="Passo 3: Criação do Evento" disabled={true} />;
@@ -57,18 +102,34 @@ export function Step3_UploadAndSubmit({ isActive, generatedJson, loading }) {
                 <ActionButton 
                     type="submit" 
                     loading={loading} 
-                    disabled={!isAuthenticated || loading} 
+                    disabled={!isAuthenticated || loading || eventAddress}
                     className="w-full text-lg py-4 bg-gradient-to-r from-green-600 to-blue-600 hover:from-green-700 hover:to-blue-700"
                 >
                     <RocketLaunchIcon className="h-6 w-6 mr-2" />
                     {loading ? (
                         "Criando Evento na Blockchain..."
-                    ) : isAuthenticated ? (
+                    ) : isAuthenticated && !eventAddress ? (
                         "🎉 Criar Evento Automaticamente"
+                    ) : isAuthenticated && eventAddress ? (
+                        "Evento Criado!"
                     ) : (
                         "Faça Login para Criar o Evento"
                     )}
                 </ActionButton>
+                
+                {eventAddress && (
+                    <div className="mt-6">
+                        <ActionButton
+                            type="button"
+                            onClick={handleDownloadFlyer}
+                            loading={false}
+                            className="w-full text-lg py-4 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
+                        >
+                            <DocumentArrowDownIcon className="h-6 w-6 mr-2" />
+                            Baixar Flyer do Evento
+                        </ActionButton>
+                    </div>
+                )}
                 
                 {!isAuthenticated && (
                     <p className="text-red-600 text-sm text-center mt-3 bg-red-50 p-3 rounded border border-red-200">
@@ -76,13 +137,24 @@ export function Step3_UploadAndSubmit({ isActive, generatedJson, loading }) {
                     </p>
                 )}
                 
-                {isAuthenticated && !loading && (
+                {isAuthenticated && !loading && !eventAddress && (
                     <div className="mt-4 text-center">
                         <p className="text-xs text-slate-500">
                             📍 O evento será criado na blockchain usando sua conta interna
                         </p>
                         <p className="text-xs text-slate-400 mt-1">
                             Não será necessário aprovar transações manualmente
+                        </p>
+                    </div>
+                )}
+
+                {eventAddress && (
+                    <div className="mt-4 text-center">
+                        <p className="text-xs text-green-600 font-medium">
+                            ✅ Evento criado com sucesso!
+                        </p>
+                        <p className="text-xs text-slate-500 mt-1">
+                            Baixe o flyer para compartilhar seu evento
                         </p>
                     </div>
                 )}

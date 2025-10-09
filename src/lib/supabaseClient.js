@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 
-// CORRIGIDO: O Vite usa `import.meta.env` para aceder às variáveis de ambiente
+
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 

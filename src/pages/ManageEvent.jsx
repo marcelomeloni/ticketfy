@@ -55,13 +55,13 @@ export function ManageEvent() {
     const [event, setEvent] = useState(null);
     const [metadata, setMetadata] = useState(null);
     const [loading, setLoading] = useState(true);
-    const [actionLoading, setActionLoading] = useState(false); // ✅ DEFINIDO AQUI
+    const [actionLoading, setActionLoading] = useState(false); 
     const [reserveBalance, setReserveBalance] = useState(0);
     const [validatorAddress, setValidatorAddress] = useState('');
     const [newTier, setNewTier] = useState({ name: '', price: '', maxTicketsSupply: '' });
     const [apiError, setApiError] = useState(null);
 
-    // ✅ DETERMINAR QUAL AUTENTICAÇÃO USAR (prioridade para wallet externa)
+
     const activeAuth = useMemo(() => {
         if (walletConnected && walletPublicKey) {
             console.log('🔗 Usando wallet externa:', walletPublicKey.toString());
@@ -130,7 +130,7 @@ export function ManageEvent() {
         const loadingToast = toast.loading("Adicionando validador via API...");
     
         try {
-            // ✅ CORRIGIR: Usar a chave correta do localStorage
+         
             const userLoginData = localStorage.getItem('solana-local-wallet-credentials');
             
             if (!userLoginData) {
@@ -152,7 +152,7 @@ export function ManageEvent() {
                 body: JSON.stringify({
                     eventAddress,
                     validatorAddress,
-                    userLoginData: userLoginData // ✅ CORRIGIDO: usar a string diretamente
+                    userLoginData: userLoginData 
                 })
             });
     
@@ -177,7 +177,7 @@ export function ManageEvent() {
         const loadingToast = toast.loading("Removendo validador via API...");
     
         try {
-            // ✅ CORRIGIR: Usar a chave correta do localStorage
+      
             const userLoginData = localStorage.getItem('solana-local-wallet-credentials');
             
             if (!userLoginData) {
@@ -194,7 +194,7 @@ export function ManageEvent() {
                 body: JSON.stringify({
                     eventAddress,
                     validatorAddress: addressToRemove,
-                    userLoginData: userLoginData // ✅ CORRIGIDO
+                    userLoginData: userLoginData 
                 })
             });
     
@@ -222,7 +222,7 @@ export function ManageEvent() {
         const loadingToast = toast.loading("Cancelando evento via API...");
     
         try {
-            // ✅ CORRIGIR: Usar a chave correta do localStorage
+          
             const userLoginData = localStorage.getItem('solana-local-wallet-credentials');
             
             if (!userLoginData) {
@@ -233,7 +233,7 @@ export function ManageEvent() {
     
             console.log('📤 Enviando dados para API - Cancel Event:', {
                 eventAddress,
-                userLoginData: JSON.parse(userLoginData) // Apenas para debug
+                userLoginData: JSON.parse(userLoginData) 
             });
     
             const response = await fetch(`${API_URL}/api/events/${eventAddress}/cancel`, {
@@ -243,7 +243,7 @@ export function ManageEvent() {
                 },
                 body: JSON.stringify({
                     eventAddress: eventAddress,
-                    userLoginData: userLoginData // ✅ CORRIGIDO
+                    userLoginData: userLoginData 
                 })
             });
     
@@ -413,7 +413,7 @@ export function ManageEvent() {
         setNewTier({ name: '', price: '', maxTicketsSupply: '' });
     };
     
-    // ✅ FUNÇÕES UNIFICADAS QUE DETECTAM O TIPO DE AUTENTICAÇÃO
+
     const handleAddValidator = () => {
         if (activeAuth.type === 'wallet') {
             // Usuário com wallet externa - usa transação normal

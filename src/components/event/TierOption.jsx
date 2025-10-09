@@ -4,16 +4,33 @@ export const TierOption = ({ tier, isSelected, isSoldOut, onSelect }) => {
     
     // Função auxiliar para converter valores que podem vir como BN, hex ou número
 const getTierValue = (value) => {
-  if (!value) return 0;
-  if (typeof value === 'object' && value.toNumber) {
-    return value.toNumber();
-  }
-  if (typeof value === 'string' && value.startsWith('0x')) {
-    return parseInt(value, 16);
-  }
-  // Se valor for string numérica, converter para número
-  return Number(value) || 0;
+    if (!value) return 0;
+    
+    // Se for objeto Anchor/BigNumber
+    if (typeof value === 'object' && value.toNumber) {
+        return value.toNumber();
+    }
+    
+    // Se for string
+    if (typeof value === 'string') {
+        // Remove zeros à esquerda para análise
+        const cleanValue = value.replace(/^0+/, '') || '0';
+        
+        // ✅ CORREÇÃO: Detecta se é hexadecimal (apenas caracteres 0-9, A-F)
+        if (/^[0-9A-Fa-f]+$/.test(cleanValue)) {
+            const decimalValue = parseInt(cleanValue, 16);
+            return decimalValue;
+        }
+        
+        // Se não for hexadecimal, tenta como número decimal
+        const numericValue = Number(value);
+        return isNaN(numericValue) ? 0 : numericValue;
+    }
+    
+    // Valor numérico direto
+    return Number(value) || 0;
 };
+
 
     const priceInCents = getTierValue(tier.priceBrlCents);
     const ticketsSold = getTierValue(tier.ticketsSold);

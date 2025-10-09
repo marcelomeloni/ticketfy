@@ -1,10 +1,9 @@
-// Em: src/components/event/MyEventsList.jsx
-
+// src/components/event/MyEventsList.jsx
 import { useState, useEffect, useMemo } from 'react';
 import { EventSummaryCard } from './EventSummaryCard';
 import { InfoBox } from '../ui/InfoBox';
-import { Spinner } from '../ui/Spinner';
 import { API_URL } from '@/lib/constants';
+import { PublicKey } from '@solana/web3.js';
 
 export function MyEventsList({ program, wallet }) {
     const [myEvents, setMyEvents] = useState([]);
@@ -53,11 +52,13 @@ export function MyEventsList({ program, wallet }) {
                         const userEvents = allEvents
                             .filter(event => event.account.controller.equals(wallet.publicKey))
                             .sort((a, b) => b.account.salesStartDate.toNumber() - a.account.salesStartDate.toNumber());
-                        setMyEvents(userEvents);
+                        
                         console.log(`✅ ${userEvents.length} eventos carregados via fallback on-chain`);
+                        setMyEvents(userEvents);
                     }
                 } catch (fallbackError) {
                     console.error('❌ Fallback on-chain também falhou:', fallbackError);
+                    setMyEvents([]);
                 }
             } finally {
                 setIsLoading(false);
@@ -72,15 +73,17 @@ export function MyEventsList({ program, wallet }) {
         
         return myEvents.filter(event => {
             const account = event.account || event;
+            const salesEndDate = account.salesEndDate?.toNumber?.() || account.sales_end_date;
+            const isCanceled = account.canceled || account.isCanceled;
             
             switch (filter) {
                 case 'finished':
-                    return !account.canceled && account.salesEndDate.toNumber() < now;
+                    return !isCanceled && salesEndDate && salesEndDate < now;
                 case 'canceled':
-                    return account.canceled;
+                    return isCanceled;
                 case 'active':
                 default:
-                    return !account.canceled && account.salesEndDate.toNumber() >= now;
+                    return !isCanceled && (!salesEndDate || salesEndDate >= now);
             }
         });
     }, [myEvents, filter]);
@@ -113,9 +116,9 @@ export function MyEventsList({ program, wallet }) {
                 <div className="space-y-6">
                     {filteredEvents.map(event => (
                         <EventSummaryCard 
-                            key={event.publicKey?.toString() || event.account?.eventId?.toString()} 
+                            key={event.publicKey?.toString() || event.event_address} 
                             event={event.account || event} 
-                            publicKey={event.publicKey ? event.publicKey : new web3.PublicKey(event.event_address || event.publicKey)} 
+                            publicKey={new PublicKey(event.publicKey || event.event_address)} 
                         />
                     ))}
                 </div>

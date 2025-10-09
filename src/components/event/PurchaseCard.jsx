@@ -25,15 +25,33 @@ export const PurchaseCard = ({ metadata, eventAccount, eventAddress, onPurchaseS
     const selectedTier = selectedTierIndex !== null ? eventAccount.tiers[selectedTierIndex] : null;
     
     const getTierValue = (value) => {
-        if (!value) return 0;
-        if (typeof value === 'object' && value.toNumber) {
-            return value.toNumber();
+    if (!value) return 0;
+    
+    // Se for objeto Anchor/BigNumber
+    if (typeof value === 'object' && value.toNumber) {
+        return value.toNumber();
+    }
+    
+    // Se for string
+    if (typeof value === 'string') {
+        // Remove zeros à esquerda para análise
+        const cleanValue = value.replace(/^0+/, '') || '0';
+        
+        // ✅ CORREÇÃO: Detecta se é hexadecimal (apenas caracteres 0-9, A-F)
+        if (/^[0-9A-Fa-f]+$/.test(cleanValue)) {
+            const decimalValue = parseInt(cleanValue, 16);
+            console.log(`🔢 Conversão hexadecimal: "${value}" -> "${cleanValue}" -> ${decimalValue}`);
+            return decimalValue;
         }
-        if (typeof value === 'string' && value.startsWith('0x')) {
-            return parseInt(value, 16);
-        }
-        return Number(value) || 0;
-    };
+        
+        // Se não for hexadecimal, tenta como número decimal
+        const numericValue = Number(value);
+        return isNaN(numericValue) ? 0 : numericValue;
+    }
+    
+    // Valor numérico direto
+    return Number(value) || 0;
+};
 
     const totalTicketsSold = eventAccount.tiers.reduce((total, tier) => {
         return total + getTierValue(tier.ticketsSold);
@@ -64,7 +82,13 @@ export const PurchaseCard = ({ metadata, eventAccount, eventAddress, onPurchaseS
         
         setRegistrationModalOpen(true);
     };
-
+    console.log('🔍 DEBUG PurchaseCard - Dados completos:', {
+    eventAccount,
+    tiers: eventAccount.tiers,
+    totalTicketsSoldCalculated: totalTicketsSold,
+    totalTicketsSoldFromAccount: eventAccount.totalTicketsSold,
+    maxTotalSupply
+});
     const handleRegistrationSubmit = async (formData) => {
         setPendingFormData(formData);
         setRegistrationModalOpen(false);
@@ -125,10 +149,11 @@ export const PurchaseCard = ({ metadata, eventAccount, eventAddress, onPurchaseS
             setTicketData({
                 mintAddress: data.mintAddress,
                 seedPhrase: data.seedPhrase,
+                
                 privateKey: data.privateKey,
                 eventName: metadata.name,
                 eventDate: metadata.properties.dateTime.start,
-                eventLocation: metadata.properties.location.venueName || 'Online',
+                eventLocation: metadata.properties.location,
                 eventImage: metadata.image,
                 isNewUser: !wallet.connected,
                 registrationId: data.registrationId,

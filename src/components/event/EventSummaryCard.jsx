@@ -49,6 +49,36 @@ const StatusBadge = ({ status }) => {
     return <span className={`px-3 py-1 text-xs font-medium rounded-full ${styles[status]}`}>{text[status]}</span>;
 };
 
+// Função para extrair valores numéricos de tiers (igual ao código anterior)
+const getTierValue = (value) => {
+    if (!value) return 0;
+    
+    // Se for objeto Anchor/BigNumber
+    if (typeof value === 'object' && value.toNumber) {
+        return value.toNumber();
+    }
+    
+    // Se for string
+    if (typeof value === 'string') {
+        // Remove zeros à esquerda para análise
+        const cleanValue = value.replace(/^0+/, '') || '0';
+        
+        // ✅ CORREÇÃO: Detecta se é hexadecimal (apenas caracteres 0-9, A-F)
+        if (/^[0-9A-Fa-f]+$/.test(cleanValue)) {
+            const decimalValue = parseInt(cleanValue, 16);
+            console.log(`🔢 Conversão hexadecimal: "${value}" -> "${cleanValue}" -> ${decimalValue}`);
+            return decimalValue;
+        }
+        
+        // Se não for hexadecimal, tenta como número decimal
+        const numericValue = Number(value);
+        return isNaN(numericValue) ? 0 : numericValue;
+    }
+    
+    // Valor numérico direto
+    return Number(value) || 0;
+};
+
 export function EventSummaryCard({ event, publicKey }) {
     // Estado para os metadados (do Supabase) e carregamento
     const [eventData, setEventData] = useState(null);
@@ -61,98 +91,106 @@ export function EventSummaryCard({ event, publicKey }) {
                 setIsLoading(true);
                 setError(null);
                 
-                console.log(`🎯 Buscando dados do evento via API rápida: ${publicKey.toString()}`);
+                console.log(`🎯 Buscando dados do evento: ${publicKey.toString()}`);
                 
-                // ✅ BUSCA DIRETA DO SUPABASE VIA API RÁPIDA
-                const response = await fetch(`${API_URL}/api/events/fast/${publicKey.toString()}`);
-                
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
+   
+                const activeEventsResponse = await fetch(`${API_URL}/api/events/active/fast`);
+                if (activeEventsResponse.ok) {
+                    const activeEvents = await activeEventsResponse.json();
+                    const existingEvent = activeEvents.find(e => e.publicKey === publicKey.toString());
+                    
+                    if (existingEvent) {
+                        console.log('✅ Evento encontrado na lista de ativos');
+                        setEventData(existingEvent);
+                        setIsLoading(false);
+                        return;
+                    }
                 }
+
+                // ✅ SEGUNDO: Se não encontrou nos ativos, tenta a API de detalhes
+                console.log(`🔍 Buscando detalhes específicos do evento: ${publicKey.toString()}`);
+                const detailsResponse = await fetch(`${API_URL}/api/events/details/${publicKey.toString()}`);
                 
-                const data = await response.json();
-                
-                if (data.success && data.event) {
-                    console.log('✅ Dados do evento carregados via API rápida');
-                    setEventData(data.event);
-                } else {
-                    throw new Error('Evento não encontrado na API');
-                }
-            } catch (error) {
-                console.error("❌ Falha ao buscar dados do evento via API:", error);
-                setError(error.message);
-                
-                // ✅ FALLBACK: Tenta usar os dados on-chain básicos
-                if (event.metadataUri) {
-                    console.log('🔄 Tentando fallback para metadata URI...');
-                    try {
-                        const fallbackResponse = await fetch(event.metadataUri);
-                        if (fallbackResponse.ok) {
-                            const metadata = await fallbackResponse.json();
-                            setEventData({
-                                metadata: metadata,
-                                account: event,
-                                imageUrl: metadata.image
-                            });
-                        }
-                    } catch (fallbackError) {
-                        console.error('❌ Fallback também falhou:', fallbackError);
-                        // Define um fallback mínimo
-                        setEventData({
-                            metadata: { 
-                                name: "Evento", 
-                                properties: {
-                                    location: { venueName: 'Online' },
-                                    dateTime: { start: new Date().toISOString() }
-                                }
-                            },
-                            account: event,
-                            imageUrl: ''
-                        });
+                if (detailsResponse.ok) {
+                    const data = await detailsResponse.json();
+                    
+                    if (data.success && data.event) {
+                        console.log('✅ Dados do evento carregados via API de detalhes');
+                        setEventData(data.event);
+                    } else {
+                        throw new Error('Evento não encontrado na API');
                     }
                 } else {
-                    // Fallback mínimo
-                    setEventData({
-                        metadata: { 
-                            name: "Evento", 
-                            properties: {
-                                location: { venueName: 'Online' },
-                                dateTime: { start: new Date().toISOString() }
-                            }
-                        },
-                        account: event,
-                        imageUrl: ''
-                    });
+                    throw new Error(`HTTP error! status: ${detailsResponse.status}`);
                 }
+            } catch (error) {
+                console.error("❌ Falha ao buscar dados do evento:", error);
+                setError(error.message);
+                
+                // ✅ FALLBACK: Usa os dados básicos do evento (igual ao código anterior)
+                console.log('🔄 Usando fallback com dados básicos...');
+                setEventData({
+                    metadata: event.metadata || { 
+                        name: "Evento", 
+                        properties: {
+                            location: { venueName: 'Online' },
+                            dateTime: { start: new Date().toISOString() }
+                        }
+                    },
+                    account: event,
+                    imageUrl: event.imageUrl || ''
+                });
             } finally {
                 setIsLoading(false);
             }
         };
         
         fetchEventData();
-    }, [publicKey, event.metadataUri]);
+    }, [publicKey, event]);
 
     const status = useMemo(() => {
         if (!eventData) return 'upcoming';
         
         const now = Math.floor(Date.now() / 1000);
-        if (eventData.account.canceled) return 'canceled';
-        if (now > eventData.account.salesEndDate.toNumber()) return 'finished';
-        if (now < eventData.account.salesStartDate.toNumber()) return 'upcoming';
+        const salesEndDate = eventData.account?.salesEndDate?.toNumber?.() || eventData.account?.sales_end_date;
+        const salesStartDate = eventData.account?.salesStartDate?.toNumber?.() || eventData.account?.sales_start_date;
+        const isCanceled = eventData.account?.canceled || eventData.account?.isCanceled;
+        
+        if (isCanceled) return 'canceled';
+        if (salesEndDate && now > salesEndDate) return 'finished';
+        if (salesStartDate && now < salesStartDate) return 'upcoming';
         return 'active';
     }, [eventData]);
 
-    // Lógica para a barra de progresso (on-chain)
+    // ✅ LÓGICA CORRIGIDA: Cálculo de ingressos (igual ao código anterior)
     const totalSupply = useMemo(() => {
         if (!eventData) return 0;
-        return Array.isArray(eventData.account.tiers) 
-            ? eventData.account.tiers.reduce((sum, tier) => sum + (tier.maxTicketsSupply || 0), 0) 
-            : 0;
+        
+        const tiers = eventData.account?.tiers || [];
+        if (!Array.isArray(tiers)) return 0;
+        
+        return tiers.reduce((sum, tier) => {
+            const maxSupply = getTierValue(tier.maxTicketsSupply);
+            return sum + maxSupply;
+        }, 0);
     }, [eventData]);
 
     const totalSold = useMemo(() => {
         if (!eventData) return 0;
-        return eventData.account.totalTicketsSold || 0;
+        
+        // ✅ PRIMEIRO: Tenta usar totalTicketsSold direto (igual ao código anterior)
+        if (eventData.account?.totalTicketsSold !== undefined) {
+            return getTierValue(eventData.account.totalTicketsSold);
+        }
+        
+        // ✅ SEGUNDO: Se não tiver totalTicketsSold, calcula somando os tiers
+        const tiers = eventData.account?.tiers || [];
+        if (!Array.isArray(tiers)) return 0;
+        
+        return tiers.reduce((sum, tier) => {
+            const sold = getTierValue(tier.ticketsSold);
+            return sum + sold;
+        }, 0);
     }, [eventData]);
 
     const progress = totalSupply > 0 ? (totalSold / totalSupply) * 100 : 0;
@@ -234,6 +272,15 @@ export function EventSummaryCard({ event, publicKey }) {
             {error && (
                 <div className="mt-4 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs text-yellow-800">
                     <strong>Aviso:</strong> Alguns dados podem estar incompletos devido a problemas de conexão.
+                </div>
+            )}
+
+            {/* Debug info (apenas em desenvolvimento) */}
+            {process.env.NODE_ENV === 'development' && eventData && (
+                <div className="mt-2 text-xs text-gray-500">
+                    <strong>Debug:</strong> Tiers: {eventData.account?.tiers?.length || 0}, 
+                    TotalSold: {totalSold}, 
+                    TotalSupply: {totalSupply}
                 </div>
             )}
         </div>

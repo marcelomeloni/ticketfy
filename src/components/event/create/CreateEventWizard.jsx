@@ -16,12 +16,14 @@ import { useAppWallet } from '@/hooks/useAppWallet';
 const WHITELIST_SEED = Buffer.from("whitelist");
 const EVENT_SEED = Buffer.from("event");
 
-export function CreateEventWizard({ program, onEventCreated }) {
+export function CreateEventWizard({ program, onEventCreated, eventAddress }) {
     const { connection } = useConnection();
     const wallet = useAppWallet();
     const [loading, setLoading] = useState(false);
     const [step, setStep] = useState(1);
     const [generatedJson, setGeneratedJson] = useState(null);
+    const [localEventAddress, setLocalEventAddress] = useState(eventAddress || null);
+    const [eventImageUrl, setEventImageUrl] = useState(null);
 
     const [offChainData, setOffChainData] = useState({
         name: '',
@@ -54,6 +56,42 @@ export function CreateEventWizard({ program, onEventCreated }) {
         maxTicketsPerWallet: '10',
         tiers: [{ name: 'Pista', price: '30.00', maxTicketsSupply: '100' }],
     });
+
+    // ✅ FUNÇÃO PARA BUSCAR DETALHES DO EVENTO VIA API
+    const fetchEventDetails = async (eventAddress) => {
+        try {
+            console.log('🔍 Buscando detalhes do evento na API...');
+            const response = await fetch(`${API_URL}/api/events/${eventAddress}/fast`);
+            const data = await response.json();
+            
+            if (data.success && data.event) {
+                console.log('📥 Dados completos do evento:', data.event);
+                
+                // ✅ PROCURA A IMAGEM EM DIFERENTES CAMPOS DA RESPOSTA
+                const imageUrl = 
+                    data.event.imageUrl || 
+                    data.event.metadata?.image ||
+                    data.event.offChainMetadata?.image;
+                    
+                if (imageUrl) {
+                    console.log('🖼️ URL da imagem encontrada via API:', imageUrl);
+                    return imageUrl;
+                } else {
+                    console.log('🔍 Campos de imagem na resposta:', {
+                        imageUrl: data.event.imageUrl,
+                        metadataImage: data.event.metadata?.image,
+                        hasMetadata: !!data.event.metadata,
+                        allFields: Object.keys(data.event)
+                    });
+                }
+            } else {
+                console.warn('❌ API retornou sucesso false:', data);
+            }
+        } catch (error) {
+            console.error('❌ Erro ao buscar detalhes do evento:', error);
+        }
+        return null;
+    };
 
     const validateStep1 = () => {
         const { name, description, image, properties } = offChainData;
@@ -336,6 +374,9 @@ export function CreateEventWizard({ program, onEventCreated }) {
                 result = await createEventWithBackend();
             }
 
+            // ✅ DEBUG: VER TODOS OS DADOS QUE O BACKEND RETORNA
+            console.log('📥 RESPOSTA COMPLETA DO BACKEND:', JSON.stringify(result, null, 2));
+            
             toast.success("Evento criado com sucesso!", { 
                 id: loadingToast, 
                 duration: 5000 
@@ -346,7 +387,25 @@ export function CreateEventWizard({ program, onEventCreated }) {
             console.log('✅ Endereço do evento:', result.eventAddress);
             console.log('✅ Transação:', result.signature);
             
-            if (onEventCreated) onEventCreated();
+            // ✅ SOLUÇÃO 2: BUSCAR URL DA IMAGEM VIA API DE DETALHES
+            console.log('🔄 Buscando URL da imagem via API de detalhes...');
+            let imageUrl = await fetchEventDetails(result.eventAddress);
+
+            if (imageUrl) {
+                setEventImageUrl(imageUrl);
+                console.log('🖼️ URL da imagem encontrada via API:', imageUrl);
+            } else {
+                console.warn('⚠️ Não foi possível obter a URL da imagem via API');
+                // ✅ TENTATIVA ALTERNATIVA: Verificar se há imageUrl no resultado direto
+                if (result.imageUrl) {
+                    setEventImageUrl(result.imageUrl);
+                    console.log('🖼️ Usando imageUrl do resultado direto:', result.imageUrl);
+                } else {
+                    console.log('🔍 Campos disponíveis no resultado:', Object.keys(result));
+                }
+            }
+            
+            setLocalEventAddress(result.eventAddress);
 
         } catch (error) {
             console.error("❌ Erro no processo de criação do evento:", error);
@@ -430,6 +489,8 @@ export function CreateEventWizard({ program, onEventCreated }) {
                     generatedJson={generatedJson}
                     loading={loading}
                     walletType={wallet.walletType}
+                    eventAddress={localEventAddress}
+                    eventImageUrl={eventImageUrl}
                 />
             </form>
         </AdminCard>

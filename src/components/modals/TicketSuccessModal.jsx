@@ -41,6 +41,14 @@ export const TicketSuccessModal = ({ isOpen, onClose, ticketData }) => {
 
     useEffect(() => {
         if (isOpen) {
+             console.log('[DEBUG] Dados recebidos no TicketSuccessModal:', {
+            ticketData,
+            eventLocation: ticketData?.eventLocation,
+            locationType: ticketData?.eventLocation?.type,
+            hasAddress: !!ticketData?.eventLocation?.address,
+            venueName: ticketData?.eventLocation?.venueName,
+            onlineUrl: ticketData?.eventLocation?.onlineUrl
+        });
             // ✨ MODO DETETIVE ✨: Esta linha é a mais importante.
             // Ela vai mostrar no console do navegador exatamente o que está chegando na prop 'ticketData'.
             console.log('[DEBUG] Dados recebidos no TicketSuccessModal:', ticketData);
