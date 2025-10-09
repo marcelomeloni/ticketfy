@@ -157,7 +157,7 @@ const CertificateDisplay = ({ profile, ticketData, eventName }) => {
         }
     };
 
-    const displayEventName = eventName || "Evento Especial";
+
     const certificateId = ticketData.ticket.nftMint;
     const issueDate = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
 
@@ -302,5 +302,6 @@ export const CertificatePage = () => {
         </div>
     );
 };
+
 
 
