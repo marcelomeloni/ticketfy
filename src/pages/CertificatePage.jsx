@@ -11,15 +11,27 @@ import { API_URL } from '@/lib/constants';
 const CertificateDisplay = ({ profile, ticketData, eventName }) => {
     const qrCodeContainerRef = useRef(null);
 
+
     const eventMetadata = ticketData.event?.metadata || {};
     
-   
-    const organizerLogoUrl = eventMetadata.organizerLogo || 
-                           eventMetadata.organizer?.organizerLogo;
-    
 
-    const complementaryHours = eventMetadata.complementaryHours || eventMetadata.additionalInfo?.complementaryHours || 0;
+    const organizerLogoUrl = ticketData.event?.organizerLogo || 
+                           eventMetadata.organizer?.organizerLogo || 
+                           eventMetadata.organizerLogo;
 
+
+    const complementaryHours = ticketData.event?.complementaryHours ||
+                             eventMetadata.complementaryHours || 
+                             eventMetadata.additionalInfo?.complementaryHours || 0;
+
+    const displayEventName = ticketData.event?.name || eventName || "Evento Especial";
+
+    console.log('📋 Dados do certificado:', {
+        eventName: displayEventName,
+        organizerLogo: organizerLogoUrl,
+        complementaryHours,
+        hasFullMetadata: !!eventMetadata.organizer
+    });
     const handleDownload = async () => {
         const loadingToast = toast.loading("Gerando seu certificado em PDF...");
 
@@ -290,4 +302,5 @@ export const CertificatePage = () => {
         </div>
     );
 };
+
 
